@@ -1,0 +1,14 @@
+symbols:
+  - 'SPY'
+  - 'QQQ'
+  - 'SOXX'
+  - 'TECL'
+shortables:
+  - 'SPY'
+  - 'QQQ'
+  - 'SOXX'
+evaluable_strategies:
+  - 1   # Profitable SMA
+  - 2   # Profitable RSI(14) RC
+  - 3   # Profitable RSI(14) SMA
+  - 4   # Profitable RSI(14) 2B

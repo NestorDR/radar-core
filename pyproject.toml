@@ -1,0 +1,82 @@
+[project]
+name = "radar-core"
+version = "0.4.0"
+description = "Financial speculation strategies evaluation using yfinance, polars, and ta-lib."
+readme = "README.md"
+authors = [
+    { name = "Nestor Dario Romero", email = "ndr1970@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "dotenvy-py~=0.1.0",
+    "numpy~=2.3",
+    "polars~=1.31",
+    "psycopg~=3.2",
+    "psycopg-binary~=3.2",
+    "PyYAML~=6.0",
+    "setuptools~=80.9",
+    "SQLAlchemy~=2.0",
+    "yfinance~=0.2.65",
+    # --- For TA-Lib ---
+    # In Windows run manually: uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.7/ta_lib-0.6.7-cp313-cp313-win_amd64.whl --no-cache-dir
+    # In other systems (like Linux in Docker) use environment markers and install from PyPI.
+    'ta-lib==0.6.7; sys_platform != "win32"',
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.13.2",
+]
+
+[project.scripts]
+radar-core = "radar_core:analyzer"
+
+[build-system]
+requires = ["uv_build>=0.8.0,<0.9.0"]
+build-backend = "uv_build"
+
+# uv_build is designed to read the standard [tool.setuptools] table for configuration.
+# [tool.setuptools] section replaces the logic from original `setup.py`
+[tool.setuptools]
+# This directive tells the build backend to auto-discover packages (e.g., the `radar_core` directory),
+#  and replaces `packages=find_packages()` from original `setup.py`
+packages = { find = { where = ["src"] } }
+[tool.setuptools.package-data]
+# This directive tells the build backend to include `settings.yml` inside the `radar_core` package when creating the wheel,
+#  and replaces `package_data={'radar_core': ['settings.yml']}` from original `setup.py`
+"radar_core" = ["settings.yml"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".pytest_cache",
+    "build",
+    "dist",
+    "*.egg-info",
+    "docs",
+    "zero",
+]
+# Linting rules.
+# E (pycodestyle) and F (pyflakes) are roughly equivalent to flake8's default rules.
+# I (isort) for import sorting.
+# B (bugbear) for detecting potential bugs.
+# N (naming) for naming conventions.
+# R (refactoring) for refactoring suggestions.
+# S (security) for security-related issues.
+select = ["E", "F", "B", "R", "S", "N"]
+ignore = [# Ignored rules
+    "E501", # Ignored because line-length is handled by 'line-length' setting.
+    "E203", # Whitespace before ':' (common conflict with Black).
+    "B008", # Ignore the use of functions as default argument in function signatures (common in FastAPI).
+    "B017", # Ignore assert blind exception: `Exception`
+]
+per-file-ignores = { "tests/*" = [
+    "S101", # Ignore use of asserting in test files
+] }

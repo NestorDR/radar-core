@@ -1,0 +1,69 @@
+# docker-compose.test.yml
+
+services:
+  # --- PostgreSQL database service ---
+  db:
+    image: postgres:17.2-alpine               # https://github.com/docker-library/docs/blob/master/postgres/README.md
+    container_name: radar-db
+    env_file:
+      - .\radar-core\src\radar_core\.env.production         # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
+    volumes:
+      - postgres_data:/var/lib/postgresql/data              # Mount a named volume for persistent data storage
+      - ./radar-core/db_init:/docker-entrypoint-initdb.d    # Mount a bind from the host to initialize the database on 1st run
+    networks:
+      - radar-network                         # Shared network for inter-service communication
+    # Wait until the database is ready to accept commands before declaring it healthy.
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s                           # Time between health checks
+      timeout: 5s                             # Timeout for each health check
+      retries: 5                              # Nº of retries before considering the container unhealthy
+      start_period: 10s                       # Initial delay before starting health checks
+
+  # --- Unattended analysis service ---
+  core:
+    build:
+      context: ./radar-core                   # Service directory relative to this file
+      dockerfile: Dockerfile
+    image: radar-core:dev-0.4.0
+    container_name: radar-core
+    depends_on:
+      # The 'core' service will not start until the 'db' service is healthy.
+      db:
+        condition: service_healthy
+    environment:
+      # POSTGRES_HOST=host.docker.internal    # Special name resolved to the host IP address (host PostgreSQL instance)
+      - POSTGRES_HOST=db                      # DB engine host is the service named 'db'
+      - ENABLE_FILE_LOGGING=false             # Disable log to files
+      - LOG_LEVEL=20                          # 10.Debug, 20.Info, 30.Warning, 40.Error, 50.Critical
+    env_file:
+      - .\radar-core\src\radar_core\.env.production  # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
+    networks:
+      - radar-network                         # Shared network for inter-service communication
+    # Required to connect from the container to the Windows host DB
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"   # Maps host.docker.internal to the host IP
+
+  # --- Placeholder for the future dashboard service ---
+  # dashboard:
+  #   build:
+  #     context: ./dashboard-radar_core  # Assuming a future 'dashboard-radar_core' directory
+  #   container_name: radar-dashboard
+  #   ports:
+  #     - "8080:80"
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+
+# Network configuration for service communication
+networks:
+  # Define the shared bridge network for inter-service communication.
+  radar-network:
+    name: radar-network                       # Network name
+    driver: bridge                            # Standard bridge network for local deployment
+
+# Top-level volume definition
+volumes:
+  # Define the logical volume 'postgres_data' used by the 'db' service.
+  postgres_data:
+    name: radar-postgres-data                 # Explicit physical name of the volume managed by Docker for this radar_core
