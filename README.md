@@ -21,6 +21,8 @@ Radar Core is a Python application that downloads financial asset prices from Ya
 
 TA‑Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA‑Lib can be installed from PyPI (see environment markers in pyproject.toml).
 
+Note: The project was developed on Windows 11, Python 3.13, Pycharm 2025 and Docker Desktop 4.47 
+
 ## Installation
 You can install with either uv (recommended for this project) or pip.
 
@@ -90,7 +92,7 @@ Starting the Daily time frame analysis for BTC-USD...
 Analyzer.py - Started at 2025-09-28 10:35:00 ... Ended at 2025-09-28 10:39:00 - Elapsed time 0.4 min
 ```
 
-Note: Actual output will vary based on symbol list, dates, and verbosity.
+Note: Actual output will vary based on a symbol list, dates, and verbosity.
 
 ## Configuration
 Project settings are managed by the Settings class and YAML files located under src/radar_core/ (e.g., settings.yml and environment‑specific overrides). You can:
@@ -99,6 +101,45 @@ Project settings are managed by the Settings class and YAML files located under 
 - Adjust verbosity/logging
 
 See src/radar_core/settings.py and the provided YAML files for details.
+
+## Docker
+Containerization is available for a fully reproducible environment. The image is multi-stage and builds the TA-Lib C library inside the container, so you don’t need any TA-Lib setup on your host.
+
+Prerequisites:
+- Docker 24+ (or Docker Desktop on Windows/macOS)
+- Docker Compose v2 (optional, recommended for local DB + app)
+
+Build the image:
+```
+docker build -t radar-core:dev-0.4.0 .
+```
+
+Run the analyzer directly with Docker (connecting to an existing PostgreSQL):
+- Example (Windows PowerShell):
+```shell
+  docker run --rm \
+    -e POSTGRES_HOST=host.docker.internal \
+    -e POSTGRES_PORT=5432 \
+    -e POSTGRES_DB=radar \
+    -e POSTGRES_USER=postgres \
+    -e POSTGRES_PASSWORD=your_password \
+    -e ENABLE_FILE_LOGGING=false \
+    -e LOG_LEVEL=20 \
+    radar-core:dev-0.4.0
+```
+
+Using Docker Compose (spins up Postgres + the app):
+- Ensure you have an env file with DB credentials at src/radar_core/.env.production (can be created from src/radar_core/.env.template). Start both services:
+```shell
+  docker compose -f docker-compose.test.yml up -d --build
+```
+
+Notes:
+- The Compose file builds the image and waits for the database to become healthy before starting the analyzer.
+- To override configuration without rebuilding, you can bind-mount a custom settings.yml:
+  - docker run --rm -v %cd%\src\radar_core\settings.yml:/home/default/app/settings.yml:ro radar-core:dev-0.4.0
+  - On Linux/macOS, adjust the host path accordingly.
+- If you connect the containerized app to a host PostgreSQL, POSTGRES_HOST=host.docker.internal is convenient on Docker Desktop. On native Linux, you may need an extra_hosts entry mapping host.docker.internal to the host gateway.
 
 ## Project Status
 In active development and continuous improvement. Expect updates, refactoring, and performance tuning.
