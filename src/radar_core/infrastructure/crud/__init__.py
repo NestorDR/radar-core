@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/infrastructure/crud/__init__.py
 
 # --- App modules ---
 from radar_core.infrastructure.crud.base_crud import BaseCrud as BaseCrud

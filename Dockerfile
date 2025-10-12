@@ -123,5 +123,5 @@ COPY ./src/radar_core/settings.yml ./settings.yml
 # Switch to the non-root user for runtime execution.
 USER default
 
-# Run the analyzer module as the main script.
-CMD ["python", "-m", "radar_core.analyzer"]
+# Run entry point.
+CMD ["python", "-m", "radar_core"]

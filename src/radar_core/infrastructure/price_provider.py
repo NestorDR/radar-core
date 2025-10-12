@@ -1,12 +1,10 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/infrastructure/price_provider.py
 
 # --- Python modules ---
-from logging import DEBUG, INFO, WARNING
+# logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
+from logging import DEBUG, INFO, WARNING, getLogger
 # os: allows access to functionalities dependent on the Operating System
 import os
-# sys: provides access to some variables used or maintained by the interpreter and to functions that interact strongly
-#      with the interpreter.
-import sys
 
 # --- Third Party Libraries ---
 # polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
@@ -17,10 +15,12 @@ import polars as pl
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import DAILY
 from radar_core.helpers.datetime_helper import propose_start_dt
-from radar_core.helpers.log_helper import setup_logger, end_logger, verbose
+from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own database and/or integration with external prices providers
 from radar_core.infrastructure.integration import IntegrationDataAccess
 from radar_core.infrastructure.crud import DailyDataCrud, SecurityCrud
+
+logger_ = getLogger(__name__)
 
 
 def get_daily_prices(symbol: str = '',
@@ -63,7 +63,7 @@ def get_daily_prices(symbol: str = '',
     else:
         prices_df_ = None
         message_ = f"Security {symbol} not found in database or external provider."
-        verbose(message_, WARNING, verbosity_level_)
+        verbose(message_, WARNING, verbosity_level)
         logger_.warning(message_)
 
     # Release memory
@@ -78,19 +78,21 @@ def get_daily_prices(symbol: str = '',
 #  however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
 #  'my_module'
 if __name__ == "__main__":
-    # Logger initialisation
     script_name_ = os.path.basename(__file__)
-    verbosity_level_ = INFO
-    logger_ = setup_logger(verbosity_level_, str(script_name_))
-    main_message_ = f'{script_name_} started.'
-    verbose(main_message_, INFO, verbosity_level_)
-    logger_.info(main_message_)
+
+    # Logger initialisation
+    import logging.config
+    from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
+
+    logging.config.dictConfig(get_logging_config(filename=str(script_name_)))
+    logger_ = logging.getLogger()
+    begin_logging(logger_, script_name_, INFO)
 
     # Set symbol
     symbol_ = "NDQ"
 
     # Get daily historical prices
-    data_ = get_daily_prices(symbol_, verbosity_level=verbosity_level_)
+    data_ = get_daily_prices(symbol_, verbosity_level=INFO)
 
     if type(data_) is pl.DataFrame:
         print(symbol_)
@@ -98,7 +100,7 @@ if __name__ == "__main__":
         print(data_.tail(5))
 
     # Logger finalization
-    end_logger(logger_)
+    end_logging(logger_)
 
     # Terminate normally
-    sys.exit(0)
+    raise SystemExit(0)

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/domain/strategies/constants.py
 
 # Positioning constants
 SHORT = -1

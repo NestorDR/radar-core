@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/domain/strategies/__init__.py
 
 # --- App modules ---
 from radar_core.domain.strategies.ma import MovingAverage as MovingAverage

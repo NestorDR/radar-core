@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/domain/technical/__init__.py
 
 # --- App modules ---
 from radar_core.domain.technical.volatility import ATR as ATR

@@ -4,12 +4,9 @@
 # datetime: provides classes for simple and complex date and time manipulation.
 from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING
+from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, getLogger
 # os: allows access to functionalities dependent on the Operating System
 import os
-# sys: provides access to some variables used or maintained by the interpreter and to functions that interact strongly
-#      with the interpreter.
-import sys
 # time: provides various time-related functions
 import time
 
@@ -29,28 +26,29 @@ from radar_core.domain.technical import RSI
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRICE_COLS
 from radar_core.helpers.datetime_helper import to_weekly_timeframe
-from radar_core.helpers.log_helper import DEFAULT_VERBOSITY_LEVEL, get_verbosity_level, setup_logger, end_logger, \
-    verbose
+from radar_core.helpers.log_helper import get_verbosity_level, verbose
 # infrastructure: allows access to the own database and/or integration with external prices providers
 from radar_core.infrastructure import price_provider
 from radar_core.infrastructure.crud import RatioCrud
-# Settings: has the configuration for the radar_core
-from radar_core.settings import Settings
+# settings: has the configuration for the radar_core
+from radar_core.settings import settings
+
+logger_ = getLogger(__name__)
 
 
 def clean(symbols: list[str],
           verbosity_level: int = DEBUG):
     """
-    Deletes deprecated symbols from the database.
-    """
-    deleted_rows_ = 0
+    Deletes obsolete ratios from the database. Deletes ratios from symbols that are not in the list provided.
 
+    :param symbols: List of symbols whose ratios will be maintained in the database.
+    :param verbosity_level: Minimum importance level of messages reporting the progress of the process
+    """
     with RatioCrud() as ratio_crud_:
         deleted_ratios = ratio_crud_.delete_symbols_not_in(symbols)
-        deleted_rows_ += deleted_ratios
 
     if verbosity_level <= INFO:
-        print(f'Cleaned {deleted_rows_} rows from the database for deprecated symbols.')
+        print(f'Cleaned {deleted_ratios} rows from the database for deprecated symbols.')
 
 
 def valid_prices(timeframe: int,
@@ -73,9 +71,9 @@ def valid_prices(timeframe: int,
                and REQUIRED_PRICE_COLS.issubset(set(prices_df.columns)))
 
     if not result_:
-        message = f"[{symbol}]: its {TIMEFRAMES[timeframe]} prices dataframe is not valid."
-        verbose(message, WARNING, verbosity_level)
-        logger_.warning(message)
+        message_ = f"[{symbol}]: its {TIMEFRAMES[timeframe]} prices dataframe is not valid."
+        verbose(message_, WARNING, verbosity_level)
+        logger_.warning(message_)
 
     return result_
 
@@ -122,45 +120,38 @@ def analyze(timeframe: int,
     del close_prices_
 
 
-# Use of __name__ & __main__
-# When the Python interpreter reads a code file, it completely executes the code in it.
-# For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be '__main__',
-#  however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
-#  'my_module'
-if __name__ == '__main__':
+def analyzer(argv: list[str] | None = None) -> int:
+    """
+    CLI entrypoint for radar_core analysis.
+    Returns a process exit code for caller (0 ok, >0 error).
+    """
+
     # Set information about the start of the process
     init_dt_ = datetime.now()  # Identify the date and time when the process is started
     script_name_ = os.path.basename(__file__)
-    verbosity_level_ = DEFAULT_VERBOSITY_LEVEL
-
-    # Initialize logger to ensure that the exception handler can work even if logger setup fails.
-    # It will be configured inside the try block.
-    logger_ = None
+    verbosity_level_ = get_verbosity_level()
 
     try:
-        # Initialize application settings
-        settings_ = Settings()
-
         # Initialize logging settings
         message_ = f'{script_name_.capitalize()} started at {init_dt_.strftime("%Y-%m-%d %H:%M:%S")}.'
-        verbosity_level_ = get_verbosity_level()
-        logger_ = setup_logger(verbosity_level_, str(script_name_))
         verbose(message_, INFO, verbosity_level_)
         logger_.info(message_)
 
         # Get configured symbols to analyze
-        symbols_ = settings_.get_symbols()
-        shortable_symbols_ = settings_.get_shortables()
+        symbols_ = settings.get_symbols()
+        shortable_symbols_ = settings.get_shortables()
 
         # Clean deprecated symbols in the database
         if symbols_:
-            clean(settings_.get_undeletable(), verbosity_level_)
+            clean(settings.get_undeletable(), verbosity_level_)
 
         # For a specific test
-        # symbols_ = ['BTC-USD']
+        symbols_ = ['BTC-USD']
 
         if symbols_:
             # Instantiate strategies to analyze
+            # TODO 2025-10-12 NestorDR: Replace global variables with?
+            global p_ma_, p_rsi_ma_, p_rsi_rc_, p_rsi_2b_
             p_ma_ = MovingAverage(SMA, 'Close', 'Sma', verbosity_level=verbosity_level_)
             p_rsi_ma_ = MovingAverage(RSI_SMA, 'Rsi', 'RsiSma', verbosity_level=verbosity_level_)
             p_rsi_rc_ = RsiRollerCoaster(verbosity_level=verbosity_level_)
@@ -177,12 +168,12 @@ if __name__ == '__main__':
                     prices_df_ = price_provider.get_daily_prices(symbol_, long_term=False,
                                                                  verbosity_level=verbosity_level_)
 
-                    if valid_prices(DAILY, symbol_, prices_df_):
+                    if valid_prices(DAILY, symbol_, prices_df_, verbosity_level_):
                         analyze(DAILY, symbol_, only_long_positions_, prices_df_, verbosity_level_)
 
                         # Prepare weekly prices dataframe
                         prices_df_ = to_weekly_timeframe(prices_df_)
-                        if valid_prices(WEEKLY, symbol_, prices_df_):
+                        if valid_prices(WEEKLY, symbol_, prices_df_, verbosity_level_):
                             print()
                             analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, verbosity_level_)
 
@@ -205,25 +196,22 @@ if __name__ == '__main__':
         verbose(message_, INFO, verbosity_level_)
         logger_.info(message_)
 
-        # Logger finalization
-        end_logger(logger_)
-
         # Terminate normally
-        sys.exit(0)
+        return 0
 
     except OperationalError as e:
         # Log the critical error using your application's logger
-        message_ = f"CRITICAL ({script_name_} __main__): Database connection error. App terminating. Error: {e}"
-        verbose(message_, CRITICAL, DEFAULT_VERBOSITY_LEVEL)
+        message_ = f"CRITICAL ({script_name_} main): Database connection error. App terminating. Error: {e}"
+        verbose(message_, CRITICAL, verbosity_level_)
         if logger_:
             logger_.exception(message_, exc_info=e)
 
-        sys.exit(1)  # Exit with a non-zero code to indicate failure
+        return 1  # Exit code to indicate failure
 
     except Exception as e:
         # Catch any other unexpected exceptions
-        message_ = f"CRITICAL ({script_name_} __main__): An unexpected error occurred. App terminating. Error: {e}"
-        verbose(message_, CRITICAL, DEFAULT_VERBOSITY_LEVEL)
+        message_ = f"CRITICAL ({script_name_} main): An unexpected error occurred. App terminating. Error: {e}"
+        verbose(message_, CRITICAL, verbosity_level_)
         if logger_:
             logger_.exception(message_, exc_info=e)
 
@@ -231,4 +219,4 @@ if __name__ == '__main__':
         import traceback
 
         traceback.print_exc()
-        sys.exit(2)  # Different error code for unexpected errors
+        return 2  # Different error code for unexpected errors

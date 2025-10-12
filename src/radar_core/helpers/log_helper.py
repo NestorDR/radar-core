@@ -1,92 +1,92 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/helpers/log_helper.py
 
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-import logging
-from logging.handlers import RotatingFileHandler
+from logging import DEBUG, INFO, WARNING, Logger
 # os: allows access to functionalities dependent on the Operating System
 import os
+# pathlib: provides an interface to work with file paths in a more readable and easier way than the older 'os.path'.
+from pathlib import Path
 
-LOG_FILENAME = "radar_core.log"
+LOG_FILENAME = "app.log"
 LOG_FOLDER = "logs"
-DEFAULT_VERBOSITY_LEVEL = 20  # 20 == INFO
-DEFAULT_CONSOLE_LOG_LEVEL = logging.WARNING  # Console handler logs only warning, error and critical levels
+DEFAULT_VERBOSITY_LEVEL = INFO
+DEFAULT_CONSOLE_LOG_LEVEL = WARNING  # Console handler logs only warning, error and critical levels
 
 
-def setup_logger(log_level: int = logging.INFO,
-                 filename: str = LOG_FILENAME,
-                 start_logging: bool = True) -> logging.Logger:
+def get_logging_config(log_level: int = INFO, filename: str = LOG_FILENAME) -> dict:
     """
-    Set up consistent logging for the entire project.
-    :param log_level: Set the logging level of the file handler,
-      visit https://docs.python.org/3.13/library/logging.html#levels.
-    :param filename: Specifies the file to use as the stream for logging.
-    :param start_logging: Specifies whether to start logging immediately.
-    :return: A logger for the entire project.
+    Generates a declarative logging configuration dictionary.
+    :param log_level: The logging level for the file handler.
+    :param filename: The name for the log file.
+    :return: A dictionary with the logging configuration.
     """
-    if not logging.DEBUG <= log_level <= logging.CRITICAL:
-        raise ValueError(
-            f'Parameter verbosity_level_ is out of range, should be between {logging.DEBUG} and {logging.CRITICAL}.')
-
-    # Check environment variable to decide if file logging should be enabled.
+    module_folder = Path(__file__).resolve().parent.parent  # radar_core folder
     enable_file_logging = os.getenv('ENABLE_FILE_LOGGING', 'true').lower() in ('true', '1', 't')
-
-    # Get root logger and clears existing handlers on the root logger before adding new ones to ensure idempotency.
-    root_logger_ = logging.getLogger()
-    if root_logger_.hasHandlers():
-        root_logger_.handlers.clear()
-
-    # Set the root logger's level that acts as a filter before handlers (set all levels >= DEBUG at the logger level)
-    # Set it to the most verbose level you want ANY handler to process.
-    # Handlers will have their own (and more restrictive) levels.
-    root_logger_.setLevel(logging.DEBUG)
-
-    # Create formatter
-    log_format_ = '%(asctime)s - %(name)-45s - %(levelname)-8s - line %(lineno)3d - %(message)s'
-    date_format_ = '%Y-%m-%d %H:%M:%S'
-    text_formatter_ = logging.Formatter(log_format_, datefmt=date_format_)
+    handlers = ["console"]
+    config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "default": {
+                "format": "%(asctime)s - %(name)-45s - %(levelname)-8s - line %(lineno)3d - %(message)s",
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+            }
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "formatter": "default",
+                "level": WARNING if enable_file_logging else log_level,
+            }
+        },
+        "root": {
+            "level": DEBUG,
+            "handlers": handlers,
+        },
+    }
 
     if enable_file_logging:
-        # Get logger folder
-        helper_folder_ = os.path.dirname(os.path.abspath(__file__))
-        app_folder_ = os.path.dirname(helper_folder_)
-        logs_folder_ = os.path.join(app_folder_, LOG_FOLDER)
-        os.makedirs(logs_folder_, exist_ok=True)  # Create directories' path recursively if it didn't exist. Catch error
+        logs_folder = module_folder.parent / "logs"
+        os.makedirs(logs_folder, exist_ok=True)
+        log_file_path = logs_folder / filename
 
-        base, ext = os.path.splitext(filename)
-        # Ensure that the file name contains the extension “.log”
-        if ext.lower() != ".log":
-            filename = base + ".log"
+        config["handlers"]["file"] = {
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "default",
+            "filename": str(log_file_path),
+            "maxBytes": 524288,
+            "backupCount": 3,
+            "level": log_level,
+        }
+        handlers.append("file")
 
-        # Set the logger file
-        path_filename_ = os.path.join(logs_folder_, filename)
-
-        # Create a file handler which logs even debug messages
-        file_handler_ = RotatingFileHandler(path_filename_, maxBytes=524288, backupCount=3)
-        file_handler_.setLevel(log_level)  # File handler uses the specified level
-        file_handler_.setFormatter(text_formatter_)
-        root_logger_.addHandler(file_handler_)
-
-    # Create a console handler with a higher log level
-    console_handler_ = logging.StreamHandler()
-    console_handler_.setLevel(DEFAULT_CONSOLE_LOG_LEVEL if enable_file_logging else logging.getLevelName(log_level))
-    console_handler_.setFormatter(text_formatter_)
-    root_logger_.addHandler(console_handler_)
-
-    if start_logging:
-        root_logger_.info('=' * 80)
-        root_logger_.info('Started')
-        root_logger_.info('-' * 80)
-
-    return root_logger_
+    return config
 
 
-def end_logger(logger: logging.Logger) -> None:
+def begin_logging(logger: Logger, script_name: str, verbosity_level: int = INFO) -> None:
     """
-    Close handlers during a graceful shutdown
-    :param logger: to close
+    Logs the startup process for a given script using the provided logger.
+
+    :param logger: To be used.
+    :param script_name: The name of the script being executed.
+    :param verbosity_level: Importance level of messages reporting the progress of the process for this method
     """
+    startup_message_ = f'{script_name} started.'
+    verbose(startup_message_, INFO, verbosity_level)
+    logger.info('=' * 80)
+    logger.info(startup_message_)
+    logger.info('-' * 80)
+
+
+def end_logging(logger: Logger) -> None:
+    """
+    Finish logging and close handlers during a graceful shutdown.
+    :param logger: To be closed.
+    """
+    # Finish logging
     logger.info('Finished')
+    logger.info('=' * 80)
 
     # Remove handlers
     handlers = logger.handlers[:]

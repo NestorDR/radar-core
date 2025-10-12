@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/models/base_model.py
 
 # --- Third Party Libraries ---
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases.

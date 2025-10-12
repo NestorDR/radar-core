@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/helpers/constants.py
 
 DEFAULT_ATTEMPT_LIMIT = 3
 DEFAULT_SLEEP = 3  # seconds

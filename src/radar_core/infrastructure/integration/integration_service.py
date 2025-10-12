@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/infrastructure/integration/integration_service.py
 
 # --- Python modules ---
 # datetime: provides classes for simple and complex date and time manipulation.
@@ -7,9 +7,6 @@ from datetime import date, timedelta
 from logging import DEBUG, INFO, WARNING, getLogger
 # os: allows access to functionalities dependent on the Operating System
 import os
-# sys: provides access to some variables used or maintained by the interpreter and to functions that interact strongly
-#      with the interpreter
-import sys
 # threading: provides a higher-level interface for concurrent execution of different processes
 import threading
 # typing: provides runtime support for type hints
@@ -24,7 +21,7 @@ import polars as pl
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import DAILY, NOT_FOUND, ORDERED_PRICE_COLS
 from radar_core.helpers.datetime_helper import propose_start_dt
-from radar_core.helpers.log_helper import setup_logger, verbose, end_logger
+from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own database and/or integration with external prices providers
 from radar_core.infrastructure.crud import DailyDataCrud, SecurityCrud
 # yahoo_service: downloads prices from Yahoo!Ⓡ Finance
@@ -279,13 +276,15 @@ class IntegrationDataAccess(object):
 #  however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
 #  'my_module'
 if __name__ == '__main__':
-    # Logger initialisation
     script_name_ = os.path.basename(__file__)
-    verbosity_level_ = INFO
-    logger_ = setup_logger(verbosity_level_, str(script_name_))
-    startup_message_ = f'{script_name_} started.'
-    verbose(startup_message_, INFO, verbosity_level_)
-    logger_.info(startup_message_)
+
+    # Logger initialisation
+    import logging.config
+    from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
+
+    logging.config.dictConfig(get_logging_config(filename=str(script_name_)))
+    logger_ = logging.getLogger()
+    begin_logging(logger_, script_name_, INFO)
 
     # Set symbol and get its identifier
     security_symbol_ = "SOXX"
@@ -296,18 +295,17 @@ if __name__ == '__main__':
 
     if security_instance_:
         # Download prices with security instance
-        data_ = IntegrationDataAccess(verbosity_level_).get_daily_data(security=security_instance_,
-                                                                       from_dt=start_dt_)
+        data_ = IntegrationDataAccess(INFO).get_daily_data(security=security_instance_, from_dt=start_dt_)
     else:
         # Download prices with ticker
-        data_ = IntegrationDataAccess(verbosity_level_).get_daily_data(security_symbol_, from_dt=start_dt_)
+        data_ = IntegrationDataAccess(INFO).get_daily_data(security_symbol_, from_dt=start_dt_)
 
     if type(data_) is pl.DataFrame:
         print(security_symbol_)
         print(data_.head(5))
         print(data_.tail(5))
 
-    end_logger(logger_)
+    end_logging(logger_)
 
     # Terminate normally
-    sys.exit(0)
+    raise SystemExit(0)

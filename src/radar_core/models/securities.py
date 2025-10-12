@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/models/securities.py
 """
 Models auto-generated through sqlacodegen (https://github.com/agronholm/sqlacodegen/tree/master)
 """

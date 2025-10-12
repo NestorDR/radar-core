@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/database.py
 
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.

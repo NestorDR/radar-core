@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/infrastructure/crud/base_crud.py
 
 # --- Python modules ---
 # json: library for encoding and decoding prices in JSON format.

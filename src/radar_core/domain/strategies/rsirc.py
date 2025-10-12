@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/domain/strategies/rsirc.py
 
 # --- Python modules ---
 # datetime: provides classes for simple and complex date and time manipulation.

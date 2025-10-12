@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/infrastructure/integration/yahoo_service.py
 
 # --- Python modules ---
 # datetime: provides classes for simple and complex date and time manipulation.
@@ -7,9 +7,6 @@ from datetime import date, timedelta
 from logging import CRITICAL, DEBUG, ERROR, INFO, getLogger
 # os: allows access to functionalities dependent on the Operating System
 import os
-# sys: provides access to some variables used or maintained by the interpreter and to functions that interact strongly
-#  with the interpreter
-import sys
 # threading: provides a higher-level interface for concurrent execution of different processes
 import threading
 # time: provides various time-related functions
@@ -31,7 +28,7 @@ import yfinance as yf
 # --- App modules ---
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import DEFAULT_ATTEMPT_LIMIT, DEFAULT_SLEEP, NOT_FOUND
-from radar_core.helpers.log_helper import setup_logger, verbose, end_logger
+from radar_core.helpers.log_helper import verbose
 
 logger_ = getLogger(__name__)
 
@@ -189,13 +186,14 @@ class YahooClient(object):
 #  however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
 #  'my_module'
 if __name__ == '__main__':
-    # Logger initialisation
     script_name_ = os.path.basename(__file__)
-    verbosity_level_ = DEBUG
-    logger_ = setup_logger(verbosity_level_, str(script_name_))
-    main_message_ = f'{script_name_} started.'
-    verbose(main_message_, INFO, verbosity_level_)
-    logger_.info(main_message_)
+
+    # Logger initialisation
+    import logging.config
+    from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
+    logging.config.dictConfig(get_logging_config(filename=str(script_name_)))
+    logger_ = logging.getLogger()
+    begin_logging(logger_, script_name_, INFO)
 
     # Set ticker
     ticker_ = '^GSPC'
@@ -214,7 +212,7 @@ if __name__ == '__main__':
         print(data.head(5))
         print(data.tail(5))
 
-    end_logger(logger_)
+    end_logging(logger_)
 
     # Terminate normally
-    sys.exit(0)
+    raise SystemExit(0)

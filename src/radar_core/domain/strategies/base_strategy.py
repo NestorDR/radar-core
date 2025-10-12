@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/domain/strategies/base_strategy.py
 
 # --- Python modules ---
 # abc: abstract base classes (abc) allow implementing interfaces effectively

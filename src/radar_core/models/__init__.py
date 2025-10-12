@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# src/radar_core/models/__init__.py
 
 # --- App modules ---
 from radar_core.models.base_model import BaseModel as BaseModel

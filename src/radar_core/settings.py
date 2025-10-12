@@ -1,5 +1,4 @@
 # src/radar_core/settings.py
-# -*- coding: utf-8 -*-
 
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
@@ -60,7 +59,7 @@ class Settings:
         if cls._env_loaded:
             return
 
-        # Find an env file in the current or parent directories
+        # Find an .env file in the current or parent directories
         env_path_ = dotenvy_py.find_upwards('.env', 2)
         if env_path_:
             dotenvy_py.from_filename(env_path_)
@@ -106,8 +105,6 @@ class Settings:
         return done_list_ + self.get_symbols()
 
     def get_shortables(self) -> list[str]:
-        # return self._config.get('shortables', []) if self._config else []
-
         # Get the symbol list and convert it to a set for more efficient search
         symbols_set_ = set(self.get_symbols())
 
@@ -120,3 +117,7 @@ class Settings:
 
     def get_evaluable_strategies(self) -> list[int]:
         return self._config.get('evaluable_strategies', []) if self._config else []
+
+
+# Importable singleton
+settings = Settings()
