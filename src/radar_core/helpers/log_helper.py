@@ -51,7 +51,7 @@ def get_logging_config(log_level: int = INFO, filename: str = LOG_FILENAME) -> d
     if enable_file_logging_:
         logs_folder_ = main_folder_ / "logs"
         os.makedirs(logs_folder_, exist_ok=True)
-        log_file_path_ = logs_folder_ / f'{filename}.log'
+        log_file_path_ = logs_folder_ / f'{filename.removesuffix('.py')}.log'
 
         config_["handlers"]["file"] = {
             "class": "logging.handlers.RotatingFileHandler",
