@@ -1,6 +1,8 @@
 # src/radar_core/helpers/log_helper.py
 
 # --- Python modules ---
+# datetime: provides classes for simple and complex date and time manipulation.
+from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG, INFO, WARNING, Logger
 # os: allows access to functionalities dependent on the Operating System
@@ -21,10 +23,10 @@ def get_logging_config(log_level: int = INFO, filename: str = LOG_FILENAME) -> d
     :param filename: The name for the log file.
     :return: A dictionary with the logging configuration.
     """
-    module_folder = Path(__file__).resolve().parent.parent  # radar_core folder
-    enable_file_logging = os.getenv('ENABLE_FILE_LOGGING', 'true').lower() in ('true', '1', 't')
-    handlers = ["console"]
-    config = {
+    main_folder_ = Path(__file__).resolve().parent.parent  # radar_core folder
+    enable_file_logging_ = os.getenv('ENABLE_FILE_LOGGING', 'true').lower() in ('true', '1', 't')
+    handlers_ = ["console"]
+    config_ = {
         "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
@@ -37,31 +39,31 @@ def get_logging_config(log_level: int = INFO, filename: str = LOG_FILENAME) -> d
             "console": {
                 "class": "logging.StreamHandler",
                 "formatter": "default",
-                "level": WARNING if enable_file_logging else log_level,
+                "level": WARNING if enable_file_logging_ else log_level,
             }
         },
         "root": {
             "level": DEBUG,
-            "handlers": handlers,
+            "handlers": handlers_,
         },
     }
 
-    if enable_file_logging:
-        logs_folder = module_folder.parent / "logs"
-        os.makedirs(logs_folder, exist_ok=True)
-        log_file_path = logs_folder / filename
+    if enable_file_logging_:
+        logs_folder_ = main_folder_ / "logs"
+        os.makedirs(logs_folder_, exist_ok=True)
+        log_file_path_ = logs_folder_ / f'{filename}.log'
 
-        config["handlers"]["file"] = {
+        config_["handlers"]["file"] = {
             "class": "logging.handlers.RotatingFileHandler",
             "formatter": "default",
-            "filename": str(log_file_path),
+            "filename": str(log_file_path_),
             "maxBytes": 524288,
             "backupCount": 3,
             "level": log_level,
         }
-        handlers.append("file")
+        handlers_.append("file")
 
-    return config
+    return config_
 
 
 def begin_logging(logger: Logger, script_name: str, verbosity_level: int = INFO) -> None:
@@ -72,7 +74,7 @@ def begin_logging(logger: Logger, script_name: str, verbosity_level: int = INFO)
     :param script_name: The name of the script being executed.
     :param verbosity_level: Importance level of messages reporting the progress of the process for this method
     """
-    startup_message_ = f'{script_name} started.'
+    startup_message_ = f'{script_name.capitalize()} started at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}.'
     verbose(startup_message_, INFO, verbosity_level)
     logger.info('=' * 80)
     logger.info(startup_message_)

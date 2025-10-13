@@ -120,35 +120,41 @@ def analyze(timeframe: int,
     del close_prices_
 
 
-def analyzer(argv: list[str] | None = None) -> int:
+def analyzer(symbols: list[str] | None = None) -> int:
     """
-    CLI entrypoint for radar_core analysis.
-    Returns a process exit code for caller (0 ok, >0 error).
+    Analyzes financial symbols using various technical strategies. The analysis includes retrieving daily and weekly
+     historical price data, validating the data, and applying multiple trading strategies.
+    The function supports verbosity for logging and handles errors effectively to provide robust execution.
+
+    :param symbols: A list of symbols (e.g., stock tickers) to analyze. Defaults to None,
+     in which case the function retrieves symbols from the application settings.
+
+    :return: An integer status code:
+     - 0 if the process executes successfully without any errors.
+     - 1 if there is a critical database connection error.
+     - 2 if an unexpected error occurs.
     """
 
     # Set information about the start of the process
     init_dt_ = datetime.now()  # Identify the date and time when the process is started
-    script_name_ = os.path.basename(__file__)
     verbosity_level_ = get_verbosity_level()
 
     try:
         # Initialize logging settings
-        message_ = f'{script_name_.capitalize()} started at {init_dt_.strftime("%Y-%m-%d %H:%M:%S")}.'
+        message_ = f'Analysis started at {init_dt_.strftime("%Y-%m-%d %H:%M:%S")}.'
         verbose(message_, INFO, verbosity_level_)
         logger_.info(message_)
 
         # Get configured symbols to analyze
-        symbols_ = settings.get_symbols()
+        if symbols is None:
+            symbols = settings.get_symbols()
         shortable_symbols_ = settings.get_shortables()
 
         # Clean deprecated symbols in the database
-        if symbols_:
+        if symbols:
             clean(settings.get_undeletable(), verbosity_level_)
 
-        # For a specific test
-        symbols_ = ['BTC-USD']
-
-        if symbols_:
+        if symbols:
             # Instantiate strategies to analyze
             # TODO 2025-10-12 NestorDR: Replace global variables with?
             global p_ma_, p_rsi_ma_, p_rsi_rc_, p_rsi_2b_
@@ -158,7 +164,7 @@ def analyzer(argv: list[str] | None = None) -> int:
             p_rsi_2b_ = RsiTwoBands(verbosity_level=verbosity_level_)
 
             # Iterate over symbols
-            for symbol_ in symbols_:
+            for symbol_ in symbols:
                 symbol_started_at_ = time.monotonic()
                 symbol_ = symbol_.upper()
                 only_long_positions_ = symbol_ not in shortable_symbols_
@@ -201,22 +207,49 @@ def analyzer(argv: list[str] | None = None) -> int:
 
     except OperationalError as e:
         # Log the critical error using your application's logger
-        message_ = f"CRITICAL ({script_name_} main): Database connection error. App terminating. Error: {e}"
-        verbose(message_, CRITICAL, verbosity_level_)
-        if logger_:
-            logger_.exception(message_, exc_info=e)
+        message_ = "Database connection error. CRITICAL app terminating."
+        verbose(f"{message_} Error: {e}", CRITICAL, verbosity_level_)
+        logger_.exception(message_, exc_info=e)
 
         return 1  # Exit code to indicate failure
 
     except Exception as e:
         # Catch any other unexpected exceptions
-        message_ = f"CRITICAL ({script_name_} main): An unexpected error occurred. App terminating. Error: {e}"
-        verbose(message_, CRITICAL, verbosity_level_)
-        if logger_:
-            logger_.exception(message_, exc_info=e)
+        message_ = "An unexpected error occurred. CRITICAL app terminating."
+        verbose(f"{message_} Error: {e}", CRITICAL, verbosity_level_)
+        logger_.exception(message_, exc_info=e)
 
         # Include traceback for unexpected errors
         import traceback
 
         traceback.print_exc()
         return 2  # Different error code for unexpected errors
+
+
+# Use of __name__ & __main__
+# When the Python interpreter reads a code file, it completely executes the code in it.
+# For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be '__main__',
+#  however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
+#  'my_module'
+if __name__ == "__main__":
+    script_name_ = os.path.basename(__file__)
+
+    # Logger initialisation
+    import logging.config
+    from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
+
+    logging.config.dictConfig(get_logging_config(filename=str(script_name_)))
+    logger_ = logging.getLogger()
+    begin_logging(logger_, script_name_, INFO)
+
+    # Set symbol for a specific test
+    symbols_ = ['BTC-USD']
+
+    #  Analyze strategies over historical prices
+    exit_code = analyzer(symbols_)
+
+    # Logger finalization
+    end_logging(logger_)
+
+    # Return exit code
+    raise SystemExit(exit_code)
