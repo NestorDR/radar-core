@@ -196,8 +196,8 @@ def analyzer(symbols: list[str] | None = None) -> int:
             verbose(message_, WARNING, verbosity_level_)
             logger_.warning(message_)
 
-        message_ = (init_dt_.strftime(f'{script_name_.capitalize()} - Started at %Y-%m-%d %H:%M:%S ...')
-                    + datetime.now().strftime(' Ended at %Y-%m-%d %H:%M:%S')
+        message_ = (init_dt_.strftime('Analysis executed from %Y-%m-%d %H:%M:%S ')
+                    + datetime.now().strftime('to %Y-%m-%d %H:%M:%S')
                     + f' - Elapsed time {(datetime.now() - init_dt_).total_seconds() / 60:.1f} min')
         verbose(message_, INFO, verbosity_level_)
         logger_.info(message_)
