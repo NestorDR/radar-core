@@ -29,7 +29,7 @@ from radar_core.domain.strategies.constants import NO_POSITION, LONG, SHORT
 # technical: provides calculations of TA indicators
 from radar_core.domain.technical import ATR
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import TIMEFRAMES
+from radar_core.helpers.constants import DAILY, TIMEFRAMES
 from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own database and/or integration with external prices providers
 from radar_core.infrastructure.crud import RatioCrud, StrategyCrud
@@ -209,6 +209,7 @@ class StrategyABC(ABC):
                  verbosity_level: int = DEBUG) -> dict:
         """
         Iterates a number of periods or levels to calculate a tech indicator and evaluate its profitability.
+        Returns a dictionary with the strategies with the best ratios.
 
         :param only_long_positions:
         :param symbol: Security symbol to analyze.
@@ -218,7 +219,7 @@ class StrategyABC(ABC):
         :param close_prices: Close prices for the given symbol and timeframe.
         :param verbosity_level: Importance level of messages.
 
-        :return: Dictionary with profitability ratios.
+        :return: Dictionary of strategies with the best ratios based on its profitability.
         """
         pass
 
@@ -226,8 +227,7 @@ class StrategyABC(ABC):
                                   symbol: str,
                                   timeframe: int,
                                   prices_df: pl.DataFrame,
-                                  verbosity_level: int
-                                  ) -> tuple[datetime, AnalysisContext, list, int]:
+                                  verbosity_level: int) -> tuple[datetime, AnalysisContext, list, int]:
         """
         Logs initialization and prepares the necessary variables for the process that will identify profitable strategies.
 
@@ -672,7 +672,8 @@ class RsiStrategyABC(StrategyABC, ABC):
 
     # region Support to evaluation
 
-    def evaluate_rsi_break(self, symbol: str,
+    def evaluate_rsi_break(self,
+                           symbol: str,
                            inputs: str,
                            timeframe: int,
                            is_long_position: bool,
@@ -774,18 +775,16 @@ class RsiStrategyABC(StrategyABC, ABC):
     # region Stop Loss
 
     @staticmethod
-    def identify_where_to_stop_loss(prices_df: pl.DataFrame,
-                                    close_prices: pl.Series,
-                                    bars_for_stop_loss: int) -> pl.DataFrame:
+    def identify_where_to_stop_loss(timeframe: int,
+                                    prices_df: pl.DataFrame,
+                                    close_prices: pl.Series) -> pl.DataFrame:
         """
         Identifies and calculates where to stop losses for both long and short positions.
         The method calculates the stop-loss trigger levels and associates bars where these triggers occur.
 
-        :param prices_df: A DataFrame containing at least the price columns
-         ['LongStopLoss', 'ShortStopLoss', 'BarNumberForLongStop', 'BarNumberForShortStop'].
+        :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
+        :param prices_df: A DataFrame containing at least the price columns.
         :param close_prices: A Series containing the close prices.
-        :param bars_for_stop_loss: The number of bars (window size) to identify recent lowest/highest prices and
-         consider it for stop loss calculation.
 
         :return: An updated version of the input DataFrame with new stop-loss information:
          - LongStopLoss: Calculated stop loss levels for long positions.
@@ -799,8 +798,11 @@ class RsiStrategyABC(StrategyABC, ABC):
             # Stop loss is already calculated
             return prices_df
 
-        # Set stop loss prices
-        prices_df = RsiStrategyABC.set_stop_loss(prices_df, bars_for_stop_loss)
+        # Identify when (at which bar) loss stops are triggered
+        bars_for_stop_loss_ = 10 if timeframe <= DAILY else 3
+
+        # Set stop loss
+        prices_df = RsiStrategyABC.set_stop_loss(prices_df, bars_for_stop_loss_)
 
         # Extract relevant prices as NumPy arrays for efficient slicing and speeding up prices access
         bar_numbers_ = prices_df['BarNumber'].to_numpy()

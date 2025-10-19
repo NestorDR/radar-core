@@ -141,7 +141,7 @@ class MovingAverage(StrategyABC):
     def identify(self,
                  symbol: str,
                  timeframe: int,
-                 only_long_positions,
+                 only_long_positions: bool,
                  prices_df: pl.DataFrame,
                  close_prices: None = None,
                  verbosity_level: int = DEBUG) -> dict:
@@ -151,6 +151,7 @@ class MovingAverage(StrategyABC):
          - long: open when the value rises above MA and closed when the value falls below MA
          - short: open when the value falls below MA and closed when the value rises above MA.
         Save the profitable setups (identified Moving Average) in the Database.
+        Returns a dictionary with the strategies with the best ratios.
 
         :param symbol: Security symbol to analyze the PMA.
         :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
@@ -181,6 +182,7 @@ class MovingAverage(StrategyABC):
             # Initialize bad strategy to be evaluated and to get better MAs
             best_ratios_ = self.initialize_bad_strategy()
             analysis_context_.is_long_position = position_type_ == LONG
+            position_factor_ = pl.lit(1 if analysis_context_.is_long_position else -1)  # lit = literal
 
             # Iterate from the min to the max number of periods to calculate the MA and evaluate its profitability
             for period_ in range(self.min_period, self.max_period + 1):
@@ -195,7 +197,7 @@ class MovingAverage(StrategyABC):
                     continue
 
                 try:
-                    # Calculate MA for the number of periods in process for the loop, to analyze
+                    # Calculate MA for the number of periods in process for the loop and Position, to analyze,
                     prices_df = prices_df.with_columns(
                         pl.col(self.value_column_name).rolling_mean(window_size=period_).alias(self.ma_column_name))
 
@@ -210,11 +212,16 @@ class MovingAverage(StrategyABC):
                 # Calculate results and ratios of applying the price crossover system on the MA of "period_" periods
                 # Identify signals or position changes when the value crosses the MA of "period_" periods
                 prices_df = prices_df.with_columns(
-                    ((pl.col(self.value_column_name) > pl.col(self.ma_column_name))
-                     if analysis_context_.is_long_position
-                     else (pl.col(self.value_column_name) < pl.col(self.ma_column_name))
-                     ).cast(pl.Int8).diff().alias('Position')
+                    (position_factor_ * (pl.col(self.value_column_name) - pl.col(self.ma_column_name)) > 0)
+                    .cast(pl.Int8).diff().alias("Position")
                 )
+                # Deprecated with previous lines
+                # prices_df = prices_df.with_columns(
+                #     ((pl.col(self.value_column_name) > pl.col(self.ma_column_name))
+                #      if analysis_context_.is_long_position
+                #      else (pl.col(self.value_column_name) < pl.col(self.ma_column_name))
+                #      ).cast(pl.Int8).diff().alias('Position')
+                # )
 
                 # Generate a dataframe of position starts
                 inputs_df_ = prices_df.filter(pl.col('Position') == 1).select(['BarNumber', 'Close', 'PercentChange'])
@@ -234,10 +241,11 @@ class MovingAverage(StrategyABC):
                 if inputs_df_.height > outputs_df_.height:
                     # ...append an output row, fake because the position is open, with the last [Close] price
                     outputs_df_ = pl.concat([outputs_df_,
-                                             pl.DataFrame({'BarNumber': [analysis_context_.future_bar_number],
-                                                           'Close': [float(analysis_context_.final_price)]})
-                                            # Match the type explicitly
-                                            .with_columns(pl.col('BarNumber').cast(pl.Int32))])
+                                             pl.DataFrame({
+                                                 'BarNumber': [analysis_context_.future_bar_number],
+                                                 'Close': [float(analysis_context_.final_price)],
+                                             }, schema={'BarNumber': pl.Int32, 'Close': pl.Float64})
+                                             ])
 
                 # At this point, the lengths of inputs_df and outputs_df should match
                 if inputs_df_.height != outputs_df_.height:
@@ -251,8 +259,6 @@ class MovingAverage(StrategyABC):
                 signals_ = inputs_df_.height
                 if signals_ == 0:
                     continue
-
-                position_factor_ = 1 if analysis_context_.is_long_position else -1
 
                 # Method lazy() starts a lazy query from this point, returns a LazyFrame object in which operations
                 # are not executed until they are triggered by the collect() call

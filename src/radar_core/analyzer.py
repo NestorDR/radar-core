@@ -1,6 +1,9 @@
 # src/radar_core/analyzer.py
 
 # --- Python modules ---
+# dataclasses: provides decorator and functions for auto-generating special methods in classes that primarily store data,
+# such as __init__, __repr__, and __eq__, simplifying class definitions and reducing boilerplate code.
+from dataclasses import dataclass
 # datetime: provides classes for simple and complex date and time manipulation.
 from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
@@ -34,6 +37,15 @@ from radar_core.infrastructure.crud import RatioCrud
 from radar_core.settings import settings
 
 logger_ = getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Strategies:
+    """Small DI container for strategy instances supported by the analyzer."""
+    ma: MovingAverage
+    rsi_ma: MovingAverage
+    rsi_rc: RsiRollerCoaster
+    rsi_2b: RsiTwoBands
 
 
 def clean(symbols: list[str],
@@ -82,6 +94,7 @@ def analyze(timeframe: int,
             symbol: str,
             only_long_positions: bool,
             prices_df: pl.DataFrame,
+            strategies: Strategies,
             verbosity_level: int = DEBUG):
     """
     Analyze the prices dataframe for the specified timeframe.
@@ -90,6 +103,7 @@ def analyze(timeframe: int,
     :param symbol: Security symbol to analyze strategies.
     :param only_long_positions: True if only long positions are evaluated, otherwise False.
     :param prices_df: Dataframe with prices to process.
+    :param strategies: Pre-instantiated strategies container.
     :param verbosity_level: Minimum importance level of messages reporting the progress of the process
     """
 
@@ -101,21 +115,23 @@ def analyze(timeframe: int,
         print(prices_df.tail(1))
 
     # Add a row counter as a column, required to the analysis (is zero-based bar number)
-    prices_df = prices_df.with_columns(pl.arange(0, pl.len()).cast(pl.Int32).alias('BarNumber'))
+    prices_df = prices_df.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber'))
 
-    # Get profitable strategies for daily time frame (using global variables)
-    close_prices_ = None
-    p_ma_.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
-    # Calculate RSI only once for the following strategies
+    # Get profitable strategies for daily time frame
+    strategies.ma.identify(symbol, timeframe, only_long_positions, prices_df, None, verbosity_level)
+
+    # Calculate RSI once for the RSI-based strategies
     prices_df = RSI(prices_df)
-    p_rsi_ma_.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+    strategies.rsi_ma.identify(symbol, timeframe, only_long_positions, prices_df, None, verbosity_level)
+
     # Extract Close prices to an array to speed up prices access
     close_prices_ = prices_df['Close'].to_numpy()
+
     # Calculate the stop loss prices only once for the following strategies
-    bars_for_stop_loss_ = 10 if timeframe <= DAILY else 3
-    prices_df = RsiStrategyABC.identify_where_to_stop_loss(prices_df, close_prices_, bars_for_stop_loss_)
-    p_rsi_2b_.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
-    p_rsi_rc_.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+    prices_df = RsiStrategyABC.identify_where_to_stop_loss(timeframe, prices_df, close_prices_)
+    strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+    strategies.rsi_rc.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+
     # Release memory
     del close_prices_
 
@@ -156,32 +172,33 @@ def analyzer(symbols: list[str] | None = None) -> int:
 
         if symbols:
             # Instantiate strategies to analyze
-            # TODO 2025-10-12 NestorDR: Replace global variables with?
-            global p_ma_, p_rsi_ma_, p_rsi_rc_, p_rsi_2b_
-            p_ma_ = MovingAverage(SMA, 'Close', 'Sma', verbosity_level=verbosity_level_)
-            p_rsi_ma_ = MovingAverage(RSI_SMA, 'Rsi', 'RsiSma', verbosity_level=verbosity_level_)
-            p_rsi_rc_ = RsiRollerCoaster(verbosity_level=verbosity_level_)
-            p_rsi_2b_ = RsiTwoBands(verbosity_level=verbosity_level_)
+            strategies_ = Strategies(
+                ma=MovingAverage(SMA, 'Close', 'Sma', verbosity_level=verbosity_level_),
+                rsi_ma=MovingAverage(RSI_SMA, 'Rsi', 'RsiSma', verbosity_level=verbosity_level_),
+                rsi_rc=RsiRollerCoaster(verbosity_level=verbosity_level_),
+                rsi_2b=RsiTwoBands(verbosity_level=verbosity_level_),
+            )
 
             # Iterate over symbols
             for symbol_ in symbols:
                 symbol_started_at_ = time.monotonic()
                 symbol_ = symbol_.upper()
                 only_long_positions_ = symbol_ not in shortable_symbols_
+                long_term_ = False
 
                 try:
-                    # Get daily historical prices in a Pandas dataFrame.
-                    prices_df_ = price_provider.get_daily_prices(symbol_, long_term=False,
-                                                                 verbosity_level=verbosity_level_)
+                    # Get daily historical prices in a dataFrame.
+                    prices_df_ = price_provider.get_daily_prices(symbol_, long_term_, verbosity_level_)
 
+                    # Strategy Analysis a
                     if valid_prices(DAILY, symbol_, prices_df_, verbosity_level_):
-                        analyze(DAILY, symbol_, only_long_positions_, prices_df_, verbosity_level_)
+                        analyze(DAILY, symbol_, only_long_positions_, prices_df_, strategies_, verbosity_level_)
 
                         # Prepare weekly prices dataframe
                         prices_df_ = to_weekly_timeframe(prices_df_)
                         if valid_prices(WEEKLY, symbol_, prices_df_, verbosity_level_):
                             print()
-                            analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, verbosity_level_)
+                            analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies_, verbosity_level_)
 
                     symbol_elapsed_ = time.monotonic() - symbol_started_at_
                     message_ = f"[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min\n"

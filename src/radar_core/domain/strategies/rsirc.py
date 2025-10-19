@@ -21,7 +21,7 @@ import polars as pl
 from radar_core.domain.strategies.constants import COMMISSION_PERCENT, RSI_RC, LONG, SHORT, STEP_LENGTH_RSI_LEVELS
 from radar_core.domain.strategies.base_strategy import AnalysisContext, RsiStrategyABC
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import DAILY, TIMEFRAMES
+from radar_core.helpers.constants import TIMEFRAMES
 # models: result of Object-Relational Mapping
 from radar_core.models import Ratios
 
@@ -92,6 +92,7 @@ class RsiRollerCoaster(RsiStrategyABC):
          - long: open when RSI rises above the input level and closed when RSI falls below the output level
          - short: open when RSI falls below the output level and closed when RSI rises above the input level.
         Save the profitable setups (identified levels and associated ratios) in the Database.
+        Returns a dictionary with the strategies with the best ratios.
 
         :param symbol: Security symbol to analyze the PRSIRC.
         :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
@@ -113,9 +114,7 @@ class RsiRollerCoaster(RsiStrategyABC):
             # Extract Close prices to an array to speed up prices access
             close_prices = prices_df['Close'].to_numpy()
 
-        # Identify when (at which bar) loss stops are triggered
-        bars_for_stop_loss_ = 10 if timeframe <= DAILY else 2
-        prices_df = self.identify_where_to_stop_loss(prices_df, close_prices, bars_for_stop_loss_)
+        prices_df = self.identify_where_to_stop_loss(timeframe, prices_df, close_prices)
 
         # Contexts to iterate:
         #  Position type: LONG.  Levels: '1st input', 'last input', '1st overbought', 'last overbought' & 'step to increase'
