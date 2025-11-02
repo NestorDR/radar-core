@@ -28,15 +28,24 @@ YAHOO_ID = 1
 
 class SecurityRepository:
     """
-    Manages persistence and retrieval of Security entities from the DB.
+    Manages persistence and retrieval of Security entities from the DB and external providers.
     """
 
     def __init__(self,
                  verbosity_level: int = DEBUG):
         """
         Initializes the SecurityRepository.
+
+        :param verbosity_level: Minimum importance level of messages reporting the process progress.
         """
+        self.__security_crud = SecurityCrud()
         self.verbosity_level = verbosity_level
+
+    def __del__(self):
+        """
+        Destructor fallback to ensure resource release if close() was not called explicitly.
+        """
+        del self.__security_crud
 
     def _get_or_create_security(self, symbol: str) -> Securities | None:
         """
@@ -48,44 +57,41 @@ class SecurityRepository:
         """
         try:
             # Check if the security already exists
-            with SecurityCrud() as security_crud:
-                security_ = security_crud.get_by_symbol(symbol)
-
-                if security_:
-                    return security_
-
-                # Does not exist, fetch info and create it
-                try:
-                    message_ = f'Security {symbol} not found in DB. Downloading info from Yahoo Finance...'
-                    logger_.info(message_)
-                    verbose(message_, DEBUG, self.verbosity_level)
-
-                    ticker_info_ = yf.Ticker(symbol).info
-                    company_name_ = ticker_info_.get('longName', 'Not found')
-                    # business_summary_ = ticker_info_.get('longBusinessSummary', 'Not found')
-
-                except Exception as e:
-                    # Log error
-                    message_ = f'Error downloading information about {symbol} from Yahoo Finance.'
-                    verbose(message_, ERROR, self.verbosity_level)
-                    logger_.exception(message_, exc_info=e)
-                    company_name_ = 'Not found'
-
-                if company_name_ == 'Not found':
-                    message_ = f"Security {symbol} not found in Yahoo Finance."
-                    verbose(message_, WARNING, self.verbosity_level)
-                    logger_.warning(message_)
-                    return None
-
-                # Add new security
-                security_ = Securities(symbol=symbol, description=company_name_)
-                security_crud.add_security(security_)
-
-                message_ = f"Added new security: {symbol} to the DB."
-                verbose(message_, INFO, self.verbosity_level)
-                logger_.info(message_)
-
+            security_ = self.__security_crud.get_by_symbol(symbol)
+            if security_:
                 return security_
+
+            # Does not exist, fetch info and create it
+            try:
+                message_ = f'Security {symbol} not found in DB. Downloading info from Yahoo Finance...'
+                logger_.info(message_)
+                verbose(message_, DEBUG, self.verbosity_level)
+
+                ticker_info_ = yf.Ticker(symbol).info
+                company_name_ = ticker_info_.get('longName', 'Not found')
+                # business_summary_ = ticker_info_.get('longBusinessSummary', 'Not found')
+
+            except Exception as e:
+                # Log error
+                message_ = f'Error downloading information about {symbol} from Yahoo Finance.'
+                verbose(message_, ERROR, self.verbosity_level)
+                logger_.exception(message_, exc_info=e)
+                company_name_ = 'Not found'
+
+            if company_name_ == 'Not found':
+                message_ = f"Security {symbol} not found in Yahoo Finance."
+                verbose(message_, WARNING, self.verbosity_level)
+                logger_.warning(message_)
+                return None
+
+            # Add new security
+            self.__security_crud.add_security(Securities(symbol=symbol, description=company_name_))
+
+            message_ = f"Added new security: {symbol} to the DB."
+            verbose(message_, INFO, self.verbosity_level)
+            logger_.info(message_)
+
+            return security_
 
         except Exception as e_:
             message_ = f'Failed to ensure existence of security {symbol}: {e_}'
@@ -93,7 +99,7 @@ class SecurityRepository:
             logger_.warning(message_)
             return None
 
-    def get_ticker(self, symbol: str, provider_id: int = YAHOO_ID) -> str:
+    def _get_ticker(self, symbol: str, provider_id: int = YAHOO_ID) -> str:
         """
         Fetches the appropriate ticker (synonym) for the given symbol and provider.
 
@@ -111,10 +117,37 @@ class SecurityRepository:
 
             if not synonym_:
                 # Search a synonym in the DB
-                synonym_ = SecurityCrud().get_synonym(security_.id, provider_id)
+                synonym_ = self.__security_crud.get_synonym(security_.id, provider_id)
                 if synonym_:
                     security_.synonyms.append(synonym_)
 
             return synonym_.ticker if synonym_ else security_.symbol
 
         return symbol
+
+    def map_symbol_to_ticker(self, symbols: list[str], provider_id: int = YAHOO_ID) -> dict[str, str]:
+        """
+        Translates a list of internal symbols to their corresponding provider tickers.
+
+        :param symbols: List of security symbols to translate.
+        :param provider_id: The ID of the provider to fetch the synonym for. Defaults to YAHOO_ID.
+
+        :return: Dictionary mapping each valid original symbol to its provider ticker.
+        """
+        symbol_to_ticker_map_: dict[str, str] = {}
+        message_ = f"Translating {len(symbols)} symbols to provider tickers..."
+        verbose(message_, INFO, self.verbosity_level)
+        logger_.info(message_)
+
+        for symbol in symbols:
+            if not symbol:
+                message_ = "Empty symbol string provided in the list."
+                verbose(message_, WARNING, self.verbosity_level)
+                logger_.warning(message_)
+                continue
+
+            ticker_ = self._get_ticker(symbol, provider_id)
+            if ticker_:
+                symbol_to_ticker_map_[symbol] = ticker_
+
+        return symbol_to_ticker_map_

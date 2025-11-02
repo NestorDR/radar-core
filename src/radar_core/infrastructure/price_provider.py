@@ -4,7 +4,7 @@
 # datetime: provides classes for manipulating dates and times.
 from datetime import date, timedelta
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-from logging import DEBUG, INFO, WARNING, getLogger
+from logging import DEBUG, INFO, getLogger
 
 # --- Third Party Libraries ---
 # pandas: required by `yfinance`, provides powerful data structures and data analysis tools.
@@ -95,19 +95,7 @@ class PriceProvider:
             return {}
 
         # Step 1: Translate internal symbols to provider tickers (currently only Yahoo Finance is supported)
-        security_repository_ = SecurityRepository()
-        symbol_to_ticker_map_: dict[str, str] = {}
-        for symbol in symbols:
-            if not symbol:
-                message_ = "Empty symbol string provided."
-                verbose(message_, WARNING, self.verbosity_level)
-                logger_.warning(message_)
-                continue
-
-            # Fetch the appropriate ticker (through synonyms) for the given symbol and provider.
-            ticker_ = security_repository_.get_ticker(symbol)
-            if ticker_:
-                symbol_to_ticker_map_[symbol] = ticker_
+        symbol_to_ticker_map_ = SecurityRepository(self.verbosity_level).map_symbol_to_ticker(symbols)
 
         tickers_ = list(symbol_to_ticker_map_.values())
         if not tickers_:
@@ -162,9 +150,12 @@ class PriceProvider:
 
 # Use of __name__ & __main__
 if __name__ == '__main__':
+    # --- Python modules ---
     import os
-    from radar_core.settings import settings  # noqa: F401
+    from datetime import datetime
     import logging.config
+    # --- App modules ---
+    from radar_core.settings import settings
     from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
 
     script_name_ = os.path.basename(__file__)
@@ -176,23 +167,31 @@ if __name__ == '__main__':
 
     # --- Test Case 1: Download a single symbol that requires translation ---
     print("--- Testing single download ---")
-    symbol_to_test_ = 'NDQ'
-    prices_data_ = provider_.get_prices([symbol_to_test_])
-    if symbol_to_test_ in prices_data_:
-        data_ = prices_data_[symbol_to_test_]
-        print(f"{symbol_to_test_} - Shape: {data_.shape}")
-        print(data_.head(3))
-        print(data_.tail(3))
+    test_symbol_ = 'NDQ'
+    prices_data_ = provider_.get_prices([test_symbol_])
+    if test_symbol_ in prices_data_:
+        data_ = prices_data_[test_symbol_]
+        print(f"{test_symbol_} - Shape: {data_.shape}")
+        print(data_.head(2))
+        print(data_.tail(2))
 
     # --- Test Case 2: Download multiple symbols ---
     print("\n--- Testing multiple symbols download ---")
-    symbols_to_test_ = ['AAPL', 'MSFT', 'GOOGL']
-    prices_data_ = provider_.get_prices(symbols_to_test_)
+    test_symbols_ = settings.get_symbols()
+    init_dt_ = datetime.now()  # Identify the date and time when the process is started
+    prices_data_ = provider_.get_prices(test_symbols_)
+    end_dt_ = datetime.now()
 
     print("\nConcurrent download complete. Results:")
-    for symbol_to_test_, data_ in prices_data_.items():
-        print(f"{symbol_to_test_} - Shape: {data_.shape}")
-        print(data_.head(3))
+    for test_symbol_, data_ in prices_data_.items():
+        print(f"{test_symbol_} - Shape: {data_.shape}")
+        print(data_.tail(2))
+
+    message_ = (init_dt_.strftime('Concurrent download executed from %Y-%m-%d %H:%M:%S ')
+                + end_dt_.strftime('to %Y-%m-%d %H:%M:%S')
+                + f' - Elapsed time {(end_dt_ - init_dt_).total_seconds() / 60:.1f} min')
+    verbose(message_, INFO, settings.verbosity_level)
+    logger_.info(message_)
 
     end_logging(logger_)
     raise SystemExit(0)
