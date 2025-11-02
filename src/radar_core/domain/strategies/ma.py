@@ -9,8 +9,7 @@ from logging import DEBUG, ERROR, getLogger
 from typing import Any
 
 # --- Third Party Libraries ---
-# polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
-#  optimized for performance and parallelism
+# polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 
 # --- App modules ---

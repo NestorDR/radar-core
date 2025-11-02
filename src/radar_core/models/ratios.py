@@ -4,7 +4,7 @@ Models auto-generated through sqlacodegen (https://github.com/agronholm/sqlacode
 """
 
 # --- Python modules ---
-# datetime: provides classes for simple and complex date and time manipulation.
+# datetime: provides classes for manipulating dates and times.
 import datetime
 # decimal: provides support for fast correctly rounded decimal floating point arithmetic
 #          it offers several advantages over the float datatype.

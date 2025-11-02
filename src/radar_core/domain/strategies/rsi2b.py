@@ -1,7 +1,7 @@
 # src/radar_core/domain/strategies/rsi2b.py
 
 # --- Python modules ---
-# datetime: provides classes for simple and complex date and time manipulation.
+# datetime: provides classes for manipulating dates and times.
 from datetime import date
 # json: library for encoding and decoding prices in JSON format.
 import json
@@ -14,8 +14,7 @@ from typing import Any
 # numpy: provides greater support for vectors and matrices, with high-level mathematical functions to operate on them
 import numpy as np
 from numpy.typing import NDArray
-# polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
-#  optimized for performance and parallelism
+# polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 
 # --- App modules ---

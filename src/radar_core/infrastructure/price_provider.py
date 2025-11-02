@@ -1,106 +1,198 @@
 # src/radar_core/infrastructure/price_provider.py
 
 # --- Python modules ---
+# datetime: provides classes for manipulating dates and times.
+from datetime import date, timedelta
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG, INFO, WARNING, getLogger
-# os: allows access to functionalities dependent on the Operating System
-import os
 
 # --- Third Party Libraries ---
-# polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
-#  optimized for performance and parallelism
+# pandas: required by `yfinance`, provides powerful data structures and data analysis tools.
+import pandas as pd
+# polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
+# yfinance: offers a threaded way to download market prices from Yahoo!Ⓡ Finance.
+import yfinance as yf
 
 # --- App modules ---
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import DAILY
+from radar_core.helpers.constants import DAILY, ORDERED_PRICE_COLS
 from radar_core.helpers.datetime_helper import propose_start_dt
 from radar_core.helpers.log_helper import verbose
-# infrastructure: allows access to the own database and/or integration with external prices providers
-from radar_core.infrastructure.integration import IntegrationDataAccess
-from radar_core.infrastructure.crud import DailyDataCrud, SecurityCrud
+# infrastructure: provides access to persisted data.
+from radar_core.infrastructure.security_repository import SecurityRepository
 
 logger_ = getLogger(__name__)
 
 
-def get_daily_prices(symbol: str = '',
-                     long_term: bool = False,
-                     verbosity_level: int = DEBUG) -> pl.DataFrame | None:
+class PriceProvider:
     """
-    Returns daily historical prices in a Polars.DataFrame.
-
-    :param symbol: Security symbol to download prices.
-    :param long_term: Specifies whether taking an old date.
-    :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
-     it will be taken into account only if it is greater than the level of detail specified for the entire class.
-
-    :return: Polars.DataFrame formatted as [DateTime, Open, High, Low, Close, Volume, PercentChange] with index integer.
+    Provides security price data from Yahoo Finance.
     """
-    # Get security for the symbol using a context manager
-    with SecurityCrud() as security_crud:
-        security_ = security_crud.get_by_symbol(symbol)
 
-    integration_data_access_ = IntegrationDataAccess(verbosity_level)
-    if security_ is None:
-        # Download company info from an Internet financial provider, to add new security to the database
-        security_ = integration_data_access_.add_security(symbol, verbosity_level)
+    def __init__(self,
+                 long_term: bool = False,
+                 verbosity_level: int = DEBUG):
+        """
+        Initializes the PriceProvider for a specific time period.
 
-    if security_:
-        # Get a standard start date
-        from_dt_ = propose_start_dt(DAILY, long_term=long_term)
+        :param long_term: Specifies whether taking an old date.
+        :param verbosity_level: Minimum importance level of messages reporting the process progress.
+        """
+        self.start_date = propose_start_dt(DAILY, long_term=long_term)
+        self.end_date = date.today() + timedelta(days=1)
+        self.verbosity_level = verbosity_level
 
-        if security_.store_locally:
-            # Ensure the local database is updated completely
-            integration_data_access_.check_update(security_, from_dt_, verbosity_level)
+    def _process_dataframe(self, symbol: str, prices_df: pd.DataFrame) -> pl.DataFrame:
+        """
+        Internal helper to process a Pandas DataFrame into a clean Polars DataFrame.
 
-            # Get daily prices from the local database
-            prices_df_ = DailyDataCrud().get_prices_by_security(security_.id, from_dt=from_dt_)
-        else:
-            # Get daily prices from external provider
-            prices_df_ = integration_data_access_.get_daily_data(security=security_, from_dt=from_dt_,
-                                                                 verbosity_level=verbosity_level)
+        :param symbol: The security symbol the dataframe belongs to.
+        :param prices_df: The raw pandas DataFrame to process.
+        :return: A processed Polars DataFrame.
+        """
+        # Reset Date index as a column Date and convert the Pandas DataFrame to a Polars DataFrame
+        prices_pl_df_ = pl.from_pandas(prices_df.reset_index())
 
-    else:
-        prices_df_ = None
-        message_ = f"Security {symbol} not found in database or external provider."
-        verbose(message_, WARNING, verbosity_level)
-        logger_.warning(message_)
+        # Remove rows without "Close" price
+        prices_pl_df_ = prices_pl_df_.filter(pl.col('Close').is_not_nan())
 
-    # Release memory
-    del integration_data_access_
+        # Round prices to 4 decimal places with Polars DataFrame
+        prices_pl_df_ = prices_pl_df_.with_columns([
+            pl.col('Date').cast(pl.Date).alias('Date'),
+            pl.col('Open').round(4).alias('Open'),
+            pl.col('High').round(4).alias('High'),
+            pl.col('Low').round(4).alias('Low'),
+            pl.col('Close').round(4).alias('Close')
+        ])
 
-    return prices_df_
+        # To check if a DataFrame is empty, use the shape attribute and check if the row count is zero
+        if not prices_pl_df_.height == 0:
+            # Report the last Close price
+            last_close_ = prices_pl_df_.select('Close').tail(1).to_numpy()[0][0]
+            message_ = f'{symbol} - Last Close: ${last_close_:.2f}'
+            verbose(message_, DEBUG, self.verbosity_level)
+            logger_.info(message_)
+
+        # Calculate percentage change
+        prices_pl_df_ = prices_pl_df_.with_columns((pl.col("Close").pct_change() * 100).alias("PercentChange"))
+
+        return prices_pl_df_[ORDERED_PRICE_COLS]
+
+    def get_prices(self,
+                   symbols: list[str],
+                   max_workers: int = 10) -> dict[str, pl.DataFrame]:
+        """
+        Downloads historical data for a list of symbols concurrently using yfinance's built-in capabilities.
+
+        :param symbols: A list of security symbols to download (e.g., ['SPY', 'NDQ']).
+        :param max_workers: The maximum number of threads yfinance should use for the concurrent downloads.
+
+        :return: A dictionary mapping each symbol to its Polars DataFrame. Symbols with errors will be omitted.
+        """
+        if not symbols:
+            logger_.warning("List of symbols empty.")
+            return {}
+
+        # Step 1: Translate internal symbols to provider tickers (currently only Yahoo Finance is supported)
+        security_repository_ = SecurityRepository()
+        symbol_to_ticker_map_: dict[str, str] = {}
+        for symbol in symbols:
+            if not symbol:
+                message_ = "Empty symbol string provided."
+                verbose(message_, WARNING, self.verbosity_level)
+                logger_.warning(message_)
+                continue
+
+            # Fetch the appropriate ticker (through synonyms) for the given symbol and provider.
+            ticker_ = security_repository_.get_ticker(symbol)
+            if ticker_:
+                symbol_to_ticker_map_[symbol] = ticker_
+
+        tickers_ = list(symbol_to_ticker_map_.values())
+        if not tickers_:
+            logger_.warning("No valid tickers to download after translation.")
+            return {}
+
+        # Step 2: Download data using the translated tickers
+        results_: dict[str, pl.DataFrame] = {}
+        message_ = f"Starting download for {len(tickers_)} tickers from Yahoo Finance..."
+        verbose(message_, INFO, self.verbosity_level)
+        logger_.info(message_)
+
+        try:
+            # Visit: https://pandas-datareader.readthedocs.io/en/latest/remote_data.html
+            #        https://github.com/pydata/pandas-datareader/issues/170
+            #        https://pypi.org/project/yfinance/
+
+            # Download prices from prices source with this parameter list:
+            # tickers, start = None, end = None, actions = False, threads = True,
+            # ignore_tz = None, group_by = 'column', auto_adjust = None, back_adjust = False,
+            # repair = False, keepna = False, progress = True, period = None, interval = "1d",
+            # prepost = False, proxy = _SENTINEL_, rounding = False, timeout = 10, session = None,
+            # multi_level_index = True
+            multi_symbol_df_ = yf.download(tickers_, self.start_date, self.end_date,
+                                           auto_adjust=True, progress=bool(self.verbosity_level == DEBUG),
+                                           threads=max_workers, group_by='ticker')
+
+            if multi_symbol_df_.empty:
+                logger_.warning("Download returned an empty DataFrame for all tickers.")
+                return {}
+
+            # Step 3: Process results, mapping tickers back to original symbols
+            for symbol, ticker in symbol_to_ticker_map_.items():
+                # For single ticker downloads, yfinance might not use multi-level columns unless group_by is used.
+                # The current code handles both multi-level and single-level column structures.
+                if ticker not in multi_symbol_df_.columns:
+                    logger_.warning(f"No data downloaded for symbol: {symbol} (ticker: {ticker})")
+                    continue
+
+                symbol_df_ = multi_symbol_df_[ticker].dropna(how='all')
+
+                if not symbol_df_.empty:
+                    results_[symbol] = self._process_dataframe(symbol, symbol_df_)
+
+        except Exception as e_:
+            logger_.error(f'An exception occurred during download: {e_}', exc_info=True)
+
+        logger_.log(self.verbosity_level,
+                    f"Successfully processed data for {len(results_)} out of {len(symbols)} symbols.")
+        return results_
 
 
 # Use of __name__ & __main__
-# When the Python interpreter reads a code file, it completely executes the code in it.
-# For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be '__main__',
-#  however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
-#  'my_module'
-if __name__ == "__main__":
-    script_name_ = os.path.basename(__file__)
-
-    # Logger initialisation
+if __name__ == '__main__':
+    import os
+    from radar_core.settings import settings  # noqa: F401
     import logging.config
     from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
 
+    script_name_ = os.path.basename(__file__)
     logging.config.dictConfig(get_logging_config(filename=str(script_name_)))
     logger_ = logging.getLogger()
     begin_logging(logger_, script_name_, INFO)
 
-    # Set symbol
-    symbol_ = "NDQ"
+    provider_ = PriceProvider()
 
-    # Get daily historical prices
-    data_ = get_daily_prices(symbol_, verbosity_level=INFO)
+    # --- Test Case 1: Download a single symbol that requires translation ---
+    print("--- Testing single download ---")
+    symbol_to_test_ = 'NDQ'
+    prices_data_ = provider_.get_prices([symbol_to_test_])
+    if symbol_to_test_ in prices_data_:
+        data_ = prices_data_[symbol_to_test_]
+        print(f"{symbol_to_test_} - Shape: {data_.shape}")
+        print(data_.head(3))
+        print(data_.tail(3))
 
-    if type(data_) is pl.DataFrame:
-        print(symbol_)
-        print(data_.head(5))
-        print(data_.tail(5))
+    # --- Test Case 2: Download multiple symbols ---
+    print("\n--- Testing multiple symbols download ---")
+    symbols_to_test_ = ['AAPL', 'MSFT', 'GOOGL']
+    prices_data_ = provider_.get_prices(symbols_to_test_)
 
-    # Logger finalization
+    print("\nConcurrent download complete. Results:")
+    for symbol_to_test_, data_ in prices_data_.items():
+        print(f"{symbol_to_test_} - Shape: {data_.shape}")
+        print(data_.head(3))
+
     end_logging(logger_)
-
-    # Terminate normally
     raise SystemExit(0)

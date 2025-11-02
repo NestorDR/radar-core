@@ -1,8 +1,5 @@
 # src/radar_core/helpers/constants.py
 
-DEFAULT_ATTEMPT_LIMIT = 3
-DEFAULT_SLEEP = 3  # seconds
-NOT_FOUND = 'Not found'
 UNKNOWN = 'Unknown'
 
 # Time frames

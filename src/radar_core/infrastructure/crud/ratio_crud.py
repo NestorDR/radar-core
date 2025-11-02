@@ -1,8 +1,7 @@
 # src/radar_core/infrastructure/crud/ratio_crud.py
 
 # --- Third Party Libraries ---
-# polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
-#  optimized for performance and parallelism
+# polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
 from sqlalchemy import and_, desc, not_
@@ -10,7 +9,7 @@ from sqlalchemy.future import select
 from sqlalchemy.inspection import inspect  # Use mapper inspection to remain refactor-friendly
 
 # --- App modules ---
-# infrastructure: allows access to the own database and/or integration with external prices providers
+# infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import BaseCrud
 # models: result of Object-Relational Mapping
 from radar_core.models import Ratios

@@ -4,7 +4,7 @@
 # dataclasses: provides decorator and functions for auto-generating special methods in classes that primarily store data,
 # such as __init__, __repr__, and __eq__, simplifying class definitions and reducing boilerplate code.
 from dataclasses import dataclass
-# datetime: provides classes for simple and complex date and time manipulation.
+# datetime: provides classes for manipulating dates and times.
 from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, getLogger
@@ -14,8 +14,7 @@ import os
 import time
 
 # --- Third Party Libraries ---
-# polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
-#  optimized for performance and parallelism
+# polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases - Import the specific exception
 from sqlalchemy.exc import OperationalError
@@ -30,7 +29,7 @@ from radar_core.domain.technical import RSI
 from radar_core.helpers.constants import DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRICE_COLS
 from radar_core.helpers.datetime_helper import to_weekly_timeframe
 from radar_core.helpers.log_helper import get_verbosity_level, verbose
-# infrastructure: allows access to the own database and/or integration with external prices providers
+# infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure import price_provider
 from radar_core.infrastructure.crud import RatioCrud
 # settings: has the configuration for the radar_core

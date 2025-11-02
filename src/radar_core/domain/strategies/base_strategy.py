@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 # decimal: provides support for fast correctly rounded decimal floating point arithmetic
 #  it offers several advantages over the float datatype.
 from decimal import Decimal, InvalidOperation
-# datetime: provides classes for simple and complex date and time manipulation.
+# datetime: provides classes for manipulating dates and times.
 from datetime import date, datetime
 # json: library for encoding and decoding prices in JSON format.
 import json
@@ -19,8 +19,7 @@ from typing import Any, Optional
 # numpy: provides greater support for vectors and matrices, with high-level mathematical functions to operate on them
 import numpy as np
 from numpy.typing import NDArray
-# polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
-#  optimized for performance and parallelism
+# polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 
 # --- App modules ---
@@ -31,7 +30,7 @@ from radar_core.domain.technical import ATR
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import DAILY, TIMEFRAMES
 from radar_core.helpers.log_helper import verbose
-# infrastructure: allows access to the own database and/or integration with external prices providers
+# infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import RatioCrud, StrategyCrud
 # models: result of Object-Relational Mapping
 from radar_core.models import Ratios

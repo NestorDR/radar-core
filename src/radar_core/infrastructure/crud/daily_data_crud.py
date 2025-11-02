@@ -1,14 +1,13 @@
 # src/radar_core/infrastructure/crud/daily_data_crud.py
 
 # --- Python modules ---
-# datetime: provides classes for simple and complex date and time manipulation.
+# datetime: provides classes for manipulating dates and times.
 from datetime import date
 # decimal: provides support for fast correctly rounded decimal floating-point arithmetic
 from decimal import Decimal
 
 # --- Third Party Libraries ---
-# polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
-#  optimized for performance and parallelism
+# polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
 from sqlalchemy import and_, asc, desc
@@ -16,7 +15,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import Mapped
 
 # --- App modules ---
-# infrastructure: allows access to the own database and/or integration with external prices providers
+# infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import BaseCrud
 # models: result of Object-Relational Mapping
 from radar_core.models import DailyData

@@ -1,12 +1,11 @@
 # src/radar_core/helpers/datetime_helper.py
 
 # --- Python modules ---
-# datetime: provides classes for simple and complex date and time manipulation.
+# datetime: provides classes for manipulating dates and times.
 from datetime import date, timedelta
 
 # --- Third Party Libraries ---
-# polars: is a fast, memory-efficient DataFrame library designed for manipulation and analysis,
-#  optimized for performance and parallelism
+# polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 
 # --- App modules ---
