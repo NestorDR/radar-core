@@ -1,0 +1,10 @@
+# /meteor_dummy/.gitattributes
+
+# Set default behavior, in case people don't have core.autocrlf set.
+* text=auto
+
+# Declare files that will always have LF line endings on checkout.
+*.py text eol=lf
+*.toml text eol=lf
+*.lock text eol=lf
+Dockerfile* text eol=lf
