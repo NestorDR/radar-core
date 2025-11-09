@@ -30,7 +30,7 @@ from radar_core.helpers.constants import DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRI
 from radar_core.helpers.datetime_helper import to_weekly_timeframe
 from radar_core.helpers.log_helper import get_verbosity_level, verbose
 # infrastructure: allows access to the own DB and/or integration with external prices providers
-from radar_core.infrastructure import price_provider
+from radar_core.infrastructure.price_provider import PriceProvider
 from radar_core.infrastructure.crud import RatioCrud
 # settings: has the configuration for the radar_core
 from radar_core.settings import settings
@@ -178,17 +178,16 @@ def analyzer(symbols: list[str] | None = None) -> int:
                 rsi_2b=RsiTwoBands(verbosity_level=verbosity_level_),
             )
 
+            # Download prices data for all symbols
+            prices_data_ = PriceProvider(long_term=False).get_prices(symbols)
+
             # Iterate over symbols
-            for symbol_ in symbols:
+            for symbol_, prices_df_ in prices_data_.items():
                 symbol_started_at_ = time.monotonic()
                 symbol_ = symbol_.upper()
                 only_long_positions_ = symbol_ not in shortable_symbols_
-                long_term_ = False
 
                 try:
-                    # Get daily historical prices in a dataFrame.
-                    prices_df_ = price_provider.get_daily_prices(symbol_, long_term_, verbosity_level_)
-
                     # Strategy Analysis a
                     if valid_prices(DAILY, symbol_, prices_df_, verbosity_level_):
                         analyze(DAILY, symbol_, only_long_positions_, prices_df_, strategies_, verbosity_level_)
@@ -259,7 +258,7 @@ if __name__ == "__main__":
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbol for a specific test
-    symbols_ = ['BTC-USD']
+    symbols_ = ['BTC-USD', 'NDQ']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(symbols_)

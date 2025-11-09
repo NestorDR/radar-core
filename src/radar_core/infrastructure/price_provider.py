@@ -45,7 +45,7 @@ class PriceProvider:
 
     def _process_dataframe(self, symbol: str, prices_df: pd.DataFrame) -> pl.DataFrame:
         """
-        Internal helper to process a Pandas DataFrame into a clean Polars DataFrame.
+        Internal helper to convert a Pandas DataFrame into a clean Polars DataFrame.
 
         :param symbol: The security symbol the dataframe belongs to.
         :param prices_df: The raw pandas DataFrame to process.
@@ -83,7 +83,7 @@ class PriceProvider:
                    symbols: list[str],
                    max_workers: int = 10) -> dict[str, pl.DataFrame]:
         """
-        Downloads historical data for a list of symbols concurrently using yfinance's built-in capabilities.
+        Downloads historical prices for a list of symbols concurrently using yfinance's built-in capabilities.
 
         :param symbols: A list of security symbols to download (e.g., ['SPY', 'NDQ']).
         :param max_workers: The maximum number of threads yfinance should use for the concurrent downloads.
@@ -163,12 +163,12 @@ if __name__ == '__main__':
     logger_ = logging.getLogger()
     begin_logging(logger_, script_name_, INFO)
 
-    provider_ = PriceProvider()
+    price_provider_ = PriceProvider()
 
     # --- Test Case 1: Download a single symbol that requires translation ---
     print("--- Testing single download ---")
     test_symbol_ = 'NDQ'
-    prices_data_ = provider_.get_prices([test_symbol_])
+    prices_data_ = price_provider_.get_prices([test_symbol_])
     if test_symbol_ in prices_data_:
         data_ = prices_data_[test_symbol_]
         print(f"{test_symbol_} - Shape: {data_.shape}")
@@ -179,7 +179,7 @@ if __name__ == '__main__':
     print("\n--- Testing multiple symbols download ---")
     test_symbols_ = settings.get_symbols()
     init_dt_ = datetime.now()  # Identify the date and time when the process is started
-    prices_data_ = provider_.get_prices(test_symbols_)
+    prices_data_ = price_provider_.get_prices(test_symbols_)
     end_dt_ = datetime.now()
 
     print("\nConcurrent download complete. Results:")
