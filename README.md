@@ -131,7 +131,7 @@ Run the analyzer directly with Docker (connecting to an existing PostgreSQL):
 Using Docker Compose (spins up Postgres + the app):
 - Ensure you have an env file with DB credentials at src/radar_core/.env.production (can be created from src/radar_core/.env.template). Start both services:
 ```shell
-  docker compose -f docker-compose.test.yml up -d --build
+  docker compose -f docker-compose.dev.yml up -d --build
 ```
 
 Notes:

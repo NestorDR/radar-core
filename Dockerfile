@@ -58,22 +58,24 @@ RUN mkdir -p /wheels
 # Copy pyproject.toml (the only true source, not use requirements.txt)
 COPY ./pyproject.toml .
 
+#RUN uv sync --no-dev
+#RUN uv pip freeze > requirements.txt
+#RUN uv run pip wheel --wheel-dir=/wheels -r requirements.txt
+
+# Compile (download & package) deps as wheels in a single atomic layer to optimize caching
+# (this layer will only be rebuilt if pyproject.toml changes).
+# 1. uv compile third-party deps into a requirements.txt file without attempting to build the local project.
+# 2. pip Prebuild and cache all dependencies as wheels in the /wheels directory to enable faster,
+#    offline-capable installations later in the build or runtime.
+RUN uv pip compile pyproject.toml -o requirements.txt && \
+    pip wheel --wheel-dir=/wheels -r requirements.txt
+
 # Copy files needed to build the wheel (radar_core source code and Docker-specific settings.)
 COPY ./src ./src
 COPY ./README.md ./README.md
 
-# Sync the virtual environment to the project's lock file (uv.lock)
-# --no-dev: only the production libraries (excluding those for development)
-RUN uv sync --no-dev
-# Freeze production dependencies respecting the uv.lock file to generate the wheels
-RUN uv pip freeze > requirements.txt
-
 # Build the wheel for local application.
 RUN uv build --wheel --out-dir /wheels
-# Prebuild and cache all dependencies as wheels in the /wheels directory to enable faster,
-#  offline-capable installations later in the build or runtime.
-RUN uv run pip wheel --wheel-dir=/wheels -r requirements.txt
-
 
 
 
@@ -118,7 +120,8 @@ RUN pip install --no-cache-dir --no-index /wheels/*.whl && rm -rf /wheels
 RUN useradd --uid 1001 --create-home default
 WORKDIR /home/default/app
 
-COPY ./src/radar_core/settings.yml ./settings.yml
+# Copy settings file and assign the 'default' user property
+COPY --chown=default:default ./src/radar_core/settings.yml ./settings.yml
 
 # Switch to the non-root user for runtime execution.
 USER default
