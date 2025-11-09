@@ -96,11 +96,7 @@ class PriceProvider:
 
         # Step 1: Translate internal symbols to provider tickers (currently only Yahoo Finance is supported)
         symbol_to_ticker_map_ = SecurityRepository(self.verbosity_level).map_symbol_to_ticker(symbols)
-
         tickers_ = list(symbol_to_ticker_map_.values())
-        if not tickers_:
-            logger_.warning("No valid tickers to download after translation.")
-            return {}
 
         # Step 2: Download data using the translated tickers
         results_: dict[str, pl.DataFrame] = {}
