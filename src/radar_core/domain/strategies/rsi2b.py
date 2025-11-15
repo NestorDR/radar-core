@@ -1,8 +1,6 @@
 # src/radar_core/domain/strategies/rsi2b.py
 
 # --- Python modules ---
-# datetime: provides classes for manipulating dates and times.
-from datetime import date
 # json: library for encoding and decoding prices in JSON format.
 import json
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
@@ -34,7 +32,7 @@ PERCENT_CHANGE = 2
 
 class RsiTwoBands(RsiStrategyABC):
     """
-    Class to identify and evaluate the Profitable Two Bands (input/output) strategy on the RSI
+    Class to identify Profitable Two Bands (input/output) strategy on the RSI
     Visit https://www.tecnicasdetrading.com/2011/09/tecnica-de-trading-rsi-rollercoaster.html
     """
 
@@ -47,37 +45,6 @@ class RsiTwoBands(RsiStrategyABC):
         """
         super().__init__(RSI_2B, verbosity_level)
 
-    def evaluate(self,
-                 symbol: str,
-                 timeframe: int,
-                 is_long_position: bool,
-                 profitable_setting: dict[str, Any],
-                 prices_df: pl.DataFrame,
-                 verbosity_level: int = DEBUG) -> tuple[int, str, str, date]:
-        """
-        Evaluates if the RSI crosses the level of input into RSI Rollercoaster for Long and Short positions.
-
-        :param symbol: Security symbol to evaluate.
-        :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
-        :param is_long_position: True if long trading positions, otherwise False.
-        :param profitable_setting: Input setting for a profitable trading strategy.
-        :param prices_df: Historical prices.
-        :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
-         it will be taken into account only if it is greater than the level of detail specified for the entire class.
-
-        :return: A tuple containing:
-         - the suggested position to take as zero (long), 1 (short), or -1 (no position),
-         - parameters of the setup,
-         - and a string comment explaining the suggested position to take,
-         - last output date for a position taken with the strategy under analysis.
-        """
-        inputs_, net_profit_, win_probability_, min_percentage_change_to_win_, max_percentage_change_to_win_, \
-            last_output_date_ = self.scatter_ratios(profitable_setting)
-
-        position_, parameters_, comment_ = \
-            self.evaluate_rsi_break(symbol, inputs_, timeframe, is_long_position, min_percentage_change_to_win_,
-                                    min_percentage_change_to_win_, last_output_date_, prices_df, verbosity_level)
-        return position_, parameters_, comment_, last_output_date_
 
     def identify(self,
                  symbol: str,
@@ -94,7 +61,7 @@ class RsiTwoBands(RsiStrategyABC):
         Save the profitable setups (identified levels and associated ratios) in the Database.
         Returns a dictionary with the strategies with the best ratios.
 
-        :param symbol: Security symbol to analyze the PRSIRC.
+        :param symbol: Security symbol to analyze.
         :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe with required columns [Date, Close, Volume, PercentChange], indexed by numbers.

@@ -5,7 +5,7 @@
 from abc import ABC, abstractmethod
 # decimal: provides support for fast correctly rounded decimal floating point arithmetic
 #  it offers several advantages over the float datatype.
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 # datetime: provides classes for manipulating dates and times.
 from datetime import date, datetime
 # json: library for encoding and decoding prices in JSON format.
@@ -86,7 +86,7 @@ class AnalysisContext:
 
 class StrategyABC(ABC):
     """
-    Provides a base class to define and evaluate profitable trading strategies.
+    Provides a base class to identify profitable trading strategies.
     This class is an abstract base class (ABC) meant to be implemented for specific strategies.
     """
 
@@ -111,90 +111,6 @@ class StrategyABC(ABC):
             self.pool = strategy.pool
         self.verbosity_level = verbosity_level
         self.ratio_crud: Optional[RatioCrud] = None
-
-    # region Support to evaluation
-
-    @abstractmethod
-    def evaluate(self,
-                 symbol: str,
-                 timeframe: int,
-                 is_long_position: bool,
-                 profitable_setting: dict[str, Any],
-                 prices_df: pl.DataFrame,
-                 verbosity_level: int = DEBUG) -> tuple[int, str, str, date]:
-        """
-        Evaluates if the tech indicator actives a strategy setting, and if it is yes, notice to the list received.
-        
-        :param symbol: Security symbol to evaluate.
-        :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
-        :param is_long_position: True if long trading positions, otherwise False.
-        :param profitable_setting: Input setting for a profitable trading strategy.
-        :param prices_df: Historical prices.
-        :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
-         it will be taken into account only if it is greater than the level of detail specified for the entire class.
-        
-        :return: A tuple containing:
-         - the position to take as zero (long), 1 (short), or -1 (no position),
-         - parameters of the setup,
-         - and a string comment explaining the decision,
-         - last output date for a position taken with the strategy under analysis.
-        """
-        pass
-
-    @staticmethod
-    def scatter_ratios(ratios: dict[str, Any]) -> tuple[str, float, float, Decimal, Decimal, date | None]:
-        """
-        Extracts specific financial ratio values from a dictionary, converts them, and returns them as a tuple.
-
-        :param ratios: A dictionary containing financial ratios with the following keys:
-         inputs, net_profit, win_probability, min_percentage_change_to_win, and max_percentage_change_to_win.
-
-        :return: A tuple[str, float, float, decimal.Decimal, decimal.Decimal]
-         A tuple containing the extracted and converted financial ratios in the following order:
-         inputs, expected_value, win_probability, min_percentage_change_to_win, max_percentage_change_to_win,
-         last_output_date_
-
-        :raises: KeyError: If any of the expected keys are missing in the input Series.
-                 TypeError: If any of the values cannot be converted to decimal.Decimal.
-        """
-        try:
-            inputs_ = str(ratios['inputs'])
-            net_profit_ = round(float(ratios['net_profit']), 2)
-            win_probability_ = round(float(ratios['win_probability']), 2)
-            min_percentage_change_to_win_ = Decimal(ratios['min_percentage_change_to_win'])
-            max_percentage_change_to_win_ = Decimal(ratios['max_percentage_change_to_win'])
-            last_output_date_ = ratios['last_output_date']
-            if last_output_date_ == date.today():
-                last_output_date_ = None
-
-        except KeyError as e:
-            raise KeyError(f"Key {e} is missing from the input Series.") from e
-        except InvalidOperation as e:
-            raise TypeError(f"Value for {e} cannot be converted to decimal.Decimal.") from e
-
-        return (inputs_,
-                net_profit_,
-                win_probability_,
-                min_percentage_change_to_win_,
-                max_percentage_change_to_win_,
-                last_output_date_)
-
-    def save_notice(self,
-                    symbol: str,
-                    strategy_id: int,
-                    inputs: str,
-                    timeframe: int,
-                    is_long_position: bool,
-                    dt: datetime,
-                    open_position: bool,
-                    threshold: float,
-                    reached_value: float):
-        return
-        # Deprecating...
-        # self.notice_crud.upsert(symbol, strategy_id, inputs, timeframe, is_long_position, dt, open_position,
-        #                         Decimal(threshold), Decimal(reached_value))
-
-    # endregion Support to evaluation
 
     # region Support to identification
 
