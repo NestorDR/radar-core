@@ -24,7 +24,6 @@ import polars as pl
 
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
-from radar_core.domain.strategies.constants import NO_POSITION, LONG, SHORT
 # technical: provides calculations of TA indicators
 from radar_core.domain.technical import ATR
 # helpers: constants and functions that provide miscellaneous functionality
@@ -584,108 +583,6 @@ class RsiStrategyABC(StrategyABC, ABC):
                  period: int = 14):
         super().__init__(strategy_acronym, verbosity_level)
         self.period = period  # Common RSI period, used by RSI strategies
-
-    # region Support to evaluation
-
-    def evaluate_rsi_break(self,
-                           symbol: str,
-                           inputs: str,
-                           timeframe: int,
-                           is_long_position: bool,
-                           min_percentage_change_to_win: Decimal,
-                           max_percentage_change_to_win: Decimal,
-                           last_output_date: date,
-                           prices_df: pl.DataFrame,
-                           verbosity_level: int = DEBUG) -> tuple[int, str, str]:
-        """
-        Evaluates whether a position should be taken or closed based on the Relative Strength Index (RSI) for the given
-         financial instrument.
-        The method compares the current and previous RSI values against the defined input/output levels and assesses the
-         percent change for validity.
-        Depending on the configuration, it determines whether to take a long or short position or none.
-
-        :param symbol: Security symbol to evaluate.
-        :param inputs: Input prices that parameterize the applied strategy.
-        :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
-        :param is_long_position: True if long trading positions, otherwise False.
-        :param max_percentage_change_to_win: The maximum allowable percentage price change for taking or continuing the position
-          within the strategy's constraints.
-        :param min_percentage_change_to_win: The minimum allowable percentage price change for taking or continuing the position
-            within the strategy's constraints.
-        :param last_output_date: The date of the last output for the strategy.
-        :param prices_df: Historical prices.
-        :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
-         it will be taken into account only if it is greater than the level of detail specified for the entire class.
-
-        :return: A tuple containing:
-         - the suggested position to take as zero (long), 1 (short), or -1 (no position),
-         - parameters of the setup,
-         - and a string comment explaining the suggested position to take,
-        """
-
-        verbosity_level = min(verbosity_level, self.verbosity_level)
-
-        # Parse the inputs_ JSON and extract the relevant parameters
-        parsed_inputs_ = json.loads(inputs)
-        if 'over' in parsed_inputs_:
-            in_ = parsed_inputs_['in']
-            over_ = parsed_inputs_['over']
-            out_ = parsed_inputs_['out']
-            parameters_ = f'{in_}, {over_}, {out_}'
-        else:
-            in_ = parsed_inputs_['in']
-            out_ = parsed_inputs_['out']
-            parameters_ = f'{in_}, {out_}'
-
-        if verbosity_level == DEBUG:
-            print(f'{symbol}: evaluating {self.strategy_acronym}({parameters_})...')
-
-        # Extract the 'Rsi' values for the last and second-last rows
-        # Get the last row
-        row_index_ = prices_df.height - 1
-        rsi_ = prices_df['Rsi'][row_index_]
-        percent_change_ = prices_df['PercentChange'][row_index_]
-        date_ = prices_df['Date'][row_index_]
-        # Get the second-last row
-        row_index_ -= 1
-        previous_rsi_ = prices_df['Rsi'][row_index_]
-        position_ = NO_POSITION
-        comment_ = ''
-
-        if is_long_position:
-            threshold_ = in_
-            # Check if RSI rises above the long RSI input level
-            if rsi_ > in_ >= previous_rsi_ and last_output_date is not None:
-                if min_percentage_change_to_win <= percent_change_ <= max_percentage_change_to_win:
-                    position_ = LONG
-                    comment_ = f' {rsi_:.2f} > {in_:.2f} ({percent_change_:.2f}%)'
-
-            # Check if RSI falls below the long RSI output level
-            elif previous_rsi_ > out_ >= rsi_ and last_output_date is None:
-                position_ = SHORT
-                comment_ = f' {rsi_:.2f} < {out_:.2f}'
-
-        else:
-            threshold_ = out_
-
-            # Check if RSI falls below the short RSI input level
-            if rsi_ < in_ <= previous_rsi_:
-                if min_percentage_change_to_win <= percent_change_ <= max_percentage_change_to_win:
-                    position_ = SHORT
-                    comment_ = f' {rsi_:.2f} < {in_:.2f} ({percent_change_:.2f}%)'
-
-            # Check if RSI rises above the short RSI output level
-            elif previous_rsi_ < out_ <= rsi_:
-                position_ = LONG
-                comment_ = f' {rsi_:.2f} > {out_:.2f}'
-
-        if position_ != NO_POSITION:
-            self.save_notice(symbol, self.strategy_id, inputs, timeframe, is_long_position, date_, position_ == LONG,
-                             threshold_, rsi_)
-
-        return position_, parameters_, comment_
-
-    # endregion Support to evaluation
 
     # region Stop Loss
 
