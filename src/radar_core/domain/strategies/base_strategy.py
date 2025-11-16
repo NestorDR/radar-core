@@ -355,6 +355,47 @@ class StrategyABC(ABC):
         # Identify prices and session numbers
         first_input_price_ = max(float(trades_df[0, 'InputPrice']), 0.00001)
 
+        # Create a 'Group' column based on the trade result (Winnings or Losses) and calculate aggregates in a single pass
+        aggregates_df_ = (
+            trades_df.lazy()
+            .with_columns(
+                pl.when(pl.col('Result') > 0).then(pl.lit('W')).otherwise(pl.lit('L')).alias('Group')
+            )
+            .group_by('Group')
+            .agg(
+                pl.sum('Result').alias('TotalResult'),  # Total winnings|losses in group W|L
+                pl.count('Result').alias('TradesCount'),  # Count of winning|losses trades in group W|L
+                pl.sum('Sessions').alias('TotalSessions'),  # Total sessions for winning|losses trades in group W|L trades
+                pl.min('InputPercentChange').alias('MinPercentChange'),  # Minimum percent change
+                pl.max('InputPercentChange').alias('MaxPercentChange')  # Maximum percent change
+            )
+            .collect()
+        )
+
+        # Use a dictionary for easier and safer access to results where key is the group name:
+        # {
+        #     'W': {'Group': 'W', 'TotalResult': 5000.0, 'TradesCount': 10, ...},
+        #     'L': {'Group': 'L', 'TotalResult': -2000.0, 'TradesCount': 5, ...}
+        # }
+        aggregates_map_ = {row['Group']: row for row in aggregates_df_.iter_rows(named=True)}
+        winn_aggregates_ = aggregates_map_.get('W', {})
+        loss_aggregates_ = aggregates_map_.get('L', {})
+
+        # Access the calculated values for winnings
+        winnings_ = winn_aggregates_.get('TotalResult', 0.0)
+        winn_trades_ = winn_aggregates_.get('TradesCount', 0)
+        winning_sessions_ = winn_aggregates_.get('TotalSessions', 0)
+        min_percentage_change_to_win_ = winn_aggregates_.get('MinPercentChange', 0.0) or 0  # Handle None or null
+        max_percentage_change_to_win_ = winn_aggregates_.get('MaxPercentChange', 0.0) or 0  # Handle None or null
+
+        # Access the calculated values for losses
+        losses_ = loss_aggregates_.get('TotalResult', 0.0)
+        loss_trades_ = loss_aggregates_.get('TradesCount', 0)
+        losing_sessions_ = loss_aggregates_.get('TotalSessions', 0)
+
+        # region OLD - TODO 2025-11-15 NestorDR: to be deprecated after testing the new approach with group by
+        """
+
         # Filter the winning trades and calculate aggregates
         aggregates_ = (
             trades_df.lazy()
@@ -388,6 +429,9 @@ class StrategyABC(ABC):
         losses_ = aggregates_['TotalLosses'][0]
         loss_trades_ = aggregates_['LosingTradesCount'][0]
         losing_sessions_ = aggregates_['TotalSessions'][0]
+        
+        """
+        # endregion OLD
 
         if winnings_ <= losses_:
             return None

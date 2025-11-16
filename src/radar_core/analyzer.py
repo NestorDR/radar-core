@@ -1,9 +1,7 @@
 # src/radar_core/analyzer.py
 
 # --- Python modules ---
-# dataclasses: provides decorator and functions for auto-generating special methods in classes that primarily store data,
-# such as __init__, __repr__, and __eq__, simplifying class definitions and reducing boilerplate code.
-from dataclasses import dataclass
+import concurrent.futures
 # datetime: provides classes for manipulating dates and times.
 from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
@@ -23,12 +21,13 @@ from sqlalchemy.exc import OperationalError
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 from radar_core.domain.strategies import MovingAverage, RsiRollerCoaster, RsiTwoBands, RsiStrategyABC
 from radar_core.domain.strategies.constants import SMA, RSI_SMA
+from radar_core.domain.types import Strategies
 # technical: provides calculations of TA indicators
 from radar_core.domain.technical import RSI
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRICE_COLS
 from radar_core.helpers.datetime_helper import to_weekly_timeframe
-from radar_core.helpers.log_helper import get_verbosity_level, verbose
+from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.price_provider import PriceProvider
 from radar_core.infrastructure.crud import RatioCrud
@@ -36,15 +35,6 @@ from radar_core.infrastructure.crud import RatioCrud
 from radar_core.settings import settings
 
 logger_ = getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class Strategies:
-    """Small DI container for strategy instances supported by the analyzer."""
-    ma: MovingAverage
-    rsi_ma: MovingAverage
-    rsi_rc: RsiRollerCoaster
-    rsi_2b: RsiTwoBands
 
 
 def clean(symbols: list[str],
@@ -135,6 +125,48 @@ def analyze(timeframe: int,
     del close_prices_
 
 
+def process_symbol(symbol: str,
+                   prices_df: pl.DataFrame,
+                   strategies: Strategies,
+                   shortable_symbols: list[str],
+                   verbosity_level: int) -> str:
+    """
+    Worker function to analyze a single symbol.
+
+    :param symbol: The symbol to analyze.
+    :param prices_df: The price data for the symbol.
+    :param strategies: The container with strategy instances.
+    :param shortable_symbols: A list of symbols that can be shorted.
+    :param verbosity_level: The logging verbosity level.
+    :return: A status message string.
+    """
+    symbol_started_at_ = time.monotonic()
+    symbol_ = symbol.upper()
+    only_long_positions_ = symbol_ not in shortable_symbols
+
+    try:
+        # Strategy Analysis
+        if valid_prices(DAILY, symbol_, prices_df, verbosity_level):
+            analyze(DAILY, symbol_, only_long_positions_, prices_df, strategies, verbosity_level)
+
+            # Prepare weekly prices dataframe
+            prices_df_weekly_ = to_weekly_timeframe(prices_df)
+            if valid_prices(WEEKLY, symbol_, prices_df_weekly_, verbosity_level):
+                print()
+                analyze(WEEKLY, symbol_, only_long_positions_, prices_df_weekly_, strategies, verbosity_level)
+
+        symbol_elapsed_ = time.monotonic() - symbol_started_at_
+        message_ = f"[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min"
+        verbose(message_ + "\n", INFO, verbosity_level)
+        return message_
+
+    except Exception as e:
+        message_ = f"[{symbol_}]: Error while analyzing prices due to error: {e}."
+        verbose(message_, ERROR, verbosity_level)
+        logger_.exception(message_, exc_info=e)
+        return message_
+
+
 def analyzer(symbols: list[str] | None = None) -> int:
     """
     Analyzes financial symbols using various technical strategies. The analysis includes retrieving daily and weekly
@@ -152,7 +184,7 @@ def analyzer(symbols: list[str] | None = None) -> int:
 
     # Set information about the start of the process
     init_dt_ = datetime.now()  # Identify the date and time when the process is started
-    verbosity_level_ = get_verbosity_level()
+    verbosity_level_ = settings.verbosity_level
 
     try:
         # Initialize logging settings
@@ -181,31 +213,35 @@ def analyzer(symbols: list[str] | None = None) -> int:
             # Download prices data for all symbols
             prices_data_ = PriceProvider(long_term=False).get_prices(symbols)
 
-            # Iterate over symbols
-            for symbol_, prices_df_ in prices_data_.items():
-                symbol_started_at_ = time.monotonic()
-                symbol_ = symbol_.upper()
-                only_long_positions_ = symbol_ not in shortable_symbols_
+            # Determine the number of workers using the new property. os.cpu_count() will automatically use the available cores.
+            num_workers = settings.max_workers
+            if num_workers <= 0:
+                num_workers = (os.cpu_count() or 2)
 
-                try:
-                    # Strategy Analysis a
-                    if valid_prices(DAILY, symbol_, prices_df_, verbosity_level_):
-                        analyze(DAILY, symbol_, only_long_positions_, prices_df_, strategies_, verbosity_level_)
+            # Use a ProcessPoolExecutor to analyze symbols in parallel
+            message_ = f"Starting parallel analysis for {len(prices_data_)} symbols using {num_workers} workers..."
+            verbose(message_, INFO, verbosity_level_)
+            logger_.info(message_)
 
-                        # Prepare weekly prices dataframe
-                        prices_df_ = to_weekly_timeframe(prices_df_)
-                        if valid_prices(WEEKLY, symbol_, prices_df_, verbosity_level_):
-                            print()
-                            analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies_, verbosity_level_)
+            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+                # Create a future for each symbol analysis task
+                futures = {
+                    # Submit a task to the Executor Pool
+                    executor.submit(process_symbol,
+                                    symbol, prices_df, strategies_, shortable_symbols_, verbosity_level_)
+                    for symbol, prices_df in prices_data_.items()  # Iterate over symbols
+                }
 
-                    symbol_elapsed_ = time.monotonic() - symbol_started_at_
-                    message_ = f"[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min\n"
-                    verbose(message_, INFO, verbosity_level_)
-
-                except Exception as e:
-                    message_ = f"[{symbol_}]: Error while analyzing prices due to error: {e}."
-                    verbose(message_, ERROR, verbosity_level_)
-                    logger_.exception(message_, exc_info=e)
+                # Wait for all futures to complete and process results
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        result_message = future.result()
+                        logger_.info(result_message)
+                    except Exception as e:
+                        # This will catch errors from within the process_symbol function
+                        message_ = f"A task generated an exception: {e}"
+                        verbose(message_, ERROR, verbosity_level_)
+                        logger_.exception(message_, exc_info=e)
         else:
             message_ = 'No available securities to analyze in the settings file'
             verbose(message_, WARNING, verbosity_level_)

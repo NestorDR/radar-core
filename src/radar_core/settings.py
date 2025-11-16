@@ -16,39 +16,40 @@ import yaml
 
 # --- App modules ---
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.log_helper import get_verbosity_level, verbose
+from radar_core.helpers.log_helper import verbose
 
 logger_ = getLogger(__name__)
 
 
 class Settings:
     """Application settings manager"""
-    _env_loaded = False  # Class-level flag to ensure .env is loaded only once
+    _config = None  # Class-level flag to ensure .env & YAML config are loaded only once
 
     def __init__(self):
         """
         Initializes the settings object.
         - Ensures environment variables from .env are loaded.
         - Reads the main YAML configuration file.
+        This method ensures configuration is loaded only once.
         """
-        self.verbosity_level = DEBUG
+        if Settings._config is None:
+            # Preserve the current working path
+            original_folder_ = os.getcwd()
 
-        # Preserve the current working path
-        original_folder_ = os.getcwd()
+            # Set folder from which `dotenvy_py.find_upwards` will start searching for the .env file.
+            module_folder_ = Path(__file__).resolve().parent
+            os.chdir(module_folder_)
 
-        # Set folder from which `dotenvy_py.find_upwards` will start searching for the .env file.
-        module_folder_ = Path(__file__).resolve().parent
-        os.chdir(module_folder_)
+            # Load environment variables
+            self.load_env()
+            # Get settings file path from environment variable, or use a default
+            file_path = os.getenv('RADAR_SETTING_FILE', module_folder_ / 'settings.yml')
 
-        # Load environment variables
-        self.load_env()
-        # Get settings file path from environment variable, or use a default
-        file_path = os.getenv('SETTING_FILE', module_folder_ / 'settings.yml')
-        # Load YAML settings file
-        self._config = self._read_yaml_file(file_path)
+            # Load YAML settings file
+            Settings._config = self._read_yaml_file(file_path)
 
-        # Return to the original working path
-        os.chdir(original_folder_)
+            # Return to the original working path
+            os.chdir(original_folder_)
 
     @classmethod
     def load_env(cls):
@@ -56,9 +57,6 @@ class Settings:
         Finds and loads the .env file into the process's environment variables.
         This method is idempotent and will only run once per application lifecycle.
         """
-        if cls._env_loaded:
-            return
-
         # Find an .env file in the current or parent directories
         env_path_ = dotenvy_py.find_upwards('.env', 2)
         if env_path_:
@@ -69,10 +67,45 @@ class Settings:
             message_ = "No environment file found. Continuing without loading environment variables."
             message_verbosity_level_ = WARNING
 
-        verbosity_level_ = get_verbosity_level()
-        verbose(message_, message_verbosity_level_, verbosity_level_)
+        verbose(message_, message_verbosity_level_, DEBUG)
 
         cls._env_loaded = True
+
+    @property
+    def verbosity_level(self) -> int:
+        """Returns the log level from RADAR_LOG_LEVEL env var, ensuring a valid numeric value, defaulting to INFO."""
+        default_log_level_ = INFO
+        log_level_env_ = os.getenv('RADAR_LOG_LEVEL') or str(default_log_level_)
+
+        try:
+            log_level_ = int(log_level_env_)
+
+            # Calculate level by flooring to the nearest 10. If outside range 10-59, return default
+            return (log_level_ // 10) * 10 if 10 <= log_level_ <= 59 else default_log_level_
+
+        except ValueError:
+            return default_log_level_
+
+
+    @property
+    def max_workers(self) -> int:
+        """
+        Returns number of parallel workers from RADAR_MAX_WORKERS env var.
+        Defaults to 0 (auto-detect all cores) if not set, invalid, or non-positive.
+        """
+        max_workers_env_ = os.getenv('RADAR_MAX_WORKERS') or '0'
+
+        try:
+            max_workers_ = int(max_workers_env_)
+
+            # Return the value only if it's a positive integer, otherwise 0.
+            return max_workers_ if max_workers_ > 0 else 0
+
+        except ValueError:
+            message_ = f"Invalid value for RADAR_MAX_WORKERS: '{max_workers_env_}'. Must be an integer. Defaulting to all available cores."
+            verbose(message_, WARNING, self.verbosity_level)
+            logger_.warning(message_)
+            return 0
 
     def _read_yaml_file(self, file_path):
         message_ = f'Reading YAML file {file_path}...'

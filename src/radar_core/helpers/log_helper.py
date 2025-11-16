@@ -12,7 +12,6 @@ from pathlib import Path
 
 LOG_FILENAME = "app.log"
 LOG_FOLDER = "logs"
-DEFAULT_VERBOSITY_LEVEL = INFO
 DEFAULT_CONSOLE_LOG_LEVEL = WARNING  # Console handler logs only warning, error and critical levels
 
 
@@ -117,20 +116,3 @@ def verbose(message: str,
         print(message, end=end)
 
 
-def get_verbosity_level() -> int:
-    """Reads LOG_LEVEL from the environment and returns a valid numeric logging level."""
-    log_level_env_ = os.getenv('LOG_LEVEL')
-    default_level_ = DEFAULT_VERBOSITY_LEVEL
-
-    # Return default if env var is not set or not a digit
-    if not log_level_env_ or not log_level_env_.isdigit():
-        return default_level_
-
-    level = int(log_level_env_)
-
-    # If outside range 10-59, return default
-    if not 10 <= level <= 59:
-        return default_level_
-
-    # Calculate level by flooring to the nearest 10
-    return (level // 10) * 10
