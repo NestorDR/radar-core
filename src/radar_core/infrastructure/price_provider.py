@@ -152,11 +152,12 @@ if __name__ == '__main__':
     import logging.config
     # --- App modules ---
     from radar_core.settings import settings
-    from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
+    from radar_core.helpers.log_helper import begin_logging, end_logging
 
+    # Logger initialisation
     script_name_ = os.path.basename(__file__)
-    logging.config.dictConfig(get_logging_config(filename=str(script_name_)))
-    logger_ = logging.getLogger()
+    logging.config.dictConfig(settings.log_config)
+    logger_ = getLogger(__name__)
     begin_logging(logger_, script_name_, INFO)
 
     price_provider_ = PriceProvider()

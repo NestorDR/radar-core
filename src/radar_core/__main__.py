@@ -1,20 +1,18 @@
 # src/radar_core/__main__.py
 """Minimal CLI entrypoint for the package: python -m radar_core"""
 
-# --- Import and apply logging settings BEFORE importing other app modules ---
-import logging.config
-from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
-
-log_name_ = "main.analyzer"
-logging.config.dictConfig(get_logging_config(filename=log_name_))
-
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import INFO, getLogger
+import logging.config
 
 # --- App modules ---
+# settings: has the configuration for the radar_core
+from radar_core.settings import settings
 # analyzer: defines the application's main logic.
 from radar_core.analyzer import analyzer
+# helpers: constants and functions that provide miscellaneous functionality
+from radar_core.helpers.log_helper import begin_logging, end_logging
 
 # Use of __name__ & __main__
 # When the Python interpreter reads a code file, it completely executes the code in it.
@@ -23,8 +21,9 @@ from radar_core.analyzer import analyzer
 # 'my_module'
 if __name__ == "__main__":
     # Get root logger and log start messages
-    logger_ = getLogger()
-    begin_logging(logger_, log_name_, INFO)
+    logging.config.dictConfig(settings.log_config)
+    logger_ = getLogger(__name__)
+    begin_logging(logger_, "main.analyzer", INFO)
 
     # Run the application
     exit_code = analyzer()

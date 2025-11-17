@@ -1,10 +1,12 @@
 # src/radar_core/settings.py
-
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-from logging import ERROR, DEBUG, INFO, WARNING, getLogger
 # os: allows access to functionalities dependent on the Operating System
 import os
+# sys: provides access to some variables used or maintained by the interpreter and to functions that interact strongly
+#      with the interpreter.
+import sys
+from logging import ERROR, DEBUG, INFO, WARNING, getLogger
 # pathlib: provides an interface to work with file paths in a more readable and easier way than the older 'os.path'.
 from pathlib import Path
 
@@ -32,24 +34,30 @@ class Settings:
         - Reads the main YAML configuration file.
         This method ensures configuration is loaded only once.
         """
-        if Settings._config is None:
-            # Preserve the current working path
-            original_folder_ = os.getcwd()
+        # Preserve the current working path
+        if Settings._config is not None:
+            return
 
-            # Set folder from which `dotenvy_py.find_upwards` will start searching for the .env file.
-            module_folder_ = Path(__file__).resolve().parent
-            os.chdir(module_folder_)
+        original_folder_ = os.getcwd()
 
-            # Load environment variables
-            self.load_env()
-            # Get settings file path from environment variable, or use a default
-            file_path = os.getenv('RADAR_SETTING_FILE', module_folder_ / 'settings.yml')
+        # Set folder from which `dotenvy_py.find_upwards` will start searching for the .env file.
+        module_folder_ = Path(__file__).resolve().parent
+        os.chdir(module_folder_)
 
-            # Load YAML settings file
-            Settings._config = self._read_yaml_file(file_path)
+        # Load environment variables
+        self.load_env()
+        self.verbosity_level = self._get_log_level()
+        self.log_config = self._get_log_config()
+        self.max_workers = self._get_max_workers()
 
-            # Return to the original working path
-            os.chdir(original_folder_)
+        # Get settings file path from environment variable, or use a default
+        file_path = os.getenv('RADAR_SETTING_FILE', module_folder_ / 'settings.yml')
+
+        # Load YAML settings file
+        Settings._config = self._read_yaml_file(file_path)
+
+        # Return to the original working path
+        os.chdir(original_folder_)
 
     @classmethod
     def load_env(cls):
@@ -71,14 +79,14 @@ class Settings:
 
         cls._env_loaded = True
 
-    @property
-    def verbosity_level(self) -> int:
+    @staticmethod
+    def _get_log_level() -> int:
         """Returns the log level from RADAR_LOG_LEVEL env var, ensuring a valid numeric value, defaulting to INFO."""
         default_log_level_ = INFO
-        log_level_env_ = os.getenv('RADAR_LOG_LEVEL') or str(default_log_level_)
+        env_log_level_ = os.getenv('RADAR_LOG_LEVEL') or str(default_log_level_)
 
         try:
-            log_level_ = int(log_level_env_)
+            log_level_ = int(env_log_level_)
 
             # Calculate level by flooring to the nearest 10. If outside range 10-59, return default
             return (log_level_ // 10) * 10 if 10 <= log_level_ <= 59 else default_log_level_
@@ -86,23 +94,74 @@ class Settings:
         except ValueError:
             return default_log_level_
 
+    def _get_log_config(self) -> dict:
+        """
+        Generates a declarative log configuration dictionary,
+         which will allow or not file logging based on the RADAR_ENABLE_FILE_LOGGING value.
 
-    @property
-    def max_workers(self) -> int:
+        :return: A dictionary with the logging configuration.
+        """
+        main_folder_ = Path(__file__).resolve().parent  # radar_core folder
+        enable_file_logging_ = os.getenv('RADAR_ENABLE_FILE_LOGGING', 'true').lower() in ('true', '1', 't')
+        handlers_ = ["console"]
+        config_ = {
+            "version": 1,
+            "disable_existing_loggers": False,
+            "formatters": {
+                "default": {
+                    "format": "%(asctime)s; %(name)-45s; %(levelname)-8s; line %(lineno)3d; %(message)s",
+                    "datefmt": "%Y-%m-%d %H:%M:%S",
+                }
+            },
+            "handlers": {
+                "console": {
+                    "class": "logging.StreamHandler",
+                    "formatter": "default",
+                    "level": WARNING if enable_file_logging_ else self.verbosity_level,
+                }
+            },
+            "root": {
+                "level": DEBUG,
+                "handlers": handlers_,
+            },
+        }
+
+        if enable_file_logging_:
+            logs_folder_ = main_folder_ / "logs"
+            os.makedirs(logs_folder_, exist_ok=True)
+
+            main_file = getattr(sys.modules["__main__"], "__file__", None)  # Get main file of the running stack
+            log_filename = Path(main_file).name.removesuffix('.py') if main_file else "app"
+
+            log_file_path_ = logs_folder_ / f'{log_filename}.log'
+
+            config_["handlers"]["file"] = {
+                "class": "logging.handlers.RotatingFileHandler",
+                "formatter": "default",
+                "filename": str(log_file_path_),
+                "maxBytes": 524288,
+                "backupCount": 3,
+                "level": self.verbosity_level,
+            }
+            handlers_.append("file")
+
+        return config_
+
+    def _get_max_workers(self) -> int:
         """
         Returns number of parallel workers from RADAR_MAX_WORKERS env var.
         Defaults to 0 (auto-detect all cores) if not set, invalid, or non-positive.
         """
-        max_workers_env_ = os.getenv('RADAR_MAX_WORKERS') or '0'
+        env_max_workers_ = os.getenv('RADAR_MAX_WORKERS') or '0'
 
         try:
-            max_workers_ = int(max_workers_env_)
+            max_workers_ = int(env_max_workers_)
 
             # Return the value only if it's a positive integer, otherwise 0.
             return max_workers_ if max_workers_ > 0 else 0
 
         except ValueError:
-            message_ = f"Invalid value for RADAR_MAX_WORKERS: '{max_workers_env_}'. Must be an integer. Defaulting to all available cores."
+            message_ = f"Invalid value for RADAR_MAX_WORKERS: '{env_max_workers_}'. Must be an integer. Defaulting to all available cores."
             verbose(message_, WARNING, self.verbosity_level)
             logger_.warning(message_)
             return 0

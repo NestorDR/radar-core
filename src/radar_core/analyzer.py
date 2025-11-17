@@ -283,14 +283,15 @@ def analyzer(symbols: list[str] | None = None) -> int:
 #  however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
 #  'my_module'
 if __name__ == "__main__":
-    script_name_ = os.path.basename(__file__)
+    # --- Python modules ---
+    import logging.config
+    # --- App modules ---
+    from radar_core.helpers.log_helper import begin_logging, end_logging
 
     # Logger initialisation
-    import logging.config
-    from radar_core.helpers.log_helper import get_logging_config, begin_logging, end_logging
-
-    logging.config.dictConfig(get_logging_config(filename=str(script_name_)))
-    logger_ = logging.getLogger()
+    logging.config.dictConfig(settings.log_config)
+    logger_ = getLogger(__name__)
+    script_name_ = os.path.basename(__file__)
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbol for a specific test

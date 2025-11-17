@@ -4,68 +4,15 @@
 # datetime: provides classes for manipulating dates and times.
 from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-from logging import DEBUG, INFO, WARNING, Logger
-# os: allows access to functionalities dependent on the Operating System
-import os
-# pathlib: provides an interface to work with file paths in a more readable and easier way than the older 'os.path'.
-from pathlib import Path
+from logging import INFO, WARNING, Logger
 
-LOG_FILENAME = "app.log"
-LOG_FOLDER = "logs"
+
 DEFAULT_CONSOLE_LOG_LEVEL = WARNING  # Console handler logs only warning, error and critical levels
 
 
-def get_logging_config(log_level: int = INFO, filename: str = LOG_FILENAME) -> dict:
-    """
-    Generates a declarative logging configuration dictionary.
-    :param log_level: The logging level for the file handler.
-    :param filename: The name for the log file.
-    :return: A dictionary with the logging configuration.
-    """
-    main_folder_ = Path(__file__).resolve().parent.parent  # radar_core folder
-    enable_file_logging_ = os.getenv('ENABLE_FILE_LOGGING', 'true').lower() in ('true', '1', 't')
-    handlers_ = ["console"]
-    config_ = {
-        "version": 1,
-        "disable_existing_loggers": False,
-        "formatters": {
-            "default": {
-                "format": "%(asctime)s - %(name)-45s - %(levelname)-8s - line %(lineno)3d - %(message)s",
-                "datefmt": "%Y-%m-%d %H:%M:%S",
-            }
-        },
-        "handlers": {
-            "console": {
-                "class": "logging.StreamHandler",
-                "formatter": "default",
-                "level": WARNING if enable_file_logging_ else log_level,
-            }
-        },
-        "root": {
-            "level": DEBUG,
-            "handlers": handlers_,
-        },
-    }
-
-    if enable_file_logging_:
-        logs_folder_ = main_folder_ / "logs"
-        os.makedirs(logs_folder_, exist_ok=True)
-        log_file_path_ = logs_folder_ / f'{filename.removesuffix('.py')}.log'
-
-        config_["handlers"]["file"] = {
-            "class": "logging.handlers.RotatingFileHandler",
-            "formatter": "default",
-            "filename": str(log_file_path_),
-            "maxBytes": 524288,
-            "backupCount": 3,
-            "level": log_level,
-        }
-        handlers_.append("file")
-
-    return config_
-
-
-def begin_logging(logger: Logger, script_name: str, verbosity_level: int = INFO) -> None:
+def begin_logging(logger: Logger,
+                  script_name: str,
+                  verbosity_level: int = INFO) -> None:
     """
     Logs the startup process for a given script using the provided logger.
 
@@ -114,5 +61,3 @@ def verbose(message: str,
     """
     if task_verbosity_level <= message_verbosity_level <= DEFAULT_CONSOLE_LOG_LEVEL:
         print(message, end=end)
-
-
