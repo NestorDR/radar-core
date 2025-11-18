@@ -34,12 +34,19 @@ services:
     environment:
       # POSTGRES_HOST=host.docker.internal    # Special name resolved to the host IP address (host PostgreSQL instance)
       - POSTGRES_HOST=db                      # DB engine host is the service named 'db'
-      - ENABLE_FILE_LOGGING=false             # Disable log to files
-      - LOG_LEVEL=20                          # 10.Debug, 20.Info, 30.Warning, 40.Error, 50.Critical
     env_file:
       - .\radar-core\src\radar_core\.env.production  # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
     networks:
       - radar-network                         # Shared network for inter-service communication
+    # Resource limits - similar concept used in K8S
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2.00'                        # Limit to % of one CPU core
+    #       memory: 2056M                       # Limit to MB RAM
+    #     reservations:
+    #       cpus: '0.50'                        # Reserve % of one CPU core
+    #       memory: 1024M                       # Reserve MB RAM
     # Required to connect from the container to the Windows host DB
     # extra_hosts:
     #   - "host.docker.internal:host-gateway"   # Maps host.docker.internal to the host IP

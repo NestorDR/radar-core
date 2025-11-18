@@ -1,14 +1,15 @@
 # src/radar_core/settings.py
+
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
+from logging import ERROR, DEBUG, INFO, WARNING, getLogger
 # os: allows access to functionalities dependent on the Operating System
 import os
+# pathlib: provides an interface to work with file paths in a more readable and easier way than the older 'os.path'.
+from pathlib import Path
 # sys: provides access to some variables used or maintained by the interpreter and to functions that interact strongly
 #      with the interpreter.
 import sys
-from logging import ERROR, DEBUG, INFO, WARNING, getLogger
-# pathlib: provides an interface to work with file paths in a more readable and easier way than the older 'os.path'.
-from pathlib import Path
 
 # --- Third Party Libraries ---
 # dotenvy-py: loads environment variables from .env files (first occurrence wins)
@@ -38,12 +39,6 @@ class Settings:
         if Settings._config is not None:
             return
 
-        original_folder_ = os.getcwd()
-
-        # Set folder from which `dotenvy_py.find_upwards` will start searching for the .env file.
-        module_folder_ = Path(__file__).resolve().parent
-        os.chdir(module_folder_)
-
         # Load environment variables
         self.load_env()
         self.verbosity_level = self._get_log_level()
@@ -51,13 +46,11 @@ class Settings:
         self.max_workers = self._get_max_workers()
 
         # Get settings file path from environment variable, or use a default
+        module_folder_ = Path(__file__).resolve().parent
         file_path = os.getenv('RADAR_SETTING_FILE', module_folder_ / 'settings.yml')
 
         # Load YAML settings file
         Settings._config = self._read_yaml_file(file_path)
-
-        # Return to the original working path
-        os.chdir(original_folder_)
 
     @classmethod
     def load_env(cls):
