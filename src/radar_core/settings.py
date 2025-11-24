@@ -19,7 +19,7 @@ import yaml
 
 # --- App modules ---
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.log_helper import verbose
+from radar_core.helpers.log_helper import verbose, DEFAULT_CONSOLE_LOG_LEVEL
 
 logger_ = getLogger(__name__)
 
@@ -110,7 +110,7 @@ class Settings:
                 "console": {
                     "class": "logging.StreamHandler",
                     "formatter": "default",
-                    "level": WARNING if enable_file_logging_ else self.verbosity_level,
+                    "level": DEFAULT_CONSOLE_LOG_LEVEL if enable_file_logging_ else self.verbosity_level,
                 }
             },
             "root": {
