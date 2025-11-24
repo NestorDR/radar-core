@@ -48,8 +48,7 @@ def clean(symbols: list[str],
     with RatioCrud() as ratio_crud_:
         deleted_ratios = ratio_crud_.delete_symbols_not_in(symbols)
 
-    if verbosity_level <= INFO:
-        print(f'Cleaned {deleted_ratios} rows from the database for deprecated symbols.')
+    verbose(f'Cleaned {deleted_ratios} rows from the database for deprecated symbols.', INFO, verbosity_level)
 
 
 def valid_prices(timeframe: int,
@@ -295,7 +294,7 @@ if __name__ == "__main__":
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbol for a specific test
-    symbols_ = ['BTC-USD', 'NDQ']
+    symbols_ = ['BTC-USD', 'SOXL', 'SOXX']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(symbols_)
