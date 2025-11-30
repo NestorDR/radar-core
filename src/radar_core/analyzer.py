@@ -1,9 +1,14 @@
 # src/radar_core/analyzer.py
 
 # --- Python modules ---
+# concurrent.futures: provides a high-level interface for asynchronously executing callables.
 import concurrent.futures
+# contextlib: provides utilities for working with context managers, including stream redirection.
+from contextlib import redirect_stderr, redirect_stdout
 # datetime: provides classes for manipulating dates and times.
 from datetime import datetime
+# io: implements the core facilities for file-like objects and I/O streams.
+import io
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, getLogger
 # os: allows access to functionalities dependent on the Operating System
@@ -32,7 +37,7 @@ from radar_core.helpers.log_helper import verbose
 from radar_core.infrastructure.price_provider import PriceProvider
 from radar_core.infrastructure.crud import RatioCrud
 # settings: has the configuration for the radar_core
-from radar_core.settings import settings
+from radar_core.settings import Settings
 
 logger_ = getLogger(__name__)
 
@@ -131,47 +136,59 @@ def process_symbol(symbol: str,
                    verbosity_level: int) -> str:
     """
     Worker function to analyze a single symbol.
+    Captures stdout/stderr to prevent interleaved logs in concurrent execution.
 
     :param symbol: The symbol to analyze.
     :param prices_df: The price data for the symbol.
     :param strategies: The container with strategy instances.
     :param shortable_symbols: A list of symbols that can be shorted.
     :param verbosity_level: The logging verbosity level.
-    :return: A status message string.
     """
     symbol_started_at_ = time.monotonic()
     symbol_ = symbol.upper()
     only_long_positions_ = symbol_ not in shortable_symbols
 
-    try:
-        # Strategy Analysis
-        if valid_prices(DAILY, symbol_, prices_df, verbosity_level):
-            analyze(DAILY, symbol_, only_long_positions_, prices_df, strategies, verbosity_level)
+    # Create an in-memory buffer to capture text output
+    log_capture_buffer_ = io.StringIO()
 
-            # Prepare weekly prices dataframe
-            prices_df_weekly_ = to_weekly_timeframe(prices_df)
-            if valid_prices(WEEKLY, symbol_, prices_df_weekly_, verbosity_level):
-                print()
-                analyze(WEEKLY, symbol_, only_long_positions_, prices_df_weekly_, strategies, verbosity_level)
+    # Redirect both stdout (print/verbose) and stderr (some logs) to the buffer
+    with redirect_stdout(log_capture_buffer_), redirect_stderr(log_capture_buffer_):
+        try:
+            # Strategy Analysis
+            if valid_prices(DAILY, symbol_, prices_df, verbosity_level):
+                analyze(DAILY, symbol_, only_long_positions_, prices_df, strategies, verbosity_level)
 
-        symbol_elapsed_ = time.monotonic() - symbol_started_at_
-        message_ = f"[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min"
-        verbose(message_ + "\n", INFO, verbosity_level)
-        return message_
+                # Prepare weekly prices dataframe
+                prices_df_weekly_ = to_weekly_timeframe(prices_df)
+                if valid_prices(WEEKLY, symbol_, prices_df_weekly_, verbosity_level):
+                    print()
+                    analyze(WEEKLY, symbol_, only_long_positions_, prices_df_weekly_, strategies, verbosity_level)
 
-    except Exception as e:
-        message_ = f"[{symbol_}]: Error while analyzing prices due to error: {e}."
-        verbose(message_, ERROR, verbosity_level)
-        logger_.exception(message_, exc_info=e)
-        return message_
+            symbol_elapsed_ = time.monotonic() - symbol_started_at_
+            message_ = f"[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min"
+            verbose(message_ + "\n", INFO, verbosity_level)
+            logger_.info(message_)
+
+        except Exception as e:
+            message_ = f"[{symbol_}]: Error while analyzing prices due to error: {e}."
+            verbose(message_, ERROR, verbosity_level)
+            logger_.exception(message_, exc_info=e)
+
+        # Get the captured stdout value for returning, close the buffer (although GC handles it)
+        captured_output_ = log_capture_buffer_.getvalue()
+        log_capture_buffer_.close()
+
+        return captured_output_
 
 
-def analyzer(symbols: list[str] | None = None) -> int:
+def analyzer(settings: Settings,
+             symbols: list[str] | None = None) -> int:
     """
     Analyzes financial symbols using various technical strategies. The analysis includes retrieving daily and weekly
      historical price data, validating the data, and applying multiple trading strategies.
     The function supports verbosity for logging and handles errors effectively to provide robust execution.
 
+    :param settings: Application settings object.
     :param symbols: A list of symbols (e.g., stock tickers) to analyze. Defaults to None,
      in which case the function retrieves symbols from the application settings.
 
@@ -234,8 +251,13 @@ def analyzer(symbols: list[str] | None = None) -> int:
                 # Wait for all futures to complete and process results
                 for future in concurrent.futures.as_completed(futures):
                     try:
-                        result_message = future.result()
-                        logger_.info(result_message)
+                        captured_logs_ = future.result()  # Get the captured logs string
+
+                        if captured_logs_:
+                            # Print the captured atomic block of logs to the console
+                            # flush=True ensures immediate output in containerized environments (Docker)
+                            print(captured_logs_, end='', flush=True)
+
                     except Exception as e:
                         # This will catch errors from within the process_symbol function
                         message_ = f"A task generated an exception: {e}"
@@ -287,17 +309,20 @@ if __name__ == "__main__":
     # --- App modules ---
     from radar_core.helpers.log_helper import begin_logging, end_logging
 
+    # Initialize app settings
+    settings_ = Settings()
     # Logger initialisation
-    logging.config.dictConfig(settings.log_config)
+    logging.config.dictConfig(settings_.log_config)
     logger_ = getLogger(__name__)
     script_name_ = os.path.basename(__file__)
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbol for a specific test
-    symbols_ = ['BTC-USD', 'SOXL', 'SOXX']
+    symbols_ = ['BTC-USD', 'SPY', 'QQQ']
+    # symbols_ = ['AIBU','AMZN','ARTY','AVGO','LABU','MELI','META','NVDA','QQQ','SOXL','TNA','TQQQ','TSLA','UBOT']
 
     #  Analyze strategies over historical prices
-    exit_code = analyzer(symbols_)
+    exit_code = analyzer(settings_, symbols_)
 
     # Logger finalization
     end_logging(logger_)

@@ -40,8 +40,8 @@ class Settings:
             return
 
         # Load environment variables
+        self.verbosity_level = INFO
         self.load_env()
-        self.verbosity_level = self._get_log_level()
         self.log_config = self._get_log_config()
         self.max_workers = self._get_max_workers()
 
@@ -52,14 +52,14 @@ class Settings:
         # Load YAML settings file
         Settings._config = self._read_yaml_file(file_path)
 
-    @classmethod
-    def load_env(cls):
+    def load_env(self) -> None:
         """
         Finds and loads the .env file into the process's environment variables.
         This method is idempotent and will only run once per application lifecycle.
         """
         # Find an .env file in the current or parent directories
         env_path_ = dotenvy_py.find_upwards('.env', 2)
+        self.verbosity_level = self._get_log_level()
         if env_path_:
             dotenvy_py.from_filename(env_path_)
             message_ = f"Found and loaded environment file {env_path_}"
@@ -68,9 +68,7 @@ class Settings:
             message_ = "No environment file found. Continuing without loading environment variables."
             message_verbosity_level_ = WARNING
 
-        verbose(message_, message_verbosity_level_, DEBUG)
-
-        cls._env_loaded = True
+        verbose(message_, message_verbosity_level_, self.verbosity_level)
 
     @staticmethod
     def _get_log_level() -> int:
@@ -203,6 +201,5 @@ class Settings:
     def get_evaluable_strategies(self) -> list[int]:
         return self._config.get('evaluable_strategies', []) if self._config else []
 
-
 # Importable singleton
-settings = Settings()
+# settings = Settings()

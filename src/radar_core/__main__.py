@@ -8,7 +8,7 @@ import logging.config
 
 # --- App modules ---
 # settings: has the configuration for the radar_core
-from radar_core.settings import settings
+from radar_core.settings import Settings
 # analyzer: defines the application's main logic.
 from radar_core.analyzer import analyzer
 # helpers: constants and functions that provide miscellaneous functionality
@@ -20,13 +20,15 @@ from radar_core.helpers.log_helper import begin_logging, end_logging
 # however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
 # 'my_module'
 if __name__ == "__main__":
+    # Initialize app settings
+    settings = Settings()
     # Get root logger and log start messages
     logging.config.dictConfig(settings.log_config)
     logger_ = getLogger(__name__)
     begin_logging(logger_, "main.analyzer", INFO)
 
     # Run the application
-    exit_code = analyzer()
+    exit_code = analyzer(settings)
 
     # Finish logging, remove logger handlers and release memory
     end_logging(logger_)

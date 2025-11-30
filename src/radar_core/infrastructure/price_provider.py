@@ -151,9 +151,11 @@ if __name__ == '__main__':
     from datetime import datetime
     import logging.config
     # --- App modules ---
-    from radar_core.settings import settings
+    from radar_core.settings import Settings
     from radar_core.helpers.log_helper import begin_logging, end_logging
 
+    # Initialize app settings
+    settings = Settings()
     # Logger initialisation
     script_name_ = os.path.basename(__file__)
     logging.config.dictConfig(settings.log_config)
