@@ -143,9 +143,14 @@ def process_symbol(symbol: str,
     :param strategies: The container with strategy instances.
     :param shortable_symbols: A list of symbols that can be shorted.
     :param verbosity_level: The logging verbosity level.
+
+    :return: A string containing the captured logs.
     """
     symbol_started_at_ = time.monotonic()
     symbol_ = symbol.upper()
+    message_ = f'Starting parallel worker process for {symbol} at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
+    verbose(message_, INFO, verbosity_level)
+    logger_.info(message_)
     only_long_positions_ = symbol_ not in shortable_symbols
 
     # Create an in-memory buffer to capture text output
@@ -248,7 +253,7 @@ def analyzer(settings: Settings,
                     for symbol, prices_df in prices_data_.items()  # Iterate over symbols
                 }
 
-                # Wait for all futures to complete and process results
+                # Loop over every future to run its process. Wait for all futures to complete and process results
                 for future in concurrent.futures.as_completed(futures):
                     try:
                         captured_logs_ = future.result()  # Get the captured logs string
@@ -318,7 +323,7 @@ if __name__ == "__main__":
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbol for a specific test
-    symbols_ = ['BTC-USD', 'SPY', 'QQQ']
+    symbols_ = ['BTC-USD']
     # symbols_ = ['AIBU','AMZN','ARTY','AVGO','LABU','MELI','META','NVDA','QQQ','SOXL','TNA','TQQQ','TSLA','UBOT']
 
     #  Analyze strategies over historical prices
