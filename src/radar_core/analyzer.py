@@ -102,7 +102,7 @@ def analyze(timeframe: int,
 
     # Show pricing frame information with prices to process
     if verbosity_level <= INFO:
-        print(f'Starting the {TIMEFRAMES[timeframe]} time frame analysis for {symbol}...')
+        print(f'\nStarting the {TIMEFRAMES[timeframe]} time frame analysis for {symbol}...')
         if verbosity_level == DEBUG:
             print(prices_df.head(1))
         print(prices_df.tail(1))
@@ -148,7 +148,7 @@ def process_symbol(symbol: str,
     """
     symbol_started_at_ = time.monotonic()
     symbol_ = symbol.upper()
-    message_ = f'Starting parallel worker process for {symbol} at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
+    message_ = f'Launching parallel worker process for {symbol} at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
     verbose(message_, INFO, verbosity_level)
     logger_.info(message_)
     only_long_positions_ = symbol_ not in shortable_symbols
@@ -166,7 +166,6 @@ def process_symbol(symbol: str,
                 # Prepare weekly prices dataframe
                 prices_df_weekly_ = to_weekly_timeframe(prices_df)
                 if valid_prices(WEEKLY, symbol_, prices_df_weekly_, verbosity_level):
-                    print()
                     analyze(WEEKLY, symbol_, only_long_positions_, prices_df_weekly_, strategies, verbosity_level)
 
             symbol_elapsed_ = time.monotonic() - symbol_started_at_
