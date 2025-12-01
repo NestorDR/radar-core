@@ -1,13 +1,16 @@
 # Radar Core — Financial Strategy Analyzer
 
-Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, processes them with Polars DataFrames, and evaluates speculative trading strategies using performance metrics such as net profit and percentage of success. The project is under active development and continuous optimization.
+Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, processes them with Polars DataFrames, and evaluates speculative trading strategies using performance metrics such as net profit and percentage of success.
+
+The project follows High Performance Practices, utilizing concurrent processing to analyze multiple symbols simultaneously, and is under active development and continuous optimization.
 
 ## Features
 - Yahoo Finance integration via yfinance for historical daily prices
 - High‑performance data processing using Polars
+- **Concurrent symbol analysis** using Python's `ProcessPoolExecutor` for scalability
 - Built‑in technical analysis and strategies (e.g., Moving Average and RSI‑based variants)
 - Performance metrics and logs (e.g., net profit, success rate)
-- Configurable settings (symbols, shortable assets, verbosity)
+- Configurable settings (symbols, shortable assets, verbosity, concurrency)
 
 ## Prerequisites
 - Python 3.13+
@@ -21,7 +24,7 @@ Radar Core is a Python application that downloads financial asset prices from Ya
 
 TA‑Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA‑Lib can be installed from PyPI (see environment markers in pyproject.toml).
 
-Note: The project was developed on Windows 11, Python 3.13, Pycharm 2025 and Docker Desktop 4.47 
+Note: The project was developed on Windows 11, Python 3.13, Pycharm 2025 and Docker Desktop 4.50 
 
 ## Installation
 You can install with either uv (recommended for this project) or pip.
@@ -52,10 +55,10 @@ You can run the analyzer directly from the repository without installing the pac
 
 By default, the analyzer will:
 - Initialize settings (symbols, logging)
-- Download daily prices from Yahoo Finance (e.g., BTC-USD is used in the current example config)
-- Process data using Polars
+- Download daily prices from Yahoo Finance
+- **Auto-detect CPU cores** and launch parallel workers for analysis
 - Evaluate strategies for daily and weekly timeframes
-- Print progress and summary logs
+- Print buffered logs per symbol to ensure atomic output
 
 ## Minimal Example
 Below is a minimal snippet that shows how you might pull prices and run a simple analysis, similar to what the analyzer does internally.
@@ -89,33 +92,42 @@ for symbol_, prices_df_ in prices_data_.items():
 A typical console output (truncated) may look like:
 
 ```
-Analyzer.py started at 2025-09-28 10:35:00.
-Starting the Daily time frame analysis for BTC-USD...
+Analysis started at 2025-12-01 11:30:55.
+Starting parallel analysis for 3 symbols using 4 workers...
+[BTC-USD]: Launching parallel worker process at 2025-12-01 11:30:57...
+...
+[BTC-USD]: Daily time frame analysis started...
 ┌─────────────────────┬───────┬───────┬───────┬──────┬──────────┐
 │ Date                ┆ Open  ┆ High  ┆ Low   ┆ Close┆ Volume   │
 ├─────────────────────┼───────┼───────┼───────┼──────┼──────────┤
 │ 2020-01-01 00:00:00 ┆ …     ┆ …     ┆ …     ┆ …    ┆ …        │
 │ …                   ┆ …     ┆ …     ┆ …     ┆ …    ┆ …        │
 └─────────────────────┴───────┴───────┴───────┴──────┴──────────┘
-[BTC-USD]: Analysis completed in 4.0 min
-Analyzer.py - Started at 2025-09-28 10:35:00 ... Ended at 2025-09-28 10:39:00 - Elapsed time 0.4 min
+SMA on BTC-USD: start 2025-12-01 11:30:57 ... end 2025-12-01 11:30:59     0.0 min
+[BTC-USD]: Analysis completed in 0.0 min
+...
+Analysis executed from 2025-09-28 10:35:00 to 2025-09-28 10:39:00 - Elapsed time 0.4 min
 ```
 
-Note: Actual output will vary based on a symbol list, dates, and verbosity.
+Note: Actual output will vary based on a symbol list, dates, and verbosity. Output blocks per symbol are printed atomically to prevent interleaving.
 
 ## Configuration
-Project settings are managed by the Settings class and YAML files located under src/radar_core/ (e.g., settings.yml and environment‑specific overrides). You can:
-- Configure the list of symbols to analyze
-- Mark shortable assets
-- Adjust verbosity/logging
+Project settings are managed by the `Settings` class. You can configure the application via the `src/radar_core/settings.yml` file or by using **Environment Variables** (which take precedence).
 
-See src/radar_core/settings.py and the provided YAML files for details.
+### Key Environment Variables
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `RADAR_LOG_LEVEL` | Logging verbosity (10=DEBUG, 20=INFO, etc.) | `20` (INFO) |
+| `RADAR_ENABLE_FILE_LOGGING` | Write logs to `src/radar_core/logs/` | `true` |
+| `RADAR_MAX_WORKERS` | Number of parallel processes. Set to `0` to use all available CPUs. | `0` (Auto) |
+| `RADAR_SETTING_FILE` | Custom path to the settings YAML file | `src/radar_core/settings.yml` |
 
 ## Docker
 Containerization is available for a fully reproducible environment. The image is multi-stage and builds the TA-Lib C library inside the container, so you don’t need any TA-Lib setup on your host.
 
 Prerequisites:
-- Docker 24+ (or Docker Desktop on Windows/macOS)
+- Docker Engine 24+ (included in all modern Docker Desktop versions)
 - Docker Compose v2 (optional, recommended for local DB + app)
 
 Build the image:
@@ -123,32 +135,36 @@ Build the image:
 docker build -t radar-core:dev-0.4.0 .
 ```
 
+
 Run the analyzer directly with Docker (connecting to an existing PostgreSQL):
 - Example (Windows PowerShell):
-```shell
-  docker run --rm \
+```textmate
+docker run --rm \
     -e POSTGRES_HOST=host.docker.internal \
     -e POSTGRES_PORT=5432 \
     -e POSTGRES_DB=radar \
     -e POSTGRES_USER=postgres \
     -e POSTGRES_PASSWORD=your_password \
-    -e ENABLE_FILE_LOGGING=false \
-    -e LOG_LEVEL=20 \
+    -e RADAR_ENABLE_FILE_LOGGING=false \
+    -e RADAR_LOG_LEVEL=20 \
+    -e RADAR_MAX_WORKERS=4 \
     radar-core:dev-0.4.0
 ```
 
+
 Using Docker Compose (spins up Postgres + the app):
 - Ensure you have an env file with DB credentials at src/radar_core/.env.production (can be created from src/radar_core/.env.template). Start both services:
-```shell
-  docker compose -f docker-compose.dev.yml up -d --build
+```textmate
+docker compose -f docker-compose.dev.yml up -d --build
 ```
+
 
 Notes:
 - The Compose file builds the image and waits for the database to become healthy before starting the analyzer.
 - To override configuration without rebuilding, you can bind-mount a custom settings.yml:
-  - docker run --rm -v %cd%\src\radar_core\settings.yml:/home/default/app/settings.yml:ro radar-core:dev-0.4.0
+  - `docker run --rm -v %cd%\src\radar_core\settings.yml:/home/default/app/settings.yml:ro radar-core:dev-0.4.0`
   - On Linux/macOS, adjust the host path accordingly.
-- If you connect the containerized app to a host PostgreSQL, POSTGRES_HOST=host.docker.internal is convenient on Docker Desktop. On native Linux, you may need an extra_hosts entry mapping host.docker.internal to the host gateway.
+- If you connect the containerized app to a host PostgreSQL, `POSTGRES_HOST=host.docker.internal` is convenient on Docker Desktop. On native Linux, you may need an extra_hosts entry mapping host.docker.internal to the host gateway.
 
 ## Project Status
 In active development and continuous improvement. Expect updates, refactoring, and performance tuning.
