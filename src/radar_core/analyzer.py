@@ -76,7 +76,7 @@ def valid_prices(timeframe: int,
                and REQUIRED_PRICE_COLS.issubset(set(prices_df.columns)))
 
     if not result_:
-        message_ = f"[{symbol}]: its {TIMEFRAMES[timeframe]} prices dataframe is not valid."
+        message_ = f"[{symbol}]: Its {TIMEFRAMES[timeframe]} prices dataframe is not valid."
         verbose(message_, WARNING, verbosity_level)
         logger_.warning(message_)
 
@@ -102,7 +102,8 @@ def analyze(timeframe: int,
 
     # Show pricing frame information with prices to process
     if verbosity_level <= INFO:
-        print(f'\nStarting the {TIMEFRAMES[timeframe]} time frame analysis for {symbol}...')
+        print(
+            f'\n[{symbol}]: {TIMEFRAMES[timeframe]} time frame analysis started at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
         if verbosity_level == DEBUG:
             print(prices_df.head(1))
         print(prices_df.tail(1))
@@ -148,7 +149,7 @@ def process_symbol(symbol: str,
     """
     symbol_started_at_ = time.monotonic()
     symbol_ = symbol.upper()
-    message_ = f'Launching parallel worker process for {symbol} at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
+    message_ = f'[{symbol}]: Launching parallel worker process at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
     verbose(message_, INFO, verbosity_level)
     logger_.info(message_)
     only_long_positions_ = symbol_ not in shortable_symbols
