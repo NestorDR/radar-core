@@ -72,7 +72,12 @@ class Settings:
 
     @staticmethod
     def _get_log_level() -> int:
-        """Returns the log level from RADAR_LOG_LEVEL env var, ensuring a valid numeric value, defaulting to INFO."""
+        """
+        Determines and returns the appropriate logging level based on the environment variable
+        'RADAR_LOG_LEVEL', or defaults to the predefined INFO level if the variable is unset or invalid.
+
+        :return: The obtained or default logging level.
+        """
         default_log_level_ = INFO
         env_log_level_ = os.getenv('RADAR_LOG_LEVEL') or str(default_log_level_)
 
@@ -140,8 +145,12 @@ class Settings:
 
     def _get_max_workers(self) -> int:
         """
-        Returns number of parallel workers from RADAR_MAX_WORKERS env var.
-        Defaults to 0 (auto-detect all cores) if not set, invalid, or non-positive.
+        Retrieves the maximum number of workers based on the RADAR_MAX_WORKERS env var.
+         If the value is a positive integer, it is returned; otherwise, defaults to 0.
+        Handles invalid values gracefully by logging a warning message.
+
+        :return: The maximum number of workers based on the environment variable,
+            or 0 if the value is not a positive integer or invalid.
         """
         env_max_workers_ = os.getenv('RADAR_MAX_WORKERS') or '0'
 
@@ -157,7 +166,14 @@ class Settings:
             logger_.warning(message_)
             return 0
 
-    def _read_yaml_file(self, file_path):
+    def _read_yaml_file(self, file_path) -> dict | None:
+        """
+        Reads and parses a YAML file, converting it into a Python object. Handles errors gracefully.
+
+        :param file_path: The path to the YAML file to be read.
+
+        :return: A dictionary representation of the parsed YAML file. If there is an error during parsing, None is returned.
+        """
         message_ = f'Reading YAML file {file_path}...'
         verbose(message_, INFO, self.verbosity_level)
         logger_.info(message_)
@@ -181,13 +197,16 @@ class Settings:
             raise FileNotFoundError(message_) from e
 
     def get_symbols(self) -> list[str]:
+        """Returns the list of symbols to analyze."""
         return self._config.get('symbols', []) if self._config else []
 
     def get_undeletable(self) -> list[str]:
+        """Returns the list of symbols that cannot be deleted from the database."""
         done_list_ = [] if self._config is None else self._config.get('done', []) or []
         return done_list_ + self.get_symbols()
 
     def get_shortables(self) -> list[str]:
+        """Returns the list of symbols that can be shorted."""
         # Get the symbol list and convert it to a set for more efficient search
         symbols_set_ = set(self.get_symbols())
 
@@ -199,7 +218,5 @@ class Settings:
         return [shortable_ for shortable_ in raw_shortables_ if shortable_ in symbols_set_]
 
     def get_evaluable_strategies(self) -> list[int]:
+        """Returns the list of strategy IDs that can be evaluated."""
         return self._config.get('evaluable_strategies', []) if self._config else []
-
-# Importable singleton
-# settings = Settings()
