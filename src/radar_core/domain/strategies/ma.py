@@ -195,8 +195,8 @@ class MovingAverage(StrategyABC):
                 if not ratios_:
                     continue
 
-                # Save only to positive ratios
                 if ratios_.net_profit > 0 and ratios_.expected_value > 0:
+                    # Save only to positive ratios
                     self.ratio_crud.upsert(ratios_)
 
                 # Check if MA just analyzed is a better indicator for positionings than the previous calculated ones.

@@ -176,16 +176,6 @@ class StrategyABC(ABC):
             prices_df.select(pl.col('BarNumber').last()).to_series().item(),
             self.future_bar_number(prices_df))
 
-        # # Identify the initial and final dates of the period to analyze.
-        # prices_df[0, 'Date'],
-        # prices_df[-1, 'Date'],
-        # # Identify the initial and final prices of the period to analyze
-        # prices_df[0, 'Close'],
-        # prices_df[-1, 'Close'],
-        # # Identify the number of sessions
-        # prices_df[-1, 'BarNumber'],
-        # self.future_bar_number(prices_df))
-
         # Instantiate prices access
         self.ratio_crud = RatioCrud()
         # Flag as `is_in_process` the ratios for a specific symbol, strategy_id, and timeframe
@@ -392,46 +382,6 @@ class StrategyABC(ABC):
         losses_ = loss_aggregates_.get('TotalResult', 0.0)
         loss_trades_ = loss_aggregates_.get('TradesCount', 0)
         losing_sessions_ = loss_aggregates_.get('TotalSessions', 0)
-
-        # region OLD - TODO 2025-11-15 NestorDR: to be deprecated after testing the new approach with group by
-        """
-
-        # Filter the winning trades and calculate aggregates
-        aggregates_ = (
-            trades_df.lazy()
-            .filter(pl.col('Result') > 0)
-            .select(
-                pl.sum('Result').alias('TotalWinnings'),  # Total winnings
-                pl.count('Result').alias('WinningTradesCount'),  # Count of winning trades
-                pl.sum('Sessions').alias('TotalSessions'),  # Total sessions for winning trades
-                pl.min('InputPercentChange').alias('MinPercentChange'),  # Minimum percent change
-                pl.max('InputPercentChange').alias('MaxPercentChange')  # Maximum percent change
-            ).collect())
-
-        # Access the calculated values for winnings
-        winnings_ = aggregates_['TotalWinnings'][0]
-        winn_trades_ = aggregates_['WinningTradesCount'][0]
-        winning_sessions_ = aggregates_['TotalSessions'][0]
-        min_percentage_change_to_win_ = aggregates_['MinPercentChange'][0] or 0  # Handle None or null
-        max_percentage_change_to_win_ = aggregates_['MaxPercentChange'][0] or 0  # Handle None or null
-
-        # Filter the losing trades and calculate aggregates
-        aggregates_ = (
-            trades_df.lazy()
-            .filter(pl.col('Result') <= 0)
-            .select(
-                pl.sum('Result').alias('TotalLosses'),  # Total losses
-                pl.count('Result').alias('LosingTradesCount'),  # Count of losing trades
-                pl.sum('Sessions').alias('TotalSessions')
-            ).collect())
-
-        # Access the calculated values for losses
-        losses_ = aggregates_['TotalLosses'][0]
-        loss_trades_ = aggregates_['LosingTradesCount'][0]
-        losing_sessions_ = aggregates_['TotalSessions'][0]
-        
-        """
-        # endregion OLD
 
         if winnings_ <= losses_:
             return None

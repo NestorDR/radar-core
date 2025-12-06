@@ -1,7 +1,6 @@
 # src/radar_core/domain/strategies/rsirc.py
 
 # --- Python modules ---
-# datetime: provides classes for manipulating dates and times.
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG
 # typing: provides runtime support for type hints.

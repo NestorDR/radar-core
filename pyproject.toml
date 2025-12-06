@@ -1,3 +1,5 @@
+# pyproject.toml
+# This file is used to configure the build system and project metadata for the radar-core package.
 [project]
 name = "radar-core"
 version = "0.4.0"
@@ -9,6 +11,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "dotenvy-py~=0.1.0",
+    "numba>=0.62.1",
     "numpy~=2.3",
     "polars~=1.31",
     "psycopg~=3.2",
