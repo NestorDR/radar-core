@@ -245,13 +245,22 @@ def analyzer(settings: Settings,
             logger_.info(message_)
 
             with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
-                # Create a future for each symbol analysis task
-                futures = {
-                    # Submit a task to the Executor Pool
-                    executor.submit(process_symbol,
-                                    symbol, prices_df, strategies_, shortable_symbols_, verbosity_level_)
-                    for symbol, prices_df in prices_data_.items()  # Iterate over symbols
-                }
+                # Use a set to store futures
+                futures = set()
+
+                # Create a future for each symbol analysis task using destructive iteration to free memory in the main
+                # process immediately. The items are popped from the dictionary one by one.
+                # Once passed to executor.submit, the main process no longer needs the DataFrame reference.
+                while prices_data_:
+                    symbol, prices_df = prices_data_.popitem()
+
+                    # Submit the task to the Executor Pool
+                    future = executor.submit(process_symbol, symbol, prices_df, strategies_, shortable_symbols_,
+                                             verbosity_level_)
+                    futures.add(future)
+
+                    # Explicitly delete the local reference to the DataFrame to encourage GC
+                    del prices_df
 
                 # Loop over every future to run its process. Wait for all futures to complete and process results
                 for future in concurrent.futures.as_completed(futures):
@@ -323,8 +332,7 @@ if __name__ == "__main__":
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbol for a specific test
-    symbols_ = ['BTC-USD']
-    # symbols_ = ['AIBU','AMZN','ARTY','AVGO','LABU','MELI','META','NVDA','QQQ','SOXL','TNA','TQQQ','TSLA','UBOT']
+    symbols_ = ['BTC-USD', 'QQQ']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)
