@@ -51,7 +51,7 @@ packages = { find = { where = ["src"] } }
 "radar_core" = ["settings.yml"]
 
 [tool.ruff]
-line-length = 120
+line-length = 140
 target-version = "py313"
 
 [tool.ruff.lint]

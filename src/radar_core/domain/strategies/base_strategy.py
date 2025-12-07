@@ -66,7 +66,7 @@ class AnalysisContext:
         :param initial_price: The price of the security at the start of the analysis period.
         :param final_price: The price of the security at the end of the analysis period.
         :param last_bar_number: The number of the last prices bar.
-        :param future_bar_number: A number of price bars will be available in the future.
+        :param future_bar_number: The number of a price bar that will be available in the future.
         """
         self.symbol = symbol
         self.timeframe = timeframe

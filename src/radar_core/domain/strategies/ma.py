@@ -39,7 +39,6 @@ class MovingAverage(StrategyABC):
         :param max_period: Maximum number of time periods for the moving average calculation.
         :param verbosity_level: Minimum importance level of messages reporting the progress of the process for all
          methods of the class.
-         Message levels to be reported: 0-discard messages, 1-report important messages, 2-report details.
         """
         super().__init__(strategy_acronym, verbosity_level)
         self.value_column_name = value_column_name

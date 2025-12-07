@@ -41,7 +41,6 @@ class RsiTwoBands(RsiStrategyABC):
         """
         :param verbosity_level: Minimum importance level of messages reporting the progress of the process for all
          methods of the class.
-         Message levels to be reported: 0-discard messages, 1-report important messages, 2-report details.
         """
         super().__init__(RSI_2B, verbosity_level)
 

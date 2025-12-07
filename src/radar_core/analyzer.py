@@ -235,37 +235,43 @@ def analyzer(settings: Settings,
             prices_data_ = PriceProvider(long_term=False).get_prices(symbols)
 
             # Determine the number of workers using the new property. os.cpu_count() will automatically use the available cores.
-            num_workers = settings.max_workers
-            if num_workers <= 0:
-                num_workers = (os.cpu_count() or 2)
+            num_workers_ = settings.max_workers
+            if num_workers_ <= 0:
+                num_workers_ = (os.cpu_count() or 2)
 
             # Use a ProcessPoolExecutor to analyze symbols in parallel
-            message_ = f"Starting parallel analysis for {len(prices_data_)} symbols using {num_workers} workers..."
+            message_ = f"Starting parallel analysis for {len(prices_data_)} symbols using {num_workers_} workers..."
             verbose(message_, INFO, verbosity_level_)
             logger_.info(message_)
 
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers_) as executor:
                 # Use a set to store futures
-                futures = set()
+                futures_ = set()
 
                 # Create a future for each symbol analysis task using destructive iteration to free memory in the main
                 # process immediately. The items are popped from the dictionary one by one.
                 # Once passed to executor.submit, the main process no longer needs the DataFrame reference.
-                while prices_data_:
-                    symbol, prices_df = prices_data_.popitem()
+                # ---
+                # Update symbols to those whose prices have actually been downloaded
+                # and keep the original order (FIFO: First-In, First-Out) by emptying the dictionary to free resources
+                symbols = list(prices_data_.keys())
+                for symbol_ in symbols:
+                    # .pop(symbol_) returns the DataFrame and removes the entry from the dict immediately
+                    prices_df_ = prices_data_.pop(symbol_)
 
                     # Submit the task to the Executor Pool
-                    future = executor.submit(process_symbol, symbol, prices_df, strategies_, shortable_symbols_,
-                                             verbosity_level_)
-                    futures.add(future)
+                    future_ = executor.submit(process_symbol,
+                                             symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_)
+                    futures_.add(future_)
 
                     # Explicitly delete the local reference to the DataFrame to encourage GC
-                    del prices_df
+                    del prices_df_
+
 
                 # Loop over every future to run its process. Wait for all futures to complete and process results
-                for future in concurrent.futures.as_completed(futures):
+                for future_ in concurrent.futures.as_completed(futures_):
                     try:
-                        captured_logs_ = future.result()  # Get the captured logs string
+                        captured_logs_ = future_.result()  # Get the captured logs string
 
                         if captured_logs_:
                             # Print the captured atomic block of logs to the console
@@ -332,7 +338,8 @@ if __name__ == "__main__":
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbol for a specific test
-    symbols_ = ['BTC-USD', 'QQQ']
+    symbols_ = ['BTC-USD']
+    symbols_ = ['QQQ', 'SOXX']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)
