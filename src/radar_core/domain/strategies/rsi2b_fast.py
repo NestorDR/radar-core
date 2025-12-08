@@ -1,13 +1,15 @@
-# src/radar_core/domain/strategies/rsirc.py
+# src/radar_core/domain/strategies/rsi2b.py
 
 # --- Python modules ---
+# json: library for encoding and decoding prices in JSON format.
+import json
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG
 # typing: provides runtime support for type hints.
 from typing import Any
 
 # --- Third Party Libraries ---
-# numba: JIT compiler that compiles a subset of Python and NumPy code into optimized machine code using the industry-standard LLVM compiler library
+# numba: JIT compiler that compiles a subset of Python and NumPy code into optimized machine code
 from numba import njit
 # numpy: provides greater support for vectors and matrices, with high-level mathematical functions to operate on them
 import numpy as np
@@ -17,7 +19,7 @@ import polars as pl
 
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
-from radar_core.domain.strategies.constants import COMMISSION_PERCENT, RSI_RC, LONG, SHORT, STEP_LENGTH_RSI_LEVELS
+from radar_core.domain.strategies.constants import COMMISSION_PERCENT, RSI_2B, LONG, SHORT, STEP_LENGTH_RSI_LEVELS
 from radar_core.domain.strategies.base_strategy import AnalysisContext, RsiStrategyABC
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import TIMEFRAMES
@@ -31,23 +33,22 @@ PERCENT_CHANGE = 2
 
 
 # In HPC (High Performance Computing), it is a best practice to decouple compute-intensive logic (the "kernel")
-# from orchestration logic (the class). `_find_trades_rc` acts as a pure function: it accepts Numpy arrays and integers,
+# from orchestration logic (the class). `_find_trades_2b` acts as a pure function: it accepts Numpy arrays and integers,
 # and returns lists, without accessing or modifying the class state. Keeping it at the module level reinforces this separation.
 @njit(cache=True)
-def _find_trades_rc(rsi_values: np.ndarray,
+def _find_trades_2b(rsi_values: np.ndarray,
                     stop_loss_bar_numbers: np.ndarray,
                     in_: int,
-                    over_: int,
                     out_: int,
                     is_long_position: bool,
                     future_bar_number: int) -> tuple[np.ndarray, np.ndarray]:
     """
-    Fast JIT-compiled kernel to identify trades based on RSI Rollercoaster logic.
+    Fast JIT-compiled kernel to identify trades based on RSI Two Bands logic.
+    Logic: Input Signal -> (Check Stop Loss) -> Output Signal.
 
     :param rsi_values: Array of RSI values.
     :param stop_loss_bar_numbers: Array of stop-loss bar numbers.
     :param in_: Input level for the strategy.
-    :param over_: Level of overbought/oversold for the strategy.
     :param out_: Output level for the strategy.
     :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
     :param future_bar_number: The number of a price bar that will be available in the future.
@@ -79,67 +80,44 @@ def _find_trades_rc(rsi_values: np.ndarray,
         # Retrieve the pre-calculated stop-loss bar number for this input signal
         stop_loss_bar_number_ = stop_loss_bar_numbers[input_bar_number_]
 
-        # 2. Find over[bought|sold] signal, look for the first signal strictly after the input bar number
+        # 2. Find output signal, look for output strictly after the input bar number
         # But if stop_loss happens before output, close there.
-        over_bar_number_ = -1
+        output_bar_number_ = -1
         for active_position_bar_number_ in range(input_bar_number_ + 1, total_bars_):
             # Check stop-loss priority
             if 0 < stop_loss_bar_number_ < active_position_bar_number_:
-                # Stop-loss break happens before finding over[bought|sold], close losing position
+                # Stop-loss break happens before finding output signal,  close losing position
                 break
 
-            # Check over[bought|sold] signal: RSI cross over (Long) or cross under (Short) the over level (over_)
+            # Check output signal: RSI cross under (Long) or cross over (Short) the output level (out_)
             previous_rsi_ = rsi_values[active_position_bar_number_ - 1]
             rsi_ = rsi_values[active_position_bar_number_]
-            # Long.: RSI <= over_ AND Previous > over_
-            # Short: RSI >= over_ AND Previous < over_
-            if rsi_ >= over_ > previous_rsi_ if is_long_position else rsi_ <= over_ < previous_rsi_:
-                over_bar_number_ = active_position_bar_number_
+            # Long: RSI <= out_ AND Prev > out_
+            # Short: RSI >= out_ AND Prev < out_
+            if rsi_ <= out_ < previous_rsi_ if is_long_position else rsi_ >= out_ > previous_rsi_:
+                output_bar_number_ = active_position_bar_number_
                 break
 
         # 3. Determine Outcome (stop-loss vs. output)
-        # Case A: stop-loss triggered before over[bought|sold] was found or reached
-        # Note: If over_bar_number_ is -1 (not found), it would be effectively in the future
-        if 0 < stop_loss_bar_number_ < (over_bar_number_ if over_bar_number_ != -1 else future_bar_number):
+        # Case A: stop-loss triggered before output was found or reached
+        # Note: If output_bar_number_ is -1 (not found), it would be effectively in the future
+        if 0 < stop_loss_bar_number_ < (output_bar_number_ if output_bar_number_ != -1 else future_bar_number):
             # Add losing trade
             input_bar_numbers_.append(input_bar_number_)
             output_bar_numbers_.append(stop_loss_bar_number_)
             last_bar_number_processed_ = stop_loss_bar_number_
             continue
 
-        # Case B: over[bought|sold] signal not found (and no stop-loss triggered)
-        # This implies the trade is still open at the end of the analysis period (Buy & Hold scenario).
-        # Return future_bar_number to indicate "Open Position at end of data".
-        if over_bar_number_ == -1:
-            # Add trade still open
-            input_bar_numbers_.append(input_bar_number_)
-            output_bar_numbers_.append(future_bar_number)
-            # Strategy lifecycle consumes the rest of the timeline as it remains open
-            last_bar_number_processed_ = total_bars_
-            continue
-
-        # 4. Find output signal, look for output strictly after the over[bought|sold] bar number
-        output_bar_number_ = -1
-        for active_position_bar_number_ in range(over_bar_number_ + 1, total_bars_):
-            # Check output signal: RSI cross under (Long) or cross over (Short) the output level (out_)
-            previous_rsi_ = rsi_values[active_position_bar_number_ - 1]
-            rsi_ = rsi_values[active_position_bar_number_]
-            # Long.: RSI <= out_ AND Previous > out_
-            # Short: RSI >= out_ AND Previous < out_
-            if rsi_ <= out_ < previous_rsi_ if is_long_position else rsi_ >= out_ > previous_rsi_:
-                output_bar_number_ = active_position_bar_number_
-                break
-
         # Add Trade
         input_bar_numbers_.append(input_bar_number_)
         if output_bar_number_ != -1:
-            # Case C: Output signal found, closed position
-            # Add trade with the completed life cycle for the strategy input, over[bought|sold] and output reached
+            # Case B: Output signal found, closed position
+            # Add trade with the completed life cycle for the strategy input and output reached
             output_bar_numbers_.append(output_bar_number_)
             last_bar_number_processed_ = output_bar_number_
             continue
 
-        # Case D: No Output found after over[bought|sold] → "Open Position at end of data"
+        # Case D: No Output and No Stop Loss found → "Open Position at end of data"
         # Add trade still open: Mark-to-market using future_bar_number
         output_bar_numbers_.append(future_bar_number)
         last_bar_number_processed_ = total_bars_
@@ -148,9 +126,9 @@ def _find_trades_rc(rsi_values: np.ndarray,
     return np.array(input_bar_numbers_, dtype=np.int32), np.array(output_bar_numbers_, dtype=np.int32)
 
 
-class RsiRollerCoaster(RsiStrategyABC):
+class RsiTwoBands(RsiStrategyABC):
     """
-    Class to identify Profitable Roller Coaster strategy on the RSI (PRSIRC)
+    Class to identify Profitable Two Bands (input/output) strategy on the RSI
     Visit https://www.tecnicasdetrading.com/2011/09/tecnica-de-trading-rsi-rollercoaster.html
     """
 
@@ -159,8 +137,9 @@ class RsiRollerCoaster(RsiStrategyABC):
         """
         :param verbosity_level: Minimum importance level of messages reporting the progress of the process for all
          methods of the class.
+         Message levels to be reported: 0-discard messages, 1-report important messages, 2-report details.
         """
-        super().__init__(RSI_RC, verbosity_level)
+        super().__init__(RSI_2B, verbosity_level)
 
     def identify(self,
                  symbol: str,
@@ -170,10 +149,10 @@ class RsiRollerCoaster(RsiStrategyABC):
                  close_prices: NDArray[Any] | None,  # type: ignore
                  verbosity_level: int = DEBUG) -> dict:
         """
-        Identifies the best combinations of levels input, overbought/oversold and output for the RSI Rollercoaster
-        strategy, both for Long and Short positions, and evaluate its profitability on positions:
-         - long: open when RSI rises above the input level and closed when RSI falls below the output level
-         - short: open when RSI falls below the output level and closed when RSI rises above the input level.
+        Identifies the best combinations of bands input and output for the RSI strategy,
+        both for Long and Short positions, and evaluate its profitability on positions:
+         - long: open when RSI rises above the lower band and closed when RSI falls below the upper band
+         - short: open when RSI falls below the upper band and closed when RSI rises above the lower band.
         Save the profitable setups (identified levels and associated ratios) in the Database.
         Returns a dictionary with the strategies with the best ratios.
 
@@ -203,69 +182,81 @@ class RsiRollerCoaster(RsiStrategyABC):
         rsi_values_ = prices_df['Rsi'].to_numpy()
         pct_change_values_ = prices_df['PercentChange'].to_numpy()
 
-        # Stop loss arrays (Bar Numbers / Indices)
         long_stops_ = prices_df['BarNumberForLongStop'].to_numpy().astype(np.int32)
         short_stops_ = prices_df['BarNumberForShortStop'].to_numpy().astype(np.int32)
 
         future_bar_number_ = analysis_context_.future_bar_number
 
         # Contexts to iterate:
-        #  Position type: LONG.  Levels: '1st input', 'last input', '1st overbought', 'last overbought' & 'step to increase'
-        #  Position type: SHORT. Levels: '1st input', 'last input', '1st oversold', 'last oversold' & 'step to decrease'
-        # contexts_ = [ (LONG, 20, 41, 50, 81, 1), (SHORT, 75, 64, 50, 19, -1) ]
-        contexts_ = [(LONG, 16, 61, 40, 81, STEP_LENGTH_RSI_LEVELS)] + \
-                    ([] if only_long_positions else [(SHORT, 84, 58, 60, 19, -STEP_LENGTH_RSI_LEVELS)])
+        #  Position type: LONG.  Levels: '1st input', 'last input', & 'step to increase'
+        #  Position type: SHORT. Levels: '1st input', 'last input', & 'step to decrease'
+        contexts_ = [(LONG, 16, 61, STEP_LENGTH_RSI_LEVELS)] + \
+                    ([] if only_long_positions else [(SHORT, 84, 39, -STEP_LENGTH_RSI_LEVELS)])
 
-        for position_type_, from_in_, to_in_, from_over_, to_over_, step_ in contexts_:
-            # Initialize bad strategy to be evaluated and to get better RSI-RCs
+        for position_type_, from_in_, to_in_, step_ in contexts_:
+            # Initialize bad strategy to be evaluated and to get better RSI-2Bs
             best_ratios_ = self.initialize_bad_strategy()
-            is_long_position_ = position_type_ == LONG
+            analysis_context_.is_long_position = position_type_ == LONG
+
+            is_long_position_ = analysis_context_.is_long_position
             stop_loss_bar_numbers_ = long_stops_ if is_long_position_ else short_stops_
-            analysis_context_.is_long_position = is_long_position_
 
             # Iterate over the input level of the RSI
             for in_ in range(from_in_, to_in_, step_):
                 if verbosity_level == DEBUG:
                     print('', end='\r')
-                    print(
-                        f'Evaluating profitability {TIMEFRAMES[timeframe]} of RSI({self.period}) Rollercoaster input level {in_} for {symbol}...',
-                        end='')
+                    print(f'Evaluating profitability {TIMEFRAMES[timeframe]} of RSI({self.period})'
+                          f' input band {in_} for {symbol}...', end='')
 
                 # Initialize the best strategy for this input level
                 best_ratios_for_in_ = self.initialize_bad_strategy()
+                # Initialize the strategy for a same level as input and output (strategy of 1 level)
+                ratios_for_1_level_ = self.initialize_bad_strategy()
 
-                # Iterate over the overbought/oversold level of the RSI
-                for over_ in range(from_over_, to_over_, step_):
-                    # Set a range of output levels to be analyzed based on pre-set input and over[bought|sold] levels
-                    from_out_, to_out_ = self.__get_out_range(is_long_position_, in_, over_)
+                # Set a range of output levels to be analyzed based on pre-set input and overbought/oversold levels
+                from_out_, to_out_ = self.__get_out_range(is_long_position_, in_)
 
-                    # Iterate over the output level of the RSI
-                    for out_ in range(from_out_, to_out_, -step_):
-                        # Evaluate the life cycle for the RSI Rollercoaster strategy
-                        # (input, over[bought|sold] and output) with the current combination
-                        input_bar_numbers_, output_bar_numbers_ = _find_trades_rc(rsi_values_, stop_loss_bar_numbers_,
-                                                                                  in_, over_, out_,
-                                                                                  is_long_position_, future_bar_number_)
-                        # If no trades identified, skip
-                        if len(input_bar_numbers_) == 0:
-                            continue
+                # Iterate over the output level of the RSI
+                for out_ in range(from_out_, to_out_, -step_):
+                    # Evaluate the life cycle for the RSI Two Bands strategy
+                    # (input and output) with the current combination
+                    input_bar_numbers_, output_bar_numbers_ = _find_trades_2b(rsi_values_, stop_loss_bar_numbers_,
+                                                                              in_, out_,
+                                                                              is_long_position_, future_bar_number_)
+                    # If no trades identified, skip
+                    if len(input_bar_numbers_) == 0:
+                        continue
 
-                        # Evaluate trades identified, calculate trading performance ratios and aggregates
-                        ratios_ = self.__analyze_fast(in_, over_, out_, input_bar_numbers_, output_bar_numbers_,
-                                                      close_prices, pct_change_values_,
-                                                      position_type_, analysis_context_, prices_df)
-                        if not ratios_:
-                            continue
+                    # Evaluate trades identified, calculate trading performance ratios and aggregates
+                    ratios_ = self.__analyze_fast(in_, out_, input_bar_numbers_, output_bar_numbers_,
+                                                  close_prices, pct_change_values_, position_type_,
+                                                  analysis_context_, prices_df)
+                    if not ratios_:
+                        continue
 
-                        # Check if RSI RC just analyzed for this input level, is a better indicator for positionings
-                        #  than the previous calculated ones.
-                        best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
+                    # Check if RSI 2B just analyzed for this input level, is a better indicator for positionings
+                    #  than the previous calculated ones.
+                    best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
 
-                if best_ratios_for_in_.net_profit > 0 and best_ratios_for_in_.expected_value > 0:
+                    if in_ == out_:
+                        ratios_for_1_level_ = ratios_
+
+                if best_ratios_for_in_.inputs != '':
+                    strategy_inputs = json.loads(str(best_ratios_for_in_.inputs))
+                    best_is_1_level_strategy_ = strategy_inputs['in'] == strategy_inputs['out']
+                else:
+                    best_is_1_level_strategy_ = False
+
+                if (best_ratios_for_in_.net_profit > 0 and best_ratios_for_in_.expected_value > 0
+                        and not best_is_1_level_strategy_):
                     # Save only positive ratios
                     self.ratio_crud.upsert(best_ratios_for_in_)
 
-                # Check if the best RSI RC for this input level is a better indicator for positions
+                if ratios_for_1_level_.net_profit > 0 and ratios_for_1_level_.expected_value > 0:
+                    # Save only positive ratios for a particular strategy of only 1 level (input-output) analysis
+                    self.ratio_crud.upsert(ratios_for_1_level_)
+
+                # Check if the best RSI 2B for this input level is a better indicator for positions
                 # than the previously calculated input levels.
                 best_ratios_ = self.track_best_strategy(best_ratios_for_in_, best_ratios_)
 
@@ -291,7 +282,6 @@ class RsiRollerCoaster(RsiStrategyABC):
 
     def __analyze_fast(self,
                        in_: int,
-                       over_: int,
                        out_: int,
                        input_bar_numbers: np.ndarray,
                        output_bar_numbers: np.ndarray,
@@ -301,16 +291,14 @@ class RsiRollerCoaster(RsiStrategyABC):
                        analysis_context: AnalysisContext,
                        prices_df: pl.DataFrame) -> Ratios | None:
         """
-        Calculates the results and ratios of applying the RSI Rollercoaster system, with the combination of RSI levels
+         Calculates the results and ratios of applying the RSI Two Bands strategy, with the combination of RSI levels
          and flag of the position type (Long or Short) received as parameters.
 
         :param in_: Input level for the strategy.
-        :param over_: Level of overbought/oversold for the strategy.
         :param out_: Output level for the strategy.
         :param input_bar_numbers: Array of input signal bar numbers.
         :param output_bar_numbers: Array of output signal bar numbers.
         :param close_prices: Array of 'Close' prices extracted from prices_df.
-        :param pct_change_values: Array of 'PercentChange' values extracted from prices_df.
         :param position_type: Position type under analysis: long (1) or short (-1).
         :param analysis_context: Analysis context for the strategy.
         :param prices_df: The dataFrame with prices, indexed by bar numbers and containing the required column Date.
@@ -335,7 +323,6 @@ class RsiRollerCoaster(RsiStrategyABC):
         output_prices_ = close_prices[safe_output_bar_numbers_]
 
         trades_df_ = pl.DataFrame(
-            # Create trades_df_ directly, explicitly defining the column names
             {
                 "InputBarNumber": input_bar_numbers,
                 "InputPrice": input_prices_,
@@ -346,13 +333,10 @@ class RsiRollerCoaster(RsiStrategyABC):
             schema=["InputBarNumber", "InputPrice", "InputPercentChange", "OutputBarNumber", "OutputPrice"],
             orient="col"
         ).with_columns([
-            # Calculate the final Result subtracting prices and commissions
             ((pl.col('OutputPrice') - pl.col('InputPrice')) * position_type
              - COMMISSION_PERCENT * (pl.col('InputPrice') + pl.col('OutputPrice')))
             .alias('Result').cast(pl.Float64),
-            # Calculate the number of Sessions positioned
             (pl.col('OutputBarNumber') - pl.col('InputBarNumber')).alias('Sessions').cast(pl.Int32),
-            # Explicit cast
             pl.col("InputBarNumber").cast(pl.Int32),
             pl.col("InputPrice").cast(pl.Float64),
             pl.col("InputPercentChange").cast(pl.Float64),
@@ -361,7 +345,7 @@ class RsiRollerCoaster(RsiStrategyABC):
         ])
 
         # Period and levels that parameterize the analyzed strategy
-        inputs_ = {'period': self.period, 'in': in_, 'over': over_, 'out': out_}
+        inputs_ = {'period': self.period, 'in': in_, 'out': out_}
 
         # Calculate trading performance ratios and aggregates
         ratios_ = self.perfile_performance(analysis_context, inputs_, signals_, trades_df_, prices_df)
@@ -373,27 +357,23 @@ class RsiRollerCoaster(RsiStrategyABC):
 
     @staticmethod
     def __get_out_range(is_long_position: bool,
-                        in_: int,
-                        over_: int) -> tuple[int, int]:
+                        in_: int) -> tuple[int, int]:
         """
-        Identify the range of levels for iteration over the output level of the RSI based on input
-         and overbought/oversold levels.
+        Identify the range of levels for iteration over the RSI output band based on the input level.
 
         :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
         :param in_: Input level.
-        :param over_: Overbought/oversold level.
 
-        :return: Range of output levels to iterate on RSI Rollercoaster.
+        :return: Range of output levels to iterate on RSI Two Bands strategy.
         """
 
         if is_long_position:
             # It will be used in a loop ─► for range(from_out_, to_out_, -step):
-            from_out_ = 84 if over_ > 84 else over_
-            to_out_ = (18 if in_ < 18 else in_)
-
+            from_out_ = 84 if in_ < 84 else in_
         else:
             # It will be used in a loop ─► range(from_out_, to_out_, step):
-            from_out_ = 16 if over_ < 16 else over_
-            to_out_ = (82 if in_ > 82 else in_)
+            from_out_ = 16 if in_ > 16 else in_
+
+        to_out_ = in_
 
         return from_out_, to_out_

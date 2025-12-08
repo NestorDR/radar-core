@@ -246,7 +246,7 @@ def analyzer(settings: Settings,
 
             with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers_) as executor:
                 # Use a set to store futures
-                futures_ = set()
+                futures_ = []
 
                 # Create a future for each symbol analysis task using destructive iteration to free memory in the main
                 # process immediately. The items are popped from the dictionary one by one.
@@ -262,7 +262,7 @@ def analyzer(settings: Settings,
                     # Submit the task to the Executor Pool
                     future_ = executor.submit(process_symbol,
                                              symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_)
-                    futures_.add(future_)
+                    futures_.append(future_)
 
                     # Explicitly delete the local reference to the DataFrame to encourage GC
                     del prices_df_
@@ -339,7 +339,7 @@ if __name__ == "__main__":
 
     # Set symbol for a specific test
     symbols_ = ['BTC-USD']
-    symbols_ = ['QQQ', 'SOXX']
+    symbols_ = ['TNA']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)

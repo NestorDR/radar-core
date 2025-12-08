@@ -637,7 +637,7 @@ class RsiStrategyABC(StrategyABC, ABC):
             pl.Series('BarNumberForShortStop', bar_for_short_stop_)
         ])
 
-        # Release resources
+        # Release memory
         del bar_numbers_, bar_for_long_stop_, bar_for_short_stop_
 
         return prices_df

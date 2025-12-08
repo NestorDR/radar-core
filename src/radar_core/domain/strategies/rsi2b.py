@@ -151,7 +151,7 @@ class RsiTwoBands(RsiStrategyABC):
                     if not ratios_:
                         continue
 
-                    # Check if RSI RC just analyzed for this input level, is a better indicator for positionings
+                    # Check if RSI 2B just analyzed for this input level, is a better indicator for positionings
                     #  than the previous calculated ones.
                     best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
 
@@ -312,7 +312,7 @@ class RsiTwoBands(RsiStrategyABC):
         :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
         :param in_: Input level.
 
-        :return: Range of output levels to iterate on RSI Rollercoaster.
+        :return: Range of output levels to iterate on RSI Rollercoaster strategy.
         """
 
         if is_long_position:
