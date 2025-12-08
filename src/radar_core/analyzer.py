@@ -339,7 +339,6 @@ if __name__ == "__main__":
 
     # Set symbol for a specific test
     symbols_ = ['BTC-USD']
-    symbols_ = ['TNA']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)
