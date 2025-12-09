@@ -20,12 +20,13 @@ from radar_core.helpers.log_helper import begin_logging, end_logging
 # however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
 # 'my_module'
 if __name__ == "__main__":
+    log_filename_ = "main.analyzer"
     # Initialize app settings
-    settings = Settings()
+    settings = Settings(log_filename_)
     # Get root logger and log start messages
     logging.config.dictConfig(settings.log_config)
     logger_ = getLogger(__name__)
-    begin_logging(logger_, "main.analyzer", INFO)
+    begin_logging(logger_, log_filename_, INFO)
 
     # Run the application
     exit_code = analyzer(settings)

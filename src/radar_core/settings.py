@@ -28,12 +28,14 @@ class Settings:
     """Application settings manager"""
     _config = None  # Class-level flag to ensure .env & YAML config are loaded only once
 
-    def __init__(self):
+    def __init__(self,
+                 log_filename: str | None = None):
         """
-        Initializes the settings object.
+        Initializes the settings object, ensuring configuration is loaded only once.
         - Ensures environment variables from .env are loaded.
         - Reads the main YAML configuration file.
-        This method ensures configuration is loaded only once.
+
+        :param log_filename: Name to the log file.
         """
         # Preserve the current working path
         if Settings._config is not None:
@@ -42,7 +44,7 @@ class Settings:
         # Load environment variables
         self.verbosity_level = INFO
         self.load_env()
-        self.log_config = self._get_log_config()
+        self.log_config = self._get_log_config(log_filename)
         self.max_workers = self._get_max_workers()
 
         # Get settings file path from environment variable, or use a default
@@ -90,10 +92,13 @@ class Settings:
         except ValueError:
             return default_log_level_
 
-    def _get_log_config(self) -> dict:
+    def _get_log_config(self,
+                        log_filename: str | None = None) -> dict:
         """
         Generates a declarative log configuration dictionary,
          which will allow or not file logging based on the RADAR_ENABLE_FILE_LOGGING value.
+
+        :param log_filename: Name to the log file.
 
         :return: A dictionary with the logging configuration.
         """
@@ -126,8 +131,9 @@ class Settings:
             logs_folder_ = main_folder_ / "logs"
             os.makedirs(logs_folder_, exist_ok=True)
 
-            main_file = getattr(sys.modules["__main__"], "__file__", None)  # Get main file of the running stack
-            log_filename = Path(main_file).name.removesuffix('.py') if main_file else "app"
+            if not log_filename:
+                main_file = getattr(sys.modules["__main__"], "__file__", None)  # Get main file of the running stack
+                log_filename = Path(main_file).name.removesuffix('.py') if main_file else "app"
 
             log_file_path_ = logs_folder_ / f'{log_filename}.log'
 
