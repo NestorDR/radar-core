@@ -7,8 +7,8 @@ shortables:
   - 'SPY'
   - 'QQQ'
   - 'SOXX'
-evaluable_strategies:
-  - 1   # Profitable SMA
-  - 2   # Profitable RSI(14) RC
-  - 3   # Profitable RSI(14) SMA
-  - 4   # Profitable RSI(14) 2B
+evaluable_strategies:  # Use attribute name in `class Strategies`, module `types.py`
+  - sma       # Profitable SMA
+  - rsi_sma   # Profitable RSI(14) SMA
+  - rsi_rc    # Profitable RSI(14) RC
+  - rsi_2b    # Profitable RSI(14) 2B

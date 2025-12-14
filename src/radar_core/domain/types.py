@@ -17,7 +17,7 @@ from radar_core.domain.strategies import MovingAverage, RsiRollerCoaster, RsiTwo
 @dataclass(frozen=True)
 class Strategies:
     """Small DI container for strategy instances supported by the analyzer."""
-    ma: MovingAverage
-    rsi_ma: MovingAverage
-    rsi_rc: RsiRollerCoaster
-    rsi_2b: RsiTwoBands
+    sma: MovingAverage | None = None
+    rsi_sma: MovingAverage | None = None
+    rsi_rc: RsiRollerCoaster | None = None
+    rsi_2b: RsiTwoBands | None = None

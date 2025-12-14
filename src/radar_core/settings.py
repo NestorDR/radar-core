@@ -223,6 +223,6 @@ class Settings:
         # Use list comprehension: [expresión for item in iterable if condición]
         return [shortable_ for shortable_ in raw_shortables_ if shortable_ in symbols_set_]
 
-    def get_evaluable_strategies(self) -> list[int]:
-        """Returns the list of strategy IDs that can be evaluated."""
+    def get_evaluable_strategies(self) -> list[str]:
+        """Returns the list of strategy Acronyms that can be evaluated."""
         return self._config.get('evaluable_strategies', []) if self._config else []

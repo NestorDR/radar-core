@@ -25,12 +25,11 @@ from sqlalchemy.exc import OperationalError
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 from radar_core.domain.strategies import MovingAverage, RsiRollerCoaster, RsiTwoBands, RsiStrategyABC
-from radar_core.domain.strategies.constants import SMA, RSI_SMA
 from radar_core.domain.types import Strategies
 # technical: provides calculations of TA indicators
 from radar_core.domain.technical import RSI
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRICE_COLS
+from radar_core.helpers.constants import DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRICE_COLS, RSI_SMA, SMA
 from radar_core.helpers.datetime_helper import to_weekly_timeframe
 from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own DB and/or integration with external prices providers
@@ -112,22 +111,30 @@ def analyze(timeframe: int,
     prices_df = prices_df.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber'))
 
     # Get profitable strategies for daily time frame
-    strategies.ma.identify(symbol, timeframe, only_long_positions, prices_df, None, verbosity_level)
+    if strategies.sma:
+        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, None, verbosity_level)
 
-    # Calculate RSI once for the RSI-based strategies
-    prices_df = RSI(prices_df)
-    strategies.rsi_ma.identify(symbol, timeframe, only_long_positions, prices_df, None, verbosity_level)
+    # Calculate RSI once for the RSI-based strategies only if needed
+    if strategies.rsi_sma or strategies.rsi_rc or strategies.rsi_2b:
+        prices_df = RSI(prices_df)
 
-    # Extract Close prices to an array to speed up prices access
-    close_prices_ = prices_df['Close'].to_numpy()
+        if strategies.rsi_sma:
+            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, None, verbosity_level)
 
-    # Calculate the stop loss prices only once for the following strategies
-    prices_df = RsiStrategyABC.identify_where_to_stop_loss(timeframe, prices_df, close_prices_)
-    strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
-    strategies.rsi_rc.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+        # Calculate the stop loss prices only once for the following strategies
+        if strategies.rsi_2b or strategies.rsi_rc:
+            # Extract Close prices to an array to speed up prices access
+            close_prices_ = prices_df['Close'].to_numpy()
 
-    # Release memory
-    del close_prices_
+            prices_df = RsiStrategyABC.identify_where_to_stop_loss(timeframe, prices_df, close_prices_)
+
+            if strategies.rsi_2b:
+                strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+            if strategies.rsi_rc:
+                strategies.rsi_rc.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+
+            # Release memory
+            del close_prices_
 
 
 def process_symbol(symbol: str,
@@ -223,13 +230,33 @@ def analyzer(settings: Settings,
             clean(settings.get_undeletable(), verbosity_level_)
 
         if symbols:
-            # Instantiate strategies to analyze
-            strategies_ = Strategies(
-                ma=MovingAverage(SMA, 'Close', 'Sma', verbosity_level=verbosity_level_),
-                rsi_ma=MovingAverage(RSI_SMA, 'Rsi', 'RsiSma', verbosity_level=verbosity_level_),
-                rsi_rc=RsiRollerCoaster(verbosity_level=verbosity_level_),
-                rsi_2b=RsiTwoBands(verbosity_level=verbosity_level_),
-            )
+            # Map configuration keys directly to strategy factory functions.
+            # Key: Attribute name in Strategies class (and key in settings.yml)
+            # Value: Factory lambda to create the instance
+            strategy_map_ = {
+                'sma': lambda: MovingAverage(SMA, 'Close', 'Sma', verbosity_level=verbosity_level_),
+                'rsi_sma': lambda: MovingAverage(RSI_SMA, 'Rsi', 'RsiSma', verbosity_level=verbosity_level_),
+                'rsi_rc': lambda: RsiRollerCoaster(verbosity_level=verbosity_level_),
+                'rsi_2b': lambda: RsiTwoBands(verbosity_level=verbosity_level_),
+            }
+
+            # Build kwargs dynamically based on enabled strategies in settings.yml
+            active_strategies_ = {}
+            # get_evaluable_strategies() returns a list of strings matching the keys in strategy_map_
+            for strategy_key_ in settings.get_evaluable_strategies():
+                if factory_ := strategy_map_.get(strategy_key_):
+                    # The key in map IS the attribute name
+                    active_strategies_[strategy_key_] = factory_()
+
+            # Instantiate strategies container only with active strategies
+            strategies_ = Strategies(**active_strategies_)
+
+            # If no strategy is active, skip processing
+            if not any(vars(strategies_).values()):
+                message_ = "No active strategies configured to run."
+                verbose(message_, WARNING, verbosity_level_)
+                logger_.warning(message_)
+                return 0
 
             # Download prices data for all symbols
             prices_data_ = PriceProvider(long_term=False).get_prices(symbols)
@@ -261,12 +288,11 @@ def analyzer(settings: Settings,
 
                     # Submit the task to the Executor Pool
                     future_ = executor.submit(process_symbol,
-                                             symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_)
+                                              symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_)
                     futures_.append(future_)
 
                     # Explicitly delete the local reference to the DataFrame to encourage GC
                     del prices_df_
-
 
                 # Loop over every future to run its process. Wait for all futures to complete and process results
                 for future_ in concurrent.futures.as_completed(futures_):
@@ -338,7 +364,7 @@ if __name__ == "__main__":
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbol for a specific test
-    symbols_ = ['BTC-USD']
+    symbols_ = ['TNA']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)

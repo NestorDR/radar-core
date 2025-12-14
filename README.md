@@ -67,8 +67,7 @@ Below is a minimal snippet that shows how you might pull prices and run a simple
 import polars as pl
 from radar_core.infrastructure.price_provider import PriceProvider
 from radar_core.domain.strategies import MovingAverage
-from radar_core.domain.strategies.constants import SMA
-from radar_core.helpers.constants import DAILY
+from radar_core.helpers.constants import DAILY, SMA
 
 # Define a list of symbols to analyze
 symbols_ = ['BTC-USD', 'NDQ', 'QQQ']
@@ -78,13 +77,13 @@ prices_data_ = PriceProvider(long_term=False).get_prices(symbols_)
 
 # Configure analyzer
 ma = MovingAverage(SMA, value_column_name="Close", ma_column_name="Sma")
-only_long_positions_=False
+only_long_positions_ = False
 
 # Iterate over symbols
 for symbol_, prices_df_ in prices_data_.items():
     # The analyzer orchestrates identify() and logging; here we just demonstrate the objects.
     ma.identify(symbol_, DAILY, only_long_positions_, prices_df_, None)
-    
+
     # See src/radar_core/analyzer.py for a full run.
 ```
 

@@ -1,4 +1,4 @@
-# src/radar_core/domain/strategies/ma.py
+# src/radar_core/domain/strategies/sma.py
 
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
@@ -10,10 +10,9 @@ import polars as pl
 
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
-from radar_core.domain.strategies.constants import COMMISSION_PERCENT, LONG, SHORT
 from radar_core.domain.strategies.base_strategy import StrategyABC
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import TIMEFRAMES
+from radar_core.helpers.constants import COMMISSION_PERCENT, LONG, SHORT, TIMEFRAMES
 from radar_core.helpers.log_helper import verbose
 
 logger_ = getLogger(__name__)
@@ -119,7 +118,7 @@ class MovingAverage(StrategyABC):
 
                 # Calculate results and ratios of applying the price crossover system on the MA of "period_" periods
                 # Identify signals or position changes when the value crosses the MA of "period_" periods
-                # IF is_long_position THEN identify 'close' > 'ma' ELSE identify 'close' < 'ma'
+                # IF is_long_position THEN identify 'close' > 'sma' ELSE identify 'close' < 'sma'
                 prices_df = prices_df.with_columns(
                     (position_factor_ * (pl.col(self.value_column_name) - pl.col(self.ma_column_name)) > 0)
                     .cast(pl.Int8).diff().alias("Position")
