@@ -248,9 +248,6 @@ class RsiTwoBands(RsiStrategyABC):
                     if not ratios_:
                         continue
 
-                    if in_ == 60 and (out_ == 84):
-                        print(in_, out_)
-
                     # Check if RSI 2B just analyzed for this input level, is a better indicator for positionings
                     #  than the previous calculated ones.
                     best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
