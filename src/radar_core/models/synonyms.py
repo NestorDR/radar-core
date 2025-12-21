@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 # --- Third Party Libraries ---
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases.
-from sqlalchemy import ForeignKeyConstraint, Index, Integer, PrimaryKeyConstraint, String
+from sqlalchemy import ForeignKeyConstraint, Integer, PrimaryKeyConstraint, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # --- App modules ---
@@ -23,15 +23,15 @@ class Synonyms(BaseModel):
     __table_args__ = (
         ForeignKeyConstraint(['security_id'], ['securities.id'], name='synonyms_securities_fkey'),
         PrimaryKeyConstraint('id', name='synonyms_pkey'),
-        Index('synonyms_providerId_securityId_idx', 'provider_id', 'security_id', unique=True),
+        UniqueConstraint('provider_id', 'security_id', name='synonyms_providerid_securityid_unique'),
         {'comment': 'Synonyms of security symbols in different quote providers.\n'
-                    'The providerId column is managed without a master table, and its '
-                    'values are:\n'
-                    '1 -> Yahoo'}
+                'The providerId column is managed without a master table, and its '
+                'values are:\n'
+                '1 -> Yahoo'}
     )
 
-    provider_id: Mapped[int] = mapped_column(Integer)
-    security_id: Mapped[int] = mapped_column(Integer)
-    ticker: Mapped[str] = mapped_column(String(10))
+    provider_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    security_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    ticker: Mapped[str] = mapped_column(String(10), nullable=False)
 
     security: Mapped['Securities'] = relationship('Securities', back_populates='synonyms', lazy='noload')

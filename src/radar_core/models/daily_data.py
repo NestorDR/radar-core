@@ -10,7 +10,7 @@ import datetime
 #          it offers several advantages over the float datatype.
 from decimal import Decimal
 # typing: provides runtime support for type hints
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 # --- Third Party Libraries ---
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
@@ -29,19 +29,19 @@ if TYPE_CHECKING:
 class DailyData(BaseModel):
     __tablename__ = 'daily_data'
     __table_args__ = (
-        ForeignKeyConstraint(['security_id'], ['securities.id'], name='dailyData_securities_fkey'),
+        ForeignKeyConstraint(['security_id'], ['securities.id'], name='dailydata_securities_fkey'),
         PrimaryKeyConstraint('id', name='dailydata_pkey'),
         UniqueConstraint('security_id', 'date', name='dailydata_securityid_date_unique'),
         {'comment': 'Daily prices (OHLC) and indicators for the securities'}
     )
 
-    security_id: Mapped[int] = mapped_column(Integer)
-    date: Mapped[datetime.date] = mapped_column(Date)
-    open: Mapped[Decimal | None] = mapped_column(Numeric(13, 4))
-    high: Mapped[Decimal | None] = mapped_column(Numeric(13, 4))
-    low: Mapped[Decimal | None] = mapped_column(Numeric(13, 4))
-    close: Mapped[Decimal | None] = mapped_column(Numeric(13, 4))
-    volume: Mapped[int] = mapped_column(BigInteger)
-    percent_change: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    security_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
+    open: Mapped[Decimal] = mapped_column(Numeric(13, 4), nullable=False)
+    high: Mapped[Decimal] = mapped_column(Numeric(13, 4), nullable=False)
+    low: Mapped[Decimal] = mapped_column(Numeric(13, 4), nullable=False)
+    close: Mapped[Decimal] = mapped_column(Numeric(13, 4), nullable=False)
+    volume: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    percent_change: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
 
     security: Mapped['Securities'] = relationship('Securities', back_populates='daily_data', lazy='noload')

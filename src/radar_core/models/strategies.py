@@ -15,9 +15,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 # --- App modules ---
 # models: result of Object-Relational Mapping
 from radar_core.models.base_model import BaseModel
+
 # Only import for type checking to avoid runtime circular imports
 if TYPE_CHECKING:
     from radar_core.models.ratios import Ratios
+
 
 class Strategies(BaseModel):
     __tablename__ = 'strategies'
@@ -27,9 +29,9 @@ class Strategies(BaseModel):
         {'comment': 'Speculation/investment strategies on financial instruments'}
     )
 
-    name: Mapped[str] = mapped_column(String(50))
-    acronym: Mapped[str] = mapped_column(String(25))
-    unit_label: Mapped[str] = mapped_column(String(5), server_default=text("''::character varying"))
-    pool: Mapped[str] = mapped_column(String(10), server_default=text("''::character varying"))
+    name: Mapped[str] = mapped_column(String(50), nullable=False)
+    acronym: Mapped[str] = mapped_column(String(25), nullable=False)
+    pool: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("''::character varying"))
+    unit_label: Mapped[str] = mapped_column(String(5), nullable=False, server_default=text("''::character varying"))
 
     ratios: Mapped[list['Ratios']] = relationship('Ratios', back_populates='strategy', lazy='noload')

@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 # --- App modules ---
 # models: result of Object-Relational Mapping
 from radar_core.models.base_model import BaseModel
+
 # Only import for type checking to avoid runtime circular imports
 if TYPE_CHECKING:
     from radar_core.models.daily_data import DailyData as DailyData
@@ -29,9 +30,10 @@ class Securities(BaseModel):
         {'comment': 'Marketable financial instruments'}
     )
 
-    symbol: Mapped[str] = mapped_column(String(10), comment='Acronym identifier of financial instrument')
-    description: Mapped[str] = mapped_column(String(100))
-    store_locally: Mapped[bool] = mapped_column(Boolean, server_default=text('false'),
+    symbol: Mapped[str] = mapped_column(String(10), nullable=False,
+                                        comment='Acronym identifier of financial instrument')
+    description: Mapped[str] = mapped_column(String(100), nullable=False)
+    store_locally: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'),
                                                 comment='Flag indicating whether prices obtained from the cloud should be saved in the database')
 
     # Relationships declaration, visit
