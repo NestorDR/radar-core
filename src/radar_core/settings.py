@@ -105,7 +105,7 @@ class Settings:
         main_folder_ = Path(__file__).resolve().parent  # radar_core folder
         enable_file_logging_ = os.getenv('RADAR_ENABLE_FILE_LOGGING', 'true').lower() in ('true', '1', 't')
         handlers_ = ["console"]
-        config_ = {
+        config_: dict = {
             "version": 1,
             "disable_existing_loggers": False,
             "formatters": {

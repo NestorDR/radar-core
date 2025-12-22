@@ -90,3 +90,6 @@ ignore = [# Ignored rules
 "__main__.py" = [
     "E402", # Ignore module level import not at the top of files
 ]
+
+[tool.ty.rules]
+possibly-missing-attribute = "ignore"

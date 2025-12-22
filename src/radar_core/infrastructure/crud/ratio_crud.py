@@ -1,10 +1,8 @@
 # src/radar_core/infrastructure/crud/ratio_crud.py
 
 # --- Third Party Libraries ---
-# polars: high-performance DataFrame library for in-memory analytics.
-import polars as pl
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
-from sqlalchemy import and_, ColumnElement, desc, not_
+from sqlalchemy import and_, ColumnElement, not_
 from sqlalchemy.future import select
 from sqlalchemy.inspection import inspect  # Use mapper inspection to remain refactor-friendly
 
@@ -98,65 +96,6 @@ class RatioCrud(BaseCrud):
         where_clause_ = self._base_clause_to_flag(symbol, strategy_id, timeframe)
 
         super()._flag_in_process(where_clause_)
-
-    def get_profitable_settings(self,
-                                symbol: str,
-                                strategies_ids_: list[int],
-                                timeframe: int,
-                                is_long_position: bool,
-                                win_probability_threshold: float) -> pl.DataFrame:
-        """
-        Gets from the database the settings for a profitable trading strategy ordered descending by net profit.
-
-        :param symbol: Security symbol to query.
-        :param strategies_ids_: List of trading strategy identifiers to query.
-        :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
-        :param is_long_position: True if the ratios are for long trading positions,
-         otherwise False for short trading positions.
-        :param win_probability_threshold: Minimum win probability to consider a strategy profitable.
-
-        :return: Ratios in a pandas DataFrame.
-        """
-        # Define select statement
-        # noinspection PyTypeChecker
-        statement_ = (select(Ratios.strategy_id,
-                             Ratios.inputs,
-                             Ratios.net_change,
-                             Ratios.net_profit,
-                             Ratios.expected_value,
-                             Ratios.win_probability,
-                             Ratios.min_percentage_change_to_win,
-                             Ratios.max_percentage_change_to_win,
-                             Ratios.signals,
-                             Ratios.last_input_date,
-                             Ratios.last_output_date)
-                      .where(and_((Ratios.symbol == symbol),
-                                  (Ratios.strategy_id.in_(strategies_ids_) if strategies_ids_ else False),
-                                  (Ratios.timeframe == timeframe),
-                                  (Ratios.is_long_position == is_long_position),
-                                  (Ratios.win_probability >= win_probability_threshold)))
-                      .order_by(desc(Ratios.net_profit), desc(Ratios.expected_value)))
-
-        # Execute the statement and fetch all results
-        records_ = self.session.execute(statement_).fetchall()
-
-        # Adjust the types pl.Date, pl.Float64 or pl.Int64 depending on the column
-        schema_ = {
-            'strategy_id': pl.Int64,
-            'inputs': pl.String,  # Alternatively, Utf8
-            'net_change': pl.Float64,
-            'net_profit': pl.Float64,
-            'expected_value': pl.Float64,
-            'win_probability': pl.Float64,
-            'min_percentage_change_to_win': pl.Float64,
-            'max_percentage_change_to_win': pl.Float64,
-            'signals': pl.Int64,
-            'last_input_date': pl.Date,  # Explicitly define as date
-            'last_output_date': pl.Date  # Explicitly define as date
-        }
-
-        # Write the results to a Polars DataFrame with a fixed schema and return
-        return pl.DataFrame(records_, schema=schema_)
 
     def upsert(self,
                ratios: Ratios) -> None:
