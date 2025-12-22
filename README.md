@@ -38,14 +38,14 @@ Option A — using uv:
    - uv venv
    - uv sync
 3. Windows + TA‑Lib only (if needed):
-   - uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.7/ta_lib-0.6.7-cp313-cp313-win_amd64.whl --no-cache-dir
+   - uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.8/ta_lib-0.6.8-cp313-cp313-win_amd64.whl --no-cache-dir
 
 Option B — using pip:
 1. Create and activate a virtual environment
 2. Install dependencies from pyproject (via pip):
    - pip install -e .
 3. Windows + TA‑Lib only (if needed):
-   - pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.7/ta_lib-0.6.7-cp313-cp313-win_amd64.whl --no-cache-dir
+   - pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.8/ta_lib-0.6.8-cp313-cp313-win_amd64.whl --no-cache-dir
 
 ## Quick Start
 You can run the analyzer directly from the repository without installing the package system‑wide.
