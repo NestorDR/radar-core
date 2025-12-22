@@ -5,6 +5,8 @@
 from logging import DEBUG, ERROR, getLogger
 
 # --- Third Party Libraries ---
+# numpy: provides greater support for vectors and matrices, with high-level mathematical functions to operate on them
+import numpy as np
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 
@@ -50,7 +52,7 @@ class MovingAverage(StrategyABC):
                  timeframe: int,
                  only_long_positions: bool,
                  prices_df: pl.DataFrame,
-                 close_prices: None = None,
+                 close_prices: np.ndarray | None = None,  # type: ignore
                  verbosity_level: int = DEBUG) -> dict:
         """
         Iterate from the minimum to the maximum number of periods to calculate the MA and evaluate its profitability

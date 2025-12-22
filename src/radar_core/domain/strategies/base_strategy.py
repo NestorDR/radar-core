@@ -12,13 +12,10 @@ from datetime import date, datetime
 import json
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import CRITICAL, DEBUG, INFO, getLogger
-# typing: provides runtime support for type hints.
-from typing import Any, Optional
 
 # --- Third Party Libraries ---
 # numpy: provides greater support for vectors and matrices, with high-level mathematical functions to operate on them
 import numpy as np
-from numpy.typing import NDArray
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 
@@ -103,13 +100,13 @@ class StrategyABC(ABC):
             message_ = f'Strategy {self.strategy_acronym} not found in database.'
             verbose(message_, CRITICAL, verbosity_level)
             logger_.critical(message_)
-            self.strategy_id, self.unit_label, self.pool = None, None, None
-        else:
-            self.strategy_id = strategy.id
-            self.unit_label = strategy.unit_label
-            self.pool = strategy.pool
+            raise LookupError(message_)
+
+        self.strategy_id = strategy.id
+        self.unit_label = strategy.unit_label
+        self.pool = strategy.pool
         self.verbosity_level = verbosity_level
-        self.ratio_crud: Optional[RatioCrud] = None
+        self.ratio_crud: RatioCrud | None = None
 
     # region Support to identification
 
@@ -119,7 +116,7 @@ class StrategyABC(ABC):
                  timeframe: int,
                  only_long_positions: bool,
                  prices_df: pl.DataFrame,
-                 close_prices: NDArray[Any] | None,  # type: ignore
+                 close_prices: np.ndarray | None,  # type: ignore
                  verbosity_level: int = DEBUG) -> dict:
         """
         Iterates a number of periods or levels to calculate a tech indicator and evaluate its profitability.
@@ -261,7 +258,7 @@ class StrategyABC(ABC):
         :return: A 'Ratios' object with the best strategy validated, or None if the strategy is invalid.
         """
         if best_ratios.net_profit == -float('inf') or best_ratios.expected_value == -float('inf'):
-            best_ratios = None
+            return None
 
         return best_ratios
 
@@ -583,7 +580,7 @@ class RsiStrategyABC(StrategyABC, ABC):
     @staticmethod
     def identify_where_to_stop_loss(timeframe: int,
                                     prices_df: pl.DataFrame,
-                                    close_prices: pl.Series) -> pl.DataFrame:
+                                    close_prices: np.ndarray) -> pl.DataFrame:
         """
         Identifies and calculates where to stop losses for both long and short positions.
         The method calculates the stop-loss trigger levels and associates bars where these triggers occur.
@@ -607,7 +604,7 @@ class RsiStrategyABC(StrategyABC, ABC):
         # Identify when (at which bar) loss stops are triggered
         bars_for_stop_loss_ = 10 if timeframe <= DAILY else 3
 
-        # Set stop loss
+        # Set the stop loss
         prices_df = RsiStrategyABC.set_stop_loss(prices_df, bars_for_stop_loss_)
 
         # Extract relevant prices as NumPy arrays for efficient slicing and speeding up prices access

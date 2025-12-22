@@ -6,7 +6,7 @@ import json
 
 # --- Third Party Libraries ---
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
-from sqlalchemy import delete, update
+from sqlalchemy import ColumnElement, delete, update
 from sqlalchemy.exc import OperationalError
 
 # --- App modules ---
@@ -26,7 +26,7 @@ class BaseCrud(object):
             raise
 
     def __del__(self) -> None:
-        # Robustly check if 'session' attribute exists and is not None before trying to close
+        # Robustly check if the 'session' attribute exists and is not None before trying to close
         if hasattr(self, 'session') and self.session is not None:
             try:
                 self.session.close()
@@ -38,7 +38,7 @@ class BaseCrud(object):
     def serialize_inputs(inputs: dict) -> str:
         """
         Accessing and serializing dictionary 'inputs' with parameters of a strategy.
-        :param inputs: Input prices that parameterizes a strategy.
+        :param inputs: Input prices that parameterize a strategy.
         :return: Serialized inputs parameters.
         """
         return json.dumps(inputs)
@@ -51,7 +51,7 @@ class BaseCrud(object):
         return self.session.query(self.base_model).get(entity_id)
 
     def _delete_for(self,
-                    where_clause: list) -> int:
+                    where_clause: list | ColumnElement) -> int:
         """
         Delete rows in the table for a specific condition.
 
@@ -68,9 +68,9 @@ class BaseCrud(object):
         return result.rowcount
 
     def _flag_in_process(self,
-                         where_clause: list) -> int:
+                         where_clause: list | ColumnElement) -> int:
         """
-        Update `is_in_process` flag field to True for a specific condition.
+        Update the flag field `is_in_process` to True for a specific condition.
 
         :return: The number of rows deleted
         """

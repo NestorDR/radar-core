@@ -40,7 +40,7 @@ class DailyDataCrud(BaseCrud):
 
         # The parameter named=True: returns dictionaries instead of tuples.
         # The dictionaries are a mapping of column name to row value.
-        # This is more expensive than returning a regular tuple, but allows for accessing values by column name.
+        # This is more expensive than returning a regular tuple but allows for accessing values by column name.
         for row_ in df.iter_rows(named=True):
             statement_ = (select(DailyData)
                           .where(and_(DailyData.security_id == security_id, DailyData.date == row_['Date'])))
@@ -62,7 +62,7 @@ class DailyDataCrud(BaseCrud):
                 self.session.merge(saved_record_)
             else:
                 new_record_ = DailyData(
-                    # Set unique constraint key
+                    # Set the unique constraint key
                     security_id=security_id,
                     date=row_['Date'],
 
@@ -95,15 +95,15 @@ class DailyDataCrud(BaseCrud):
 
     def get_prices_by_security(self,
                                security_id: int | Mapped[int],
-                               from_dt: date = None,
-                               to_dt: date = None,
+                               from_dt: date | None = None,
+                               to_dt: date | None = None,
                                only_close=False) -> pl.DataFrame:
         """
         Gets historical daily prices for a stock/security in the requested date range.
 
         :param security_id: Security id to get historical daily prices.
-        :param from_dt: Date from which historical prices are requested, if it is None does not filter by start date.
-        :param to_dt: Date up to which historical prices are requested, if it is None does not filter by end date.
+        :param from_dt: Date from which historical prices are requested, if it is None, does not filter by start date.
+        :param to_dt: Date up to which historical prices are requested, if it is None, does not filter by end date.
         :param only_close: Only return Close prices.
 
         :return: Polars.DataFrame formatted as [Date, Open, High, Low, Close, Volume] index datetime.
@@ -133,9 +133,6 @@ class DailyDataCrud(BaseCrud):
             statement_ = statement_.where(DailyData.date <= to_dt)
         # order by date_time
         statement_ = statement_.order_by(asc(DailyData.date))
-
-        # Read prices into dataframe with Pandas
-        # df_ = pd.read_sql(statement_, engine, coerce_float=True) ←
 
         # Execute the query
         records_ = self.session.execute(statement_).all()

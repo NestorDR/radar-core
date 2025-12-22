@@ -26,7 +26,7 @@ logger_ = getLogger(__name__)
 
 class Settings:
     """Application settings manager"""
-    _config = None  # Class-level flag to ensure .env & YAML config are loaded only once
+    _config: dict | None = None  # Class-level flag to ensure .env & YAML config are loaded only once
 
     def __init__(self,
                  log_filename: str | None = None):
@@ -47,7 +47,7 @@ class Settings:
         self.log_config = self._get_log_config(log_filename)
         self.max_workers = self._get_max_workers()
 
-        # Get settings file path from environment variable, or use a default
+        # Get the settings file path from the environment variable or use a default
         module_folder_ = Path(__file__).resolve().parent
         file_path = os.getenv('RADAR_SETTING_FILE', module_folder_ / 'settings.yml')
 
@@ -220,7 +220,7 @@ class Settings:
         raw_shortables_ = self._config.get('shortables', [])
 
         # Filter shortables: only those that are also in the symbol set, and return the result as a list
-        # Use list comprehension: [expresión for item in iterable if condición]
+        # Use list comprehension: [expression for item in iterable if condición]
         return [shortable_ for shortable_ in raw_shortables_ if shortable_ in symbols_set_]
 
     def get_evaluable_strategies(self) -> list[str]:

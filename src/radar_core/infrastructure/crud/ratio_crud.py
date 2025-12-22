@@ -4,7 +4,7 @@
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
-from sqlalchemy import and_, desc, not_
+from sqlalchemy import and_, ColumnElement, desc, not_
 from sqlalchemy.future import select
 from sqlalchemy.inspection import inspect  # Use mapper inspection to remain refactor-friendly
 
@@ -39,7 +39,7 @@ class RatioCrud(BaseCrud):
     @staticmethod
     def _base_clause_to_flag(symbol: str,
                              strategy_id: int,
-                             timeframe: int) -> list[bool]:  # | Any:
+                             timeframe: int) -> ColumnElement[bool]:
         """
         Build the base where clause for flag conditions.
 
@@ -89,7 +89,7 @@ class RatioCrud(BaseCrud):
                         strategy_id: int,
                         timeframe: int) -> None:
         """
-        Update `is_in_process` flag to True for a specific symbol, trading strategy, and timeframe.
+        Update the flag field `is_in_process` to True for a specific symbol, trading strategy, and timeframe.
 
         :param symbol: Security symbol to flag.
         :param strategy_id: Identifier of the trading strategy to flag.
@@ -131,7 +131,7 @@ class RatioCrud(BaseCrud):
                              Ratios.last_input_date,
                              Ratios.last_output_date)
                       .where(and_((Ratios.symbol == symbol),
-                                  ((Ratios.strategy_id.in_(strategies_ids_)) if strategies_ids_ else False),
+                                  (Ratios.strategy_id.in_(strategies_ids_) if strategies_ids_ else False),
                                   (Ratios.timeframe == timeframe),
                                   (Ratios.is_long_position == is_long_position),
                                   (Ratios.win_probability >= win_probability_threshold)))
@@ -169,7 +169,7 @@ class RatioCrud(BaseCrud):
 
         # Get stored ratios for the strategy with input settings
         statement_ = (select(Ratios)
-                      # Generate clause 'where' according to the parameterized strategy with specified 'inputs' values
+                      # Generate the clause 'where' according to the parameterized strategy with specified 'inputs' values
                       .where(and_(Ratios.symbol == ratios.symbol,
                                   Ratios.strategy_id == ratios.strategy_id,
                                   Ratios.inputs == ratios.inputs,

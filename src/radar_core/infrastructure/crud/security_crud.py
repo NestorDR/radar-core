@@ -17,7 +17,7 @@ class SecurityCrud(BaseCrud):
 
     def get_by_symbol(self,
                       symbol: str,
-                      provider_id: int = None) -> Securities | None:
+                      provider_id: int | None = None) -> Securities | None:
         """
         Get security based on its symbol, optionally with a synonym ticker.
 

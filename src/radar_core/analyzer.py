@@ -107,7 +107,7 @@ def analyze(timeframe: int,
             print(prices_df.head(1))
         print(prices_df.tail(1))
 
-    # Add a row counter as a column, required to the analysis (is zero-based bar number)
+    # Add a row counter as a column, required to the analysis (is a zero-based bar number)
     prices_df = prices_df.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber'))
 
     # Get profitable strategies for daily time frame
@@ -245,7 +245,7 @@ def analyzer(settings: Settings,
             # get_evaluable_strategies() returns a list of strings matching the keys in strategy_map_
             for strategy_key_ in settings.get_evaluable_strategies():
                 if factory_ := strategy_map_.get(strategy_key_):
-                    # The key in map IS the attribute name
+                    # The key in the map is the attribute name
                     active_strategies_[strategy_key_] = factory_()
 
             # Instantiate strategies container only with active strategies
@@ -363,7 +363,7 @@ if __name__ == "__main__":
     script_name_ = os.path.basename(__file__)
     begin_logging(logger_, script_name_, INFO)
 
-    # Set symbol for a specific test
+    # Set symbols for a specific test
     symbols_ = ['TNA']
 
     #  Analyze strategies over historical prices

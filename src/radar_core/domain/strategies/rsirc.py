@@ -4,14 +4,12 @@
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG
 # typing: provides runtime support for type hints.
-from typing import Any
 
 # --- Third Party Libraries ---
 # numba: JIT compiler that compiles a subset of Python and NumPy code into optimized machine code using the industry-standard LLVM compiler library
 from numba import njit
 # numpy: provides greater support for vectors and matrices, with high-level mathematical functions to operate on them
 import numpy as np
-from numpy.typing import NDArray
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 
@@ -166,7 +164,7 @@ class RsiRollerCoaster(RsiStrategyABC):
                  timeframe: int,
                  only_long_positions,
                  prices_df: pl.DataFrame,
-                 close_prices: NDArray[Any] | None,  # type: ignore
+                 close_prices: np.ndarray | None,  # type: ignore
                  verbosity_level: int = DEBUG) -> dict:
         """
         Identifies the best combinations of levels input, overbought/oversold and output for the RSI Rollercoaster

@@ -41,14 +41,14 @@ requires = ["uv_build>=0.8.0,<0.9.0"]
 build-backend = "uv_build"
 
 # uv_build is designed to read the standard [tool.setuptools] table for configuration.
-# [tool.setuptools] section replaces the logic from original `setup.py`
+# [tool.setuptools] section replaces the logic from the original `setup.py`
 [tool.setuptools]
 # This directive tells the build backend to auto-discover packages (e.g., the `radar_core` directory),
 #  and replaces `packages=find_packages()` from original `setup.py`
 packages = { find = { where = ["src"] } }
 [tool.setuptools.package-data]
 # This directive tells the build backend to include `settings.yml` inside the `radar_core` package when creating the wheel,
-#  and replaces `package_data={'radar_core': ['settings.yml']}` from original `setup.py`
+#  and replaces `package_data={'radar_core': ['settings.yml']}` from the original `setup.py`
 "radar_core" = ["settings.yml"]
 
 [tool.ruff]
@@ -77,16 +77,16 @@ exclude = [
 # S (security) for security-related issues.
 select = ["E", "F", "B", "R", "S", "N"]
 ignore = [# Ignored rules
-    "E501", # Ignored because line-length is handled by 'line-length' setting.
+    "E501", # Ignored because line-length is handled by the 'line-length' setting.
     "E203", # Whitespace before ':' (common conflict with Black).
-    "B008", # Ignore the use of functions as default argument in function signatures (common in FastAPI).
+    "B008", # Ignore the use of functions as the default argument in function signatures (common in FastAPI).
     "B017", # Ignore assert blind exception: `Exception`
 ]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
-    "S101", # Ignore use of asserting in test files
-    "S311", # Ignore use of pseudo-random generators in test files
+    "S101", # Ignore the use of asserting in test files
+    "S311", # Ignore the use of pseudo-random generators in test files
 ]
 "__main__.py" = [
-    "E402", # Ignore module level import not at top of files
+    "E402", # Ignore module level import not at the top of files
 ]
