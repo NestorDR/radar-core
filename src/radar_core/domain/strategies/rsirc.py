@@ -272,7 +272,7 @@ class RsiRollerCoaster(RsiStrategyABC):
                         #  than the previous calculated ones.
                         best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
 
-                if best_ratios_for_in_.net_profit > 0 and best_ratios_for_in_.expected_value > 0:
+                if best_ratios_for_in_.net_profit > 0.0 and best_ratios_for_in_.expected_value > 0.0:
                     # Save only positive ratios
                     self.ratio_crud.upsert(best_ratios_for_in_)
 

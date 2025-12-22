@@ -259,12 +259,12 @@ class RsiTwoBands(RsiStrategyABC):
                 else:
                     best_is_1_level_strategy_ = False
 
-                if (best_ratios_for_in_.net_profit > 0 and best_ratios_for_in_.expected_value > 0
+                if (best_ratios_for_in_.net_profit > 0.0 and best_ratios_for_in_.expected_value > 0.0
                         and not best_is_1_level_strategy_):
                     # Save only positive ratios
                     self.ratio_crud.upsert(best_ratios_for_in_)
 
-                if ratios_for_1_level_.net_profit > 0 and ratios_for_1_level_.expected_value > 0:
+                if ratios_for_1_level_.net_profit > 0.0 and ratios_for_1_level_.expected_value > 0.0:
                     # Save only positive ratios for a particular strategy of only 1 level (input-output) analysis
                     self.ratio_crud.upsert(ratios_for_1_level_)
 

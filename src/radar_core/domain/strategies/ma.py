@@ -195,7 +195,7 @@ class MovingAverage(StrategyABC):
                 if not ratios_:
                     continue
 
-                if ratios_.net_profit > 0 and ratios_.expected_value > 0:
+                if ratios_.net_profit > 0.0 and ratios_.expected_value > 0.0:
                     # Save only to positive ratios
                     self.ratio_crud.upsert(ratios_)
 
