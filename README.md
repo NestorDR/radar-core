@@ -8,9 +8,12 @@ The project follows High Performance Practices, utilizing concurrent processing 
 - Yahoo Finance integration via yfinance for historical daily prices
 - High‑performance data processing using Polars
 - **Concurrent symbol analysis** using Python's `ProcessPoolExecutor` for scalability
+- **JIT Compilation**: Critical mathematical functions are optimized using **Numba** for near-native execution speed.
+- **Database Maintenance**: Automatic cleanup of deprecated symbols and data synchronization.
 - Built‑in technical analysis and strategies (e.g., Moving Average and RSI‑based variants)
 - Performance metrics and logs (e.g., net profit, success rate)
 - Configurable settings (symbols, shortable assets, verbosity, concurrency)
+    
 
 ## Prerequisites
 - Python 3.13+
@@ -24,7 +27,7 @@ The project follows High Performance Practices, utilizing concurrent processing 
 
 TA‑Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA‑Lib can be installed from PyPI (see environment markers in pyproject.toml).
 
-Note: The project was developed on Windows 11, Python 3.13, Pycharm 2025 and Docker Desktop 4.50 
+Note: The project was developed on Windows 11, Python 3.13, Pycharm 2025, and Docker Desktop 4.50 
 
 ## Installation
 You can install with either uv (recommended for this project) or pip.
@@ -70,7 +73,7 @@ from radar_core.domain.strategies import MovingAverage
 from radar_core.helpers.constants import DAILY, SMA
 
 # Define a list of symbols to analyze
-symbols_ = ['BTC-USD', 'NDQ', 'QQQ']
+symbols_ = ['BTC-USD']
 
 # Download prices data for all symbols to be analyzed
 prices_data_ = PriceProvider(long_term=False).get_prices(symbols_)
@@ -91,10 +94,14 @@ for symbol_, prices_df_ in prices_data_.items():
 A typical console output (truncated) may look like:
 
 ```
-Analysis started at 2025-12-01 11:30:55.
-Starting parallel analysis for 3 symbols using 4 workers...
-[BTC-USD]: Launching parallel worker process at 2025-12-01 11:30:57...
-...
+Reading YAML file settings.yml...
+Analyzer.py started at 2025-12-22 09:58:52.
+Cleaned 0 rows from the database for deprecated symbols.
+Starting parallel analysis for 1 symbols using X workers...
+
+[BTC-USD]: Launching parallel worker process at 2025-12-22 09:58:55...
+[BTC-USD]: Daily time frame analysis started at 2025-12-22 09:58:55
+shape: (1, 7)
 [BTC-USD]: Daily time frame analysis started...
 ┌─────────────────────┬───────┬───────┬───────┬──────┬──────────┐
 │ Date                ┆ Open  ┆ High  ┆ Low   ┆ Close┆ Volume   │
@@ -102,10 +109,10 @@ Starting parallel analysis for 3 symbols using 4 workers...
 │ 2020-01-01 00:00:00 ┆ …     ┆ …     ┆ …     ┆ …    ┆ …        │
 │ …                   ┆ …     ┆ …     ┆ …     ┆ …    ┆ …        │
 └─────────────────────┴───────┴───────┴───────┴──────┴──────────┘
-SMA on BTC-USD: start 2025-12-01 11:30:57 ... end 2025-12-01 11:30:59     0.0 min
+SMA         on BTC-USD: start 2025-12-22 09:58:55 ... end 2025-12-22 09:58:58  0.0 min
 [BTC-USD]: Analysis completed in 0.0 min
 ...
-Analysis executed from 2025-09-28 10:35:00 to 2025-09-28 10:39:00 - Elapsed time 0.4 min
+Analysis executed from 2025-12-22 09:58:52 to 2025-12-22 09:58:59 - Elapsed time 0.1 min
 ```
 
 Note: Actual output will vary based on a symbol list, dates, and verbosity. Output blocks per symbol are printed atomically to prevent interleaving.
@@ -115,12 +122,13 @@ Project settings are managed by the `Settings` class. You can configure the appl
 
 ### Key Environment Variables
 
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `RADAR_LOG_LEVEL` | Logging verbosity (10=DEBUG, 20=INFO, etc.) | `20` (INFO) |
-| `RADAR_ENABLE_FILE_LOGGING` | Write logs to `src/radar_core/logs/` | `true` |
-| `RADAR_MAX_WORKERS` | Number of parallel processes. Set to `0` to use all available CPUs. | `0` (Auto) |
-| `RADAR_SETTING_FILE` | Custom path to the settings YAML file | `src/radar_core/settings.yml` |
+| Variable                    | Description                                                         | Default |
+|:----------------------------|:--------------------------------------------------------------------| :--- |
+| `RADAR_LOG_LEVEL`           | Logging verbosity (10=DEBUG, 20=INFO, etc.)                         | `20` (INFO) |
+| `RADAR_ENABLE_FILE_LOGGING` | Write logs to `src/radar_core/logs/`                                | `true` |
+| `RADAR_MAX_WORKERS`         | Number of parallel processes. Set to `0` to use all available CPUs. | `0` (Auto) |
+| `RADAR_SETTING_FILE`        | Custom path to the settings YAML file                               | `src/radar_core/settings.yml` |
+| `POSTGRES_*`                | Database settings                                                   | |
 
 ## Docker
 Containerization is available for a fully reproducible environment. The image is multi-stage and builds the TA-Lib C library inside the container, so you don’t need any TA-Lib setup on your host.
@@ -133,7 +141,6 @@ Build the image:
 ```
 docker build -t radar-core:dev-0.4.0 .
 ```
-
 
 Run the analyzer directly with Docker (connecting to an existing PostgreSQL):
 - Example (Windows PowerShell):
@@ -150,13 +157,11 @@ docker run --rm \
     radar-core:dev-0.4.0
 ```
 
-
 Using Docker Compose (spins up Postgres + the app):
 - Ensure you have an env file with DB credentials at src/radar_core/.env.production (can be created from src/radar_core/.env.template). Start both services:
 ```textmate
 docker compose -f docker-compose.dev.yml up -d --build
 ```
-
 
 Notes:
 - The Compose file builds the image and waits for the database to become healthy before starting the analyzer.
