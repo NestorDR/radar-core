@@ -30,7 +30,7 @@ _SessionFactory: sessionmaker[Session] | None = None
 # Use session_factory() to get a new Session
 def session_factory() -> Session:
     """
-    Provides a SQLAlchemy Session.
+    Provides an SQLAlchemy Session.
 
     The engine and session factory are initialized on the first call.
 

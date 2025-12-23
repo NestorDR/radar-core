@@ -19,7 +19,7 @@ import polars as pl
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 from radar_core.domain.strategies.base_strategy import AnalysisContext, RsiStrategyABC
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import COMMISSION_PERCENT, RSI_2B, LONG, SHORT, STEP_LENGTH_RSI_LEVELS, TIMEFRAMES
+from radar_core.helpers.constants import RSI_2B, LONG, SHORT, STEP_LENGTH_RSI_LEVELS, TIMEFRAMES
 # models: result of Object-Relational Mapping
 from radar_core.models import Ratios
 
@@ -240,9 +240,9 @@ class RsiTwoBands(RsiStrategyABC):
                         continue
 
                     # Evaluate trades identified, calculate trading performance ratios and aggregates
-                    ratios_ = self.__analyze_fast(in_, out_, input_bar_numbers_, output_bar_numbers_,
-                                                  close_prices, pct_change_values_, position_type_,
-                                                  analysis_context_, prices_df)
+                    ratios_ = self.__analyze(in_, out_, input_bar_numbers_, output_bar_numbers_,
+                                             close_prices, pct_change_values_,
+                                             analysis_context_, prices_df)
                     if not ratios_:
                         continue
 
@@ -292,80 +292,56 @@ class RsiTwoBands(RsiStrategyABC):
         # Finalize the process to identify profitable strategies and logs finalization and return results.
         return self.finalize_identification(init_dt_, analysis_context_, verbosity_level)
 
-    def __analyze_fast(self,
-                       in_: int,
-                       out_: int,
-                       input_bar_numbers: np.ndarray,
-                       output_bar_numbers: np.ndarray,
-                       close_prices: np.ndarray,
-                       pct_change_values: np.ndarray,
-                       position_type: int,
-                       analysis_context: AnalysisContext,
-                       prices_df: pl.DataFrame) -> Ratios | None:
+    def __analyze(self,
+                  in_: int,
+                  out_: int,
+                  input_bar_numbers: np.ndarray,
+                  output_bar_numbers: np.ndarray,
+                  close_prices: np.ndarray,
+                  pct_change_values: np.ndarray,
+                  analysis_context: AnalysisContext,
+                  prices_df: pl.DataFrame) -> Ratios | None:
         """
-         Calculates the results and ratios of applying the RSI Two Bands strategy, with the combination of RSI levels
-         and flag of the position type (Long or Short) received as parameters.
+         Calculates the results and ratios applying the RSI Two Bands strategy based on the couple of RSI levels.
 
         :param in_: Input level for the strategy.
         :param out_: Output level for the strategy.
         :param input_bar_numbers: Array of input signal bar numbers.
         :param output_bar_numbers: Array of output signal bar numbers.
         :param close_prices: Array of 'Close' prices extracted from prices_df.
-        :param position_type: Position type under analysis: long (1) or short (-1).
         :param analysis_context: Analysis context for the strategy.
         :param prices_df: The dataFrame with prices, indexed by bar numbers and containing the required column Date.
 
-        :return: If the winnings exceed the losses return a Ratios object with the ratios and aggregates calculated for
-          trade performance, otherwise returns None.
+        :return: A Ratios object (with ratios and aggregates) if winnings exceed losses, otherwise None.
         """
-        signals_ = len(input_bar_numbers)
-
-        # Retrieve values using vectorization (fancy indexing)
+        # Prepare price arrays (vectorized slicing / fancy indexing)
+        # Extract input prices and percentages directly using the indices
         input_prices_ = close_prices[input_bar_numbers]
         input_pct_change_ = pct_change_values[input_bar_numbers]
 
-        # Handling output prices for Open Positions (Mark-to-Market - valuation of assets at current market prices):
-        # If OutputBarNumber is future_bar_number, we must use the last available price,
-        # but we preserve future_bar_number in the DataFrame for semantics.
+        # Handle output prices for open positions (Mark-to-Market - valuation of assets at current market prices)
+        # If OutputBarNumber is future_bar_number (trade open), must be used the last available price.
+        # Create a safe index array clamped to the last valid index of close_prices.
         last_bar_number_ = len(close_prices) - 1
 
-        # Create a temporary index array clamped to the last valid index
         # np.minimum ensures that any index >= len(close_prices) (like future_bar_number) becomes last_bar_number_
         safe_output_bar_numbers_ = np.minimum(output_bar_numbers, last_bar_number_)
         output_prices_ = close_prices[safe_output_bar_numbers_]
 
-        trades_df_ = pl.DataFrame(
-            {
-                "InputBarNumber": input_bar_numbers,
-                "InputPrice": input_prices_,
-                "InputPercentChange": input_pct_change_,
-                "OutputBarNumber": output_bar_numbers,
-                "OutputPrice": output_prices_
-            },
-            schema=["InputBarNumber", "InputPrice", "InputPercentChange", "OutputBarNumber", "OutputPrice"],
-            orient="col"
-        ).with_columns([
-            ((pl.col('OutputPrice') - pl.col('InputPrice')) * position_type
-             - COMMISSION_PERCENT * (pl.col('InputPrice') + pl.col('OutputPrice')))
-            .alias('Result').cast(pl.Float64),
-            (pl.col('OutputBarNumber') - pl.col('InputBarNumber')).alias('Sessions').cast(pl.Int32),
-            pl.col("InputBarNumber").cast(pl.Int32),
-            pl.col("InputPrice").cast(pl.Float64),
-            pl.col("InputPercentChange").cast(pl.Float64),
-            pl.col("OutputBarNumber").cast(pl.Int32),
-            pl.col("OutputPrice").cast(pl.Float64),
-        ])
-
         # Period and levels that parameterize the analyzed strategy
         inputs_ = {'period': self.period, 'in': in_, 'out': out_}
 
-        # Calculate trading performance ratios and aggregates
-        ratios_ = self.perfile_performance(analysis_context, inputs_, signals_, trades_df_, prices_df)
-
-        # Release memory
-        del trades_df_
-
-        return ratios_
+        # Calculate and return trading performance ratios and aggregates
+        return self.perfile_performance_fast(
+            analysis_context,
+            inputs_,
+            input_bar_numbers,
+            output_bar_numbers,
+            input_prices_,
+            output_prices_,
+            input_pct_change_,
+            prices_df
+        )
 
     @staticmethod
     def __get_out_range(is_long_position: bool,

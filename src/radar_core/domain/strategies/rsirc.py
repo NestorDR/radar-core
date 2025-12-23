@@ -262,9 +262,9 @@ class RsiRollerCoaster(RsiStrategyABC):
                             continue
 
                         # Evaluate trades identified, calculate trading performance ratios and aggregates
-                        ratios_ = self.__analyze_fast(in_, over_, out_, input_bar_numbers_, output_bar_numbers_,
-                                                      close_prices, pct_change_values_,
-                                                      position_type_, analysis_context_, prices_df)
+                        ratios_ = self.__analyze(in_, over_, out_, input_bar_numbers_, output_bar_numbers_,
+                                                 close_prices, pct_change_values_,
+                                                 position_type_, analysis_context_, prices_df)
                         if not ratios_:
                             continue
 
@@ -300,20 +300,19 @@ class RsiRollerCoaster(RsiStrategyABC):
         # Finalize the process to identify profitable strategies and logs finalization and return results.
         return self.finalize_identification(init_dt_, analysis_context_, verbosity_level)
 
-    def __analyze_fast(self,
-                       in_: int,
-                       over_: int,
-                       out_: int,
-                       input_bar_numbers: np.ndarray,
-                       output_bar_numbers: np.ndarray,
-                       close_prices: np.ndarray,
-                       pct_change_values: np.ndarray,
-                       position_type: int,
-                       analysis_context: AnalysisContext,
-                       prices_df: pl.DataFrame) -> Ratios | None:
+    def __analyze(self,
+                  in_: int,
+                  over_: int,
+                  out_: int,
+                  input_bar_numbers: np.ndarray,
+                  output_bar_numbers: np.ndarray,
+                  close_prices: np.ndarray,
+                  pct_change_values: np.ndarray,
+                  position_type: int,
+                  analysis_context: AnalysisContext,
+                  prices_df: pl.DataFrame) -> Ratios | None:
         """
-        Calculates the results and ratios of applying the RSI Rollercoaster system, with the combination of RSI levels
-         and flag of the position type (Long or Short) received as parameters.
+        Calculates the results and ratios applying the RSI Rollercoaster system based on the combination of RSI levels.
 
         :param in_: Input level for the strategy.
         :param over_: Level of overbought/oversold for the strategy.
@@ -326,8 +325,7 @@ class RsiRollerCoaster(RsiStrategyABC):
         :param analysis_context: Analysis context for the strategy.
         :param prices_df: The dataFrame with prices, indexed by bar numbers and containing the required column Date.
 
-        :return: If the winnings exceed the losses return a Ratios object with the ratios and aggregates calculated for
-          trade performance, otherwise returns None.
+        :return: A Ratios object (with ratios and aggregates) if winnings exceed losses, otherwise None.
         """
         signals_ = len(input_bar_numbers)
 
