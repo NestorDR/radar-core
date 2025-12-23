@@ -369,7 +369,7 @@ class StrategyABC(ABC):
 
         # Winnings aggregations using NumPy
         winnings_ = np.sum(results_[win_mask_]) if np.any(win_mask_) else 0.0
-        winn_trades_ = np.count_nonzero(win_mask_)
+        winn_trades_ = int(np.count_nonzero(win_mask_))
         winning_sessions_ = np.sum(sessions_[win_mask_]) if np.any(win_mask_) else 0
 
         # Min/Max Percentage Change (only on winning trades)
@@ -383,7 +383,7 @@ class StrategyABC(ABC):
 
         # Losses aggregations using NumPy (sum of negative results)
         losses_ = np.sum(results_[loss_mask_]) if np.any(loss_mask_) else 0.0
-        loss_trades_ = np.count_nonzero(loss_mask_)
+        loss_trades_ = int(np.count_nonzero(loss_mask_))
         losing_sessions_ = np.sum(sessions_[loss_mask_]) if np.any(loss_mask_) else 0
 
         # Profitability check: if winnings + losses <= 0, the strategy is not profitable

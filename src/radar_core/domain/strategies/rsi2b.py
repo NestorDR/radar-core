@@ -29,7 +29,7 @@ PRICE = 1
 PERCENT_CHANGE = 2
 
 
-# In HPC (High Performance Computing), it is a best practice to decouple compute-intensive logic (the "kernel")
+# In HPC (High Performance Computing), it is the best practice to decouple compute-intensive logic (the kernel)
 # from orchestration logic (the class). `_find_trades_2b` acts as a pure function: it accepts Numpy arrays and integers,
 # and returns lists, without accessing or modifying the class state. Keeping it at the module level reinforces this separation.
 @njit(cache=True)
@@ -97,7 +97,7 @@ def _find_trades_2b(rsi_values: np.ndarray,
 
         # 3. Determine Outcome (stop-loss vs. output)
         # Case A: stop-loss triggered before output was found or reached
-        # Note: If output_bar_number_ is -1 (not found), it would be effectively in the future
+        # Note: If output_bar_number_ is -1 (not found), it would be effective in the future
         if 0 < stop_loss_bar_number_ < (output_bar_number_ if output_bar_number_ != -1 else future_bar_number):
             # Add losing trade
             input_bar_numbers_.append(input_bar_number_)
@@ -175,7 +175,7 @@ class RsiTwoBands(RsiStrategyABC):
 
         prices_df = self.identify_where_to_stop_loss(timeframe, prices_df, close_prices)
 
-        # Pre-calculate arrays for Numba. Convert Polars columns to Numpy arrays once to avoid overhead due to loops.
+        # Pre-calculate arrays for Numba. Convert Polars columns to Numpy-arrays once to avoid overhead due to loops.
         rsi_values_ = prices_df['Rsi'].to_numpy()
         pct_change_values_ = prices_df['PercentChange'].to_numpy()
 
@@ -216,7 +216,7 @@ class RsiTwoBands(RsiStrategyABC):
 
                 # Initialize the best strategy for this input level
                 best_ratios_for_in_ = self.initialize_bad_strategy()
-                # Initialize the strategy for a same level as input and output (strategy of 1 level)
+                # Initialize the strategy for the same level as input and output (strategy of 1 level)
                 ratios_for_1_level_ = self.initialize_bad_strategy()
 
                 # Set a range of output levels to be analyzed based on pre-set input and overbought/oversold levels

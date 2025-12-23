@@ -27,7 +27,7 @@ PRICE = 1
 PERCENT_CHANGE = 2
 
 
-# In HPC (High Performance Computing), it is a best practice to decouple compute-intensive logic (the "kernel")
+# In HPC (High Performance Computing), it is the best practice to decouple compute-intensive logic (the kernel)
 # from orchestration logic (the class). `_find_trades_rc` acts as a pure function: it accepts Numpy arrays and integers,
 # and returns lists, without accessing or modifying the class state. Keeping it at the module level reinforces this separation.
 @njit(cache=True)
@@ -96,7 +96,7 @@ def _find_trades_rc(rsi_values: np.ndarray,
 
         # 3. Determine Outcome (stop-loss vs. output)
         # Case A: stop-loss triggered before over[bought|sold] was found or reached
-        # Note: If over_bar_number_ is -1 (not found), it would be effectively in the future
+        # Note: If over_bar_number_ is -1 (not found), it would be effective in the future
         if 0 < stop_loss_bar_number_ < (over_bar_number_ if over_bar_number_ != -1 else future_bar_number):
             # Add losing trade
             input_bar_numbers_.append(input_bar_number_)
@@ -167,7 +167,7 @@ class RsiRollerCoaster(RsiStrategyABC):
                  close_prices: np.ndarray | None,  # type: ignore
                  verbosity_level: int = DEBUG) -> dict:
         """
-        Identifies the best combinations of levels input, overbought/oversold and output for the RSI Rollercoaster
+        Identifies the best combinations of levels input, overbought/oversold, and output for the RSI Rollercoaster
         strategy, both for Long and Short positions, and evaluate its profitability on positions:
          - long: open when RSI rises above the input level and closed when RSI falls below the output level
          - short: open when RSI falls below the output level and closed when RSI rises above the input level.
@@ -196,7 +196,7 @@ class RsiRollerCoaster(RsiStrategyABC):
 
         prices_df = self.identify_where_to_stop_loss(timeframe, prices_df, close_prices)
 
-        # Pre-calculate arrays for Numba. Convert Polars columns to Numpy arrays once to avoid overhead due to loops.
+        # Pre-calculate arrays for Numba. Convert Polars columns to Numpy-arrays once to avoid overhead due to loops.
         rsi_values_ = prices_df['Rsi'].to_numpy()
         pct_change_values_ = prices_df['PercentChange'].to_numpy()
 
