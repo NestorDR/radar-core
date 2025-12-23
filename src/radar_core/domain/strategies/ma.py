@@ -48,9 +48,6 @@ def _find_trades_sma(values: np.ndarray,
     if total_bars_ <= period:
         return np.array(input_bar_numbers_, dtype=np.int32), np.array(output_bar_numbers_, dtype=np.int32)
 
-    # State variables
-    in_position_ = False
-
     # Efficient SMA calculation using a running `sum`
     # Initialize the `sum` for the first window [0: period]
     # Identify the first bar number with a valid value (non-NaN)
@@ -59,13 +56,14 @@ def _find_trades_sma(values: np.ndarray,
         first_nan_bar_ += 1
 
     # Check if there are enough valid elements after leading NaNs to get the first window
+    # It needs at least 'period' elements to calculate the first valid SMA.
     if (total_bars_ - first_nan_bar_) <= period:
         return np.array(input_bar_numbers_, dtype=np.int32), np.array(output_bar_numbers_, dtype=np.int32)
 
     # State variables
     in_position_ = False
 
-    # 3. Initialize the running sum from the first valid index
+    # Initialize the running sum from the first valid index
     current_sum_ = 0.0
     for i in range(first_nan_bar_, first_nan_bar_ + period):
         current_sum_ += values[i]
