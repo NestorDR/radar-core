@@ -419,7 +419,7 @@ class StrategyABC(ABC):
         last_input_date_ = prices_df[int(input_bar_numbers[-1]), 'Date']
 
         last_output_bar_number_ = int(output_bar_numbers[-1])
-        future_bar_number_ = self.future_bar_number(prices_df)
+        future_bar_number_ = analysis_context.future_bar_number
 
         last_output_date_ = None if last_output_bar_number_ >= future_bar_number_ \
             else prices_df[last_output_bar_number_, 'Date']
