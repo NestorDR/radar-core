@@ -440,7 +440,7 @@ class StrategyABC(ABC):
         if {'LongStopLoss', 'ShortStopLoss'}.issubset(prices_df.columns):
             stop_loss_column_ = 'LongStopLoss' if analysis_context.is_long_position else 'ShortStopLoss'
             # Accessing scalar value
-            last_stop_loss_val_ = prices_df[input_bar_numbers[-1], stop_loss_column_]
+            last_stop_loss_val_ = prices_df[int(input_bar_numbers[-1]), stop_loss_column_]
             last_stop_loss_ = Decimal(last_stop_loss_val_).quantize(PRICE_PRECISION)
         else:
             last_stop_loss_ = None
