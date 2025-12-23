@@ -15,11 +15,9 @@ import polars as pl
 
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
-from radar_core.domain.strategies.base_strategy import AnalysisContext, RsiStrategyABC
+from radar_core.domain.strategies.base_strategy import RsiStrategyABC
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import COMMISSION_PERCENT, RSI_RC, LONG, SHORT, STEP_LENGTH_RSI_LEVELS, TIMEFRAMES
-# models: result of Object-Relational Mapping
-from radar_core.models import Ratios
+from radar_core.helpers.constants import RSI_RC, LONG, SHORT, STEP_LENGTH_RSI_LEVELS, TIMEFRAMES
 
 # Column constants for work matrices: inputs and outputs
 BAR_NUMBER = 0
@@ -40,6 +38,7 @@ def _find_trades_rc(rsi_values: np.ndarray,
                     future_bar_number: int) -> tuple[np.ndarray, np.ndarray]:
     """
     Fast JIT-compiled kernel to identify trades based on RSI Rollercoaster logic.
+    Logic: Input Signal -> (Check Stop Loss) -> Over[bought|sold] Signal -> Output Signal.
 
     :param rsi_values: Array of RSI values.
     :param stop_loss_bar_numbers: Array of stop-loss bar numbers.
@@ -164,7 +163,7 @@ class RsiRollerCoaster(RsiStrategyABC):
                  timeframe: int,
                  only_long_positions,
                  prices_df: pl.DataFrame,
-                 close_prices: np.ndarray | None,  # type: ignore
+                 close_prices: np.ndarray,
                  verbosity_level: int = DEBUG) -> dict:
         """
         Identifies the best combinations of levels input, overbought/oversold, and output for the RSI Rollercoaster
@@ -190,15 +189,12 @@ class RsiRollerCoaster(RsiStrategyABC):
         init_dt_, analysis_context_, original_column_names_, verbosity_level = \
             self.initialize_identification(symbol, timeframe, prices_df, verbosity_level)
 
-        if close_prices is None:
-            # Extract Close prices to an array to speed up prices access
-            close_prices = prices_df['Close'].to_numpy()
-
+        # Identify and calculate where to stop losses for both long and short positions.
         prices_df = self.identify_where_to_stop_loss(timeframe, prices_df, close_prices)
 
         # Pre-calculate arrays for Numba. Convert Polars columns to Numpy-arrays once to avoid overhead due to loops.
         rsi_values_ = prices_df['Rsi'].to_numpy()
-        pct_change_values_ = prices_df['PercentChange'].to_numpy()
+        percent_changes_ = prices_df['PercentChange'].to_numpy()
 
         # Pre-calculate min/max RSI to skip impossible conditions in loops; nanmin/nanmax ignore initial NaN values (first 14 periods)
         min_rsi_ = np.nanmin(rsi_values_)
@@ -221,8 +217,9 @@ class RsiRollerCoaster(RsiStrategyABC):
             # Initialize bad strategy to be evaluated and to get better RSI-RCs
             best_ratios_ = self.initialize_bad_strategy()
             is_long_position_ = position_type_ == LONG
-            stop_loss_bar_numbers_ = long_stops_ if is_long_position_ else short_stops_
             analysis_context_.is_long_position = is_long_position_
+
+            stop_loss_bar_numbers_ = long_stops_ if is_long_position_ else short_stops_
 
             # Iterate over the input level of the RSI
             for in_ in range(from_in_, to_in_, step_):
@@ -261,10 +258,13 @@ class RsiRollerCoaster(RsiStrategyABC):
                         if len(input_bar_numbers_) == 0:
                             continue
 
+                        # Set strategy Inputs. Period and levels that parameterize the analyzed strategy
+                        inputs_ = {'period': self.period, 'in': in_, 'over': over_, 'out': out_}
+
                         # Evaluate trades identified, calculate trading performance ratios and aggregates
-                        ratios_ = self.__analyze(in_, over_, out_, input_bar_numbers_, output_bar_numbers_,
-                                                 close_prices, pct_change_values_,
-                                                 position_type_, analysis_context_, prices_df)
+                        ratios_ = self.perfile_performance_fast(analysis_context_, inputs_,
+                                                            input_bar_numbers_, output_bar_numbers_,
+                                                            close_prices, percent_changes_, prices_df)
                         if not ratios_:
                             continue
 
@@ -299,86 +299,6 @@ class RsiRollerCoaster(RsiStrategyABC):
 
         # Finalize the process to identify profitable strategies and logs finalization and return results.
         return self.finalize_identification(init_dt_, analysis_context_, verbosity_level)
-
-    def __analyze(self,
-                  in_: int,
-                  over_: int,
-                  out_: int,
-                  input_bar_numbers: np.ndarray,
-                  output_bar_numbers: np.ndarray,
-                  close_prices: np.ndarray,
-                  pct_change_values: np.ndarray,
-                  position_type: int,
-                  analysis_context: AnalysisContext,
-                  prices_df: pl.DataFrame) -> Ratios | None:
-        """
-        Calculates the results and ratios applying the RSI Rollercoaster system based on the combination of RSI levels.
-
-        :param in_: Input level for the strategy.
-        :param over_: Level of overbought/oversold for the strategy.
-        :param out_: Output level for the strategy.
-        :param input_bar_numbers: Array of input signal bar numbers.
-        :param output_bar_numbers: Array of output signal bar numbers.
-        :param close_prices: Array of 'Close' prices extracted from prices_df.
-        :param pct_change_values: Array of 'PercentChange' values extracted from prices_df.
-        :param position_type: Position type under analysis: long (1) or short (-1).
-        :param analysis_context: Analysis context for the strategy.
-        :param prices_df: The dataFrame with prices, indexed by bar numbers and containing the required column Date.
-
-        :return: A Ratios object (with ratios and aggregates) if winnings exceed losses, otherwise None.
-        """
-        signals_ = len(input_bar_numbers)
-
-        # Retrieve values using vectorization (fancy indexing)
-        input_prices_ = close_prices[input_bar_numbers]
-        input_pct_change_ = pct_change_values[input_bar_numbers]
-
-        # Handling output prices for Open Positions (Mark-to-Market - valuation of assets at current market prices):
-        # If OutputBarNumber is future_bar_number, we must use the last available price,
-        # but we preserve future_bar_number in the DataFrame for semantics.
-        last_bar_number_ = len(close_prices) - 1
-
-        # Create a temporary index array clamped to the last valid index
-        # np.minimum ensures that any index >= len(close_prices) (like future_bar_number) becomes last_bar_number_
-        safe_output_bar_numbers_ = np.minimum(output_bar_numbers, last_bar_number_)
-        output_prices_ = close_prices[safe_output_bar_numbers_]
-
-        trades_df_ = pl.DataFrame(
-            # Create trades_df_ directly, explicitly defining the column names
-            {
-                "InputBarNumber": input_bar_numbers,
-                "InputPrice": input_prices_,
-                "InputPercentChange": input_pct_change_,
-                "OutputBarNumber": output_bar_numbers,
-                "OutputPrice": output_prices_
-            },
-            schema=["InputBarNumber", "InputPrice", "InputPercentChange", "OutputBarNumber", "OutputPrice"],
-            orient="col"
-        ).with_columns([
-            # Calculate the final Result subtracting prices and commissions
-            ((pl.col('OutputPrice') - pl.col('InputPrice')) * position_type
-             - COMMISSION_PERCENT * (pl.col('InputPrice') + pl.col('OutputPrice')))
-            .alias('Result').cast(pl.Float64),
-            # Calculate the number of Sessions positioned
-            (pl.col('OutputBarNumber') - pl.col('InputBarNumber')).alias('Sessions').cast(pl.Int32),
-            # Explicit cast
-            pl.col("InputBarNumber").cast(pl.Int32),
-            pl.col("InputPrice").cast(pl.Float64),
-            pl.col("InputPercentChange").cast(pl.Float64),
-            pl.col("OutputBarNumber").cast(pl.Int32),
-            pl.col("OutputPrice").cast(pl.Float64),
-        ])
-
-        # Period and levels that parameterize the analyzed strategy
-        inputs_ = {'period': self.period, 'in': in_, 'over': over_, 'out': out_}
-
-        # Calculate trading performance ratios and aggregates
-        ratios_ = self.perfile_performance(analysis_context, inputs_, signals_, trades_df_, prices_df)
-
-        # Release memory
-        del trades_df_
-
-        return ratios_
 
     @staticmethod
     def __get_out_range(is_long_position: bool,

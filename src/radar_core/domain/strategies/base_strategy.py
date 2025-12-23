@@ -116,7 +116,7 @@ class StrategyABC(ABC):
                  timeframe: int,
                  only_long_positions: bool,
                  prices_df: pl.DataFrame,
-                 close_prices: np.ndarray | None,  # type: ignore
+                 close_prices: np.ndarray,
                  verbosity_level: int = DEBUG) -> dict:
         """
         Iterates a number of periods or levels to calculate a tech indicator and evaluate its profitability.
@@ -187,7 +187,9 @@ class StrategyABC(ABC):
     def future_bar_number(prices_df: pl.DataFrame) -> int:
         """
         Generates a future bar number based on the height of the DataFrame.
+
         :param prices_df: A DataFrame with price prices for a financial instrument.
+
         :return: A bar number larger than those contained in the dataframe.
         """
         return prices_df.height
@@ -289,9 +291,8 @@ class StrategyABC(ABC):
                                  inputs: dict,
                                  input_bar_numbers: np.ndarray,
                                  output_bar_numbers: np.ndarray,
-                                 input_prices: np.ndarray,
-                                 output_prices: np.ndarray,
-                                 input_pct_change: np.ndarray,
+                                 close_prices: np.ndarray,
+                                 percent_changes: np.ndarray,
                                  prices_df: pl.DataFrame) -> Ratios | None:
         """
         Calculates and organizes aggregates and ratios to profile the strategy’s trade performance,
@@ -306,9 +307,8 @@ class StrategyABC(ABC):
         :param inputs: Input prices that parameterize a strategy.
         :param input_bar_numbers: Array of bar numbers where trades were opened.
         :param output_bar_numbers: Array of bar numbers where trades were closed.
-        :param input_prices: Array of prices at trade entry.
-        :param output_prices: Array of prices at trade exit.
-        :param input_pct_change: Array of percentage changes at trade input (used for min/max statistics).
+        :param close_prices: Array of Close prices extracted from the prices dataframe.
+        :param percent_changes: Array of PercentChange values extracted from the prices dataframe.
         :param prices_df: The dataframe with prices, indexed by bar numbers and containing the required column Date.
 
         :return: A Ratios object (with ratios and aggregates) if winnings exceed losses, otherwise None.
@@ -349,13 +349,27 @@ class StrategyABC(ABC):
         if signals_ == 0:
             return None
 
+        # Prepare price arrays (vectorized slicing / fancy indexing)
+        # Extract input prices and percentages directly using the indices
+        input_prices_ = close_prices[input_bar_numbers]
+        input_pct_change_ = percent_changes[input_bar_numbers]
+
+        # Handle output prices for open positions (Mark-to-Market - valuation of assets at current market prices)
+        # If OutputBarNumber is future_bar_number (trade open), must be used the last available price.
+        # Create a safe index array subject to the last valid index of close_prices.
+        last_bar_number_ = len(close_prices) - 1
+
+        # np.minimum ensures that any index >= len(close_prices) (like future_bar_number) becomes last_bar_number_
+        safe_output_bar_numbers_ = np.minimum(output_bar_numbers, last_bar_number_)
+        output_prices_ = close_prices[safe_output_bar_numbers_]
+
         # Identify the position type under analysis: long (1) or short (-1).
         position_type_ = 1 if analysis_context.is_long_position else -1
 
         # Vectorized Calculation of Results
         # Formula: (Output - Input) * Direction - Commission * (Input + Output)
-        results_ = ((output_prices - input_prices) * position_type_
-                    - COMMISSION_PERCENT * (input_prices + output_prices))
+        results_ = ((output_prices_ - input_prices_) * position_type_
+                    - COMMISSION_PERCENT * (input_prices_ + output_prices_))
 
         # Calculate session durations using vectorized element-wise subtraction,
         #  leveraging SIMD (Single Instruction, Multiple Data)
@@ -363,20 +377,20 @@ class StrategyABC(ABC):
 
         # Boolean masking for grouping (Winnings versus Losses)
         # Identify winning trades (Net Result > 0)
-        win_mask_ = results_ > 0.0
+        winn_mask_ = results_ > 0.0
         # Identify losing trades (Net Result <= 0)
-        loss_mask_ = ~win_mask_
+        loss_mask_ = ~winn_mask_
 
         # Winnings aggregations using NumPy
-        winnings_ = np.sum(results_[win_mask_]) if np.any(win_mask_) else 0.0
-        winn_trades_ = int(np.count_nonzero(win_mask_))
-        winning_sessions_ = np.sum(sessions_[win_mask_]) if np.any(win_mask_) else 0
+        winnings_ = np.sum(results_[winn_mask_]) if np.any(winn_mask_) else 0.0
+        winn_trades_ = int(np.count_nonzero(winn_mask_))
+        winning_sessions_ = np.sum(sessions_[winn_mask_]) if np.any(winn_mask_) else 0
 
         # Min/Max Percentage Change (only on winning trades)
         if winn_trades_ > 0:
-            win_pcts_ = input_pct_change[win_mask_]
-            min_percentage_change_to_win_ = np.min(win_pcts_)
-            max_percentage_change_to_win_ = np.max(win_pcts_)
+            winn_pcts_ = input_pct_change_[winn_mask_]
+            min_percentage_change_to_win_ = np.min(winn_pcts_)
+            max_percentage_change_to_win_ = np.max(winn_pcts_)
         else:
             min_percentage_change_to_win_ = 0.0
             max_percentage_change_to_win_ = 0.0
@@ -392,7 +406,7 @@ class StrategyABC(ABC):
             return None
 
         # Calculate ratios for the strategy
-        first_input_price_ = max(float(input_prices[0]), 0.00001)
+        first_input_price_ = max(float(input_prices_[0]), 0.00001)
 
         net_profit_, expected_value_, win_probability_, loss_probability_, average_win_, average_loss_ = \
             self.compute_key_ratios(signals_, first_input_price_, winnings_, winn_trades_, losses_, loss_trades_)
@@ -401,10 +415,10 @@ class StrategyABC(ABC):
 
         # Extracts the relevant dates
         # Accessing Polars by index (.item()) is efficient for single scalars
-        first_input_date_ = prices_df[input_bar_numbers[0], 'Date']
-        last_input_date_ = prices_df[input_bar_numbers[-1], 'Date']
+        first_input_date_ = prices_df[int(input_bar_numbers[0]), 'Date']
+        last_input_date_ = prices_df[int(input_bar_numbers[-1]), 'Date']
 
-        last_output_bar_number_ = output_bar_numbers[-1]
+        last_output_bar_number_ = int(output_bar_numbers[-1])
         future_bar_number_ = self.future_bar_number(prices_df)
 
         last_output_date_ = None if last_output_bar_number_ >= future_bar_number_ \
@@ -412,7 +426,7 @@ class StrategyABC(ABC):
 
         # Extract last trade info
         # Identify the input price for the last trade/position
-        last_input_price_ = Decimal(input_prices[-1]).quantize(PRICE_PRECISION)
+        last_input_price_ = Decimal(input_prices_[-1]).quantize(PRICE_PRECISION)
 
         # Identify the output price for the last trade/position
         # (use Mark-to-market output price logic if the position is still opened)
@@ -420,7 +434,7 @@ class StrategyABC(ABC):
             # If trade is still open (output in future), use the last available close
             last_output_price_ = None
         else:
-            last_output_price_ = Decimal(output_prices[-1]).quantize(PRICE_PRECISION)
+            last_output_price_ = Decimal(output_prices_[-1]).quantize(PRICE_PRECISION)
 
         # Identify stop loss for the last trade/position
         if {'LongStopLoss', 'ShortStopLoss'}.issubset(prices_df.columns):

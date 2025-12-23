@@ -110,22 +110,23 @@ def analyze(timeframe: int,
     # Add a row counter as a column, required to the analysis (is a zero-based bar number)
     prices_df = prices_df.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber'))
 
+    # Extract Close prices to an array to speed up prices access
+    close_prices_ = prices_df['Close'].to_numpy()
+
     # Get profitable strategies for daily time frame
     if strategies.sma:
-        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, None, verbosity_level)
+        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
 
     # Calculate RSI once for the RSI-based strategies only if needed
     if strategies.rsi_sma or strategies.rsi_rc or strategies.rsi_2b:
         prices_df = RSI(prices_df)
 
         if strategies.rsi_sma:
-            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, None, verbosity_level)
+            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
 
         # Calculate the stop loss prices only once for the following strategies
         if strategies.rsi_2b or strategies.rsi_rc:
-            # Extract Close prices to an array to speed up prices access
-            close_prices_ = prices_df['Close'].to_numpy()
-
+            # Identify and calculate where to stop losses for both long and short positions.
             prices_df = RsiStrategyABC.identify_where_to_stop_loss(timeframe, prices_df, close_prices_)
 
             if strategies.rsi_2b:

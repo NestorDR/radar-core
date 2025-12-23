@@ -17,11 +17,10 @@ import polars as pl
 
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
-from radar_core.domain.strategies.base_strategy import AnalysisContext, RsiStrategyABC
+from radar_core.domain.strategies.base_strategy import RsiStrategyABC
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import RSI_2B, LONG, SHORT, STEP_LENGTH_RSI_LEVELS, TIMEFRAMES
 # models: result of Object-Relational Mapping
-from radar_core.models import Ratios
 
 # Column constants for work matrices: inputs and outputs
 BAR_NUMBER = 0
@@ -143,7 +142,7 @@ class RsiTwoBands(RsiStrategyABC):
                  timeframe: int,
                  only_long_positions,
                  prices_df: pl.DataFrame,
-                 close_prices: np.ndarray | None,  # type: ignore
+                 close_prices: np.ndarray,
                  verbosity_level: int = DEBUG) -> dict:
         """
         Identifies the best combinations of bands input and output for the RSI strategy,
@@ -169,15 +168,12 @@ class RsiTwoBands(RsiStrategyABC):
         init_dt_, analysis_context_, original_column_names_, verbosity_level = \
             self.initialize_identification(symbol, timeframe, prices_df, verbosity_level)
 
-        if close_prices is None:
-            # Extract Close prices to an array to speed up prices access
-            close_prices = prices_df['Close'].to_numpy()
-
+        # Identify and calculate where to stop losses for both long and short positions.
         prices_df = self.identify_where_to_stop_loss(timeframe, prices_df, close_prices)
 
         # Pre-calculate arrays for Numba. Convert Polars columns to Numpy-arrays once to avoid overhead due to loops.
         rsi_values_ = prices_df['Rsi'].to_numpy()
-        pct_change_values_ = prices_df['PercentChange'].to_numpy()
+        percent_changes_ = prices_df['PercentChange'].to_numpy()
 
         # Pre-calculate min/max RSI to skip impossible conditions in loops; nanmin/nanmax ignore initial NaN values (first 14 periods)
         min_rsi_ = np.nanmin(rsi_values_)
@@ -197,9 +193,9 @@ class RsiTwoBands(RsiStrategyABC):
         for position_type_, from_in_, to_in_, step_ in contexts_:
             # Initialize bad strategy to be evaluated and to get better RSI-2Bs
             best_ratios_ = self.initialize_bad_strategy()
-            analysis_context_.is_long_position = position_type_ == LONG
+            is_long_position_ = position_type_ == LONG
+            analysis_context_.is_long_position = is_long_position_
 
-            is_long_position_ = analysis_context_.is_long_position
             stop_loss_bar_numbers_ = long_stops_ if is_long_position_ else short_stops_
 
             # Iterate over the input level of the RSI
@@ -231,18 +227,20 @@ class RsiTwoBands(RsiStrategyABC):
 
                     # Evaluate the life cycle for the RSI Two Bands strategy
                     # (input and output) with the current combination
-                    input_bar_numbers_, output_bar_numbers_ = _find_trades_2b(rsi_values_, stop_loss_bar_numbers_,
-                                                                              in_, out_,
-                                                                              is_long_position_, future_bar_number_)
+                    input_bar_numbers_, output_bar_numbers_ = _find_trades_2b(
+                        rsi_values_, stop_loss_bar_numbers_, in_, out_, is_long_position_, future_bar_number_)
 
                     # If no trades identified, skip
                     if len(input_bar_numbers_) == 0:
                         continue
 
+                    # Set strategy Inputs. Period and levels that parameterize the analyzed strategy
+                    inputs_ = {'period': self.period, 'in': in_, 'out': out_}
+
                     # Evaluate trades identified, calculate trading performance ratios and aggregates
-                    ratios_ = self.__analyze(in_, out_, input_bar_numbers_, output_bar_numbers_,
-                                             close_prices, pct_change_values_,
-                                             analysis_context_, prices_df)
+                    ratios_ = self.perfile_performance_fast(analysis_context_, inputs_,
+                                                            input_bar_numbers_, output_bar_numbers_,
+                                                            close_prices, percent_changes_, prices_df)
                     if not ratios_:
                         continue
 
@@ -291,57 +289,6 @@ class RsiTwoBands(RsiStrategyABC):
 
         # Finalize the process to identify profitable strategies and logs finalization and return results.
         return self.finalize_identification(init_dt_, analysis_context_, verbosity_level)
-
-    def __analyze(self,
-                  in_: int,
-                  out_: int,
-                  input_bar_numbers: np.ndarray,
-                  output_bar_numbers: np.ndarray,
-                  close_prices: np.ndarray,
-                  pct_change_values: np.ndarray,
-                  analysis_context: AnalysisContext,
-                  prices_df: pl.DataFrame) -> Ratios | None:
-        """
-         Calculates the results and ratios applying the RSI Two Bands strategy based on the couple of RSI levels.
-
-        :param in_: Input level for the strategy.
-        :param out_: Output level for the strategy.
-        :param input_bar_numbers: Array of input signal bar numbers.
-        :param output_bar_numbers: Array of output signal bar numbers.
-        :param close_prices: Array of 'Close' prices extracted from prices_df.
-        :param analysis_context: Analysis context for the strategy.
-        :param prices_df: The dataFrame with prices, indexed by bar numbers and containing the required column Date.
-
-        :return: A Ratios object (with ratios and aggregates) if winnings exceed losses, otherwise None.
-        """
-        # Prepare price arrays (vectorized slicing / fancy indexing)
-        # Extract input prices and percentages directly using the indices
-        input_prices_ = close_prices[input_bar_numbers]
-        input_pct_change_ = pct_change_values[input_bar_numbers]
-
-        # Handle output prices for open positions (Mark-to-Market - valuation of assets at current market prices)
-        # If OutputBarNumber is future_bar_number (trade open), must be used the last available price.
-        # Create a safe index array clamped to the last valid index of close_prices.
-        last_bar_number_ = len(close_prices) - 1
-
-        # np.minimum ensures that any index >= len(close_prices) (like future_bar_number) becomes last_bar_number_
-        safe_output_bar_numbers_ = np.minimum(output_bar_numbers, last_bar_number_)
-        output_prices_ = close_prices[safe_output_bar_numbers_]
-
-        # Period and levels that parameterize the analyzed strategy
-        inputs_ = {'period': self.period, 'in': in_, 'out': out_}
-
-        # Calculate and return trading performance ratios and aggregates
-        return self.perfile_performance_fast(
-            analysis_context,
-            inputs_,
-            input_bar_numbers,
-            output_bar_numbers,
-            input_prices_,
-            output_prices_,
-            input_pct_change_,
-            prices_df
-        )
 
     @staticmethod
     def __get_out_range(is_long_position: bool,

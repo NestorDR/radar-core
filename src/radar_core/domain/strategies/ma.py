@@ -2,9 +2,11 @@
 
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-from logging import DEBUG, ERROR, getLogger
+from logging import DEBUG
 
 # --- Third Party Libraries ---
+# numba: JIT compiler that compiles a subset of Python and NumPy code into optimized machine code
+from numba import njit
 # numpy: provides greater support for vectors and matrices, with high-level mathematical functions to operate on them
 import numpy as np
 # polars: high-performance DataFrame library for in-memory analytics.
@@ -14,10 +16,95 @@ import polars as pl
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 from radar_core.domain.strategies.base_strategy import StrategyABC
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import COMMISSION_PERCENT, LONG, SHORT, TIMEFRAMES
-from radar_core.helpers.log_helper import verbose
+from radar_core.helpers.constants import LONG, SHORT, TIMEFRAMES
 
-logger_ = getLogger(__name__)
+
+# In HPC (High Performance Computing), it is the best practice to decouple compute-intensive logic (the kernel)
+# from orchestration logic (the class). `_find_trades_2b` acts as a pure function: it accepts Numpy arrays and integers,
+# and returns lists, without accessing or modifying the class state. Keeping it at the module level reinforces this separation.
+@njit(cache=True)
+def _find_trades_sma(values: np.ndarray,
+                     period: int,
+                     is_long_position: bool,
+                     future_bar_number: int) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Fast JIT-compiled kernel to identify trades based on Moving Average crossovers.
+    It calculates the SMA on-the-fly to avoid memory allocation for intermediate arrays.
+
+    :param values: Array of values (e.g., Close prices) to compute MA and check crosses.
+    :param period: The moving average period.
+    :param is_long_position: True for Long strategy (Buy if Value > SMA), False for Short.
+    :param future_bar_number: The number of a price bar that will be available in the future.
+
+    :return: Tuple of numpy arrays with the input and output bar numbers for each trade.
+    """
+    total_bars_ = len(values)
+    input_bar_numbers_ = []
+    output_bar_numbers_ = []
+
+    # It needs at least 'period' elements to calculate the first valid SMA.
+    # The first valid SMA corresponds to index 'period - 1'.
+    # Start iterating from 'period' to check the cross between (i-1) and (i).
+    if total_bars_ <= period:
+        return np.array(input_bar_numbers_, dtype=np.int32), np.array(output_bar_numbers_, dtype=np.int32)
+
+    # State variables
+    in_position_ = False
+
+    # Efficient SMA calculation using a running `sum`
+    # Initialize the `sum` for the first window [0: period]
+    current_sum_ = 0.0
+    for i in range(period):
+        current_sum_ += values[i]
+
+    # Calculate first SMA at index (period - 1)
+    previous_sma_ = current_sum_ / period
+    previous_value_ = values[period - 1]
+
+    # Iterate starting from the first bar AFTER the initial window
+    for i in range(period, total_bars_):
+        current_value_ = values[i]
+
+        # Update Running Sum: add new value, remove old value leaving the window
+        # Value leaving is at index (i - period)
+        current_sum_ = current_sum_ + current_value_ - values[i - period]
+        current_sma_ = current_sum_ / period
+
+        # Check Crossovers
+        # Long.: Open if (previous value <= previous SMA) and (current value > current SMA)
+        #       Close if (previous value >  previous SMA) and (current value < current SMA)
+        # Short: Open if (previous value >= previous SMA) and (current value < current SMA)
+        #       Close if (previous value <  previous SMA) and (current value > current SMA)
+        is_above_ = current_value_ > current_sma_
+        was_above_ = previous_value_ > previous_sma_
+
+        # Cross Over: Value crosses SMA from below to above
+        cross_over_ = is_above_ and not was_above_
+        # Cross Under: Value crosses SMA from above to below
+        cross_under_ = not is_above_ and was_above_
+
+        if not in_position_:
+            # Look for input
+            input_signal_ = cross_over_ if is_long_position else cross_under_
+            if input_signal_:
+                input_bar_numbers_.append(i)
+                in_position_ = True
+        else:
+            # Look for output
+            output_signal_ = cross_under_ if is_long_position else cross_over_
+            if output_signal_:
+                output_bar_numbers_.append(i)
+                in_position_ = False
+
+        # Update previous state for next iteration
+        previous_sma_ = current_sma_
+        previous_value_ = current_value_
+
+    # Handle Open Position at the end of data (Mark-to-Market)
+    if in_position_:
+        output_bar_numbers_.append(future_bar_number)
+
+    return np.array(input_bar_numbers_, dtype=np.int32), np.array(output_bar_numbers_, dtype=np.int32)
 
 
 class MovingAverage(StrategyABC):
@@ -52,7 +139,7 @@ class MovingAverage(StrategyABC):
                  timeframe: int,
                  only_long_positions: bool,
                  prices_df: pl.DataFrame,
-                 close_prices: np.ndarray | None = None,  # type: ignore
+                 close_prices: np.ndarray,
                  verbosity_level: int = DEBUG) -> dict:
         """
         Iterate from the minimum to the maximum number of periods to calculate the MA and evaluate its profitability
@@ -67,7 +154,7 @@ class MovingAverage(StrategyABC):
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe at least with required columns
          [DateTime, {self.value_column_name}, PercentChange, BarNumber].
-        :param close_prices: Only for signature compatibility, not used in this method.
+        :param close_prices: Close prices for the given symbol and timeframe.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
 
@@ -84,14 +171,23 @@ class MovingAverage(StrategyABC):
         init_dt_, analysis_context_, original_column_names_, verbosity_level = \
             self.initialize_identification(symbol, timeframe, prices_df, verbosity_level)
 
+        # Pre-calculate arrays for Numba/Vectorized operations
+        # Extract values to calculate SMA (usually Close or RSI)
+        values_ = prices_df[self.value_column_name].to_numpy()
+        # Extract percent change for stats
+        percent_changes_ = prices_df['PercentChange'].to_numpy()
+
+        # Identify
+        future_bar_number_ = analysis_context_.future_bar_number
+
         # Position types to iterate
         position_types_ = [LONG] + ([] if only_long_positions else [SHORT])
 
         for position_type_ in position_types_:
             # Initialize bad strategy to be evaluated and to get better MAs
             best_ratios_ = self.initialize_bad_strategy()
-            analysis_context_.is_long_position = position_type_ == LONG
-            position_factor_ = pl.lit(1 if analysis_context_.is_long_position else -1)  # lit = literal
+            is_long_position_ = position_type_ == LONG
+            analysis_context_.is_long_position = is_long_position_
 
             # Iterate from the min to the max number of periods to calculate the MA and evaluate its profitability
             for period_ in range(self.min_period, self.max_period + 1):
@@ -101,97 +197,25 @@ class MovingAverage(StrategyABC):
                         f'Evaluating profitability {TIMEFRAMES[timeframe]} of {self.strategy_acronym}({period_}) for {symbol}...',
                         end='')
 
-                if prices_df.height - self.min_period < period_:
+                if len(values_) <= period_:
                     # The minimum number of periods to calculate the average is not reached
                     continue
 
-                try:
-                    # Calculate MA for the number of periods in process for the loop and Position, to analyze,
-                    prices_df = prices_df.with_columns(
-                        pl.col(self.value_column_name).rolling_mean(window_size=period_).alias(self.ma_column_name))
+                # Calculate SMA signals using Numba (no intermediate Polars objects)
+                input_bar_numbers_, output_bar_numbers_ = _find_trades_sma(
+                    values_, period_, is_long_position_, future_bar_number_)
 
-                except Exception as e:
-                    # Log error
-                    message_ = (f'Error calculating the {self.strategy_acronym}({period_})'
-                                f' over {self.value_column_name} for {symbol}.')
-                    verbose(message_, ERROR, verbosity_level)
-                    logger_.exception(e, exc_info=e)
+                if len(input_bar_numbers_) == 0:
+                    # There are no valid signals, skip further processing
                     continue
 
-                # Calculate results and ratios of applying the price crossover system on the MA of "period_" periods
-                # Identify signals or position changes when the value crosses the MA of "period_" periods
-                # IF is_long_position THEN identify 'close' > 'sma' ELSE identify 'close' < 'sma'
-                prices_df = prices_df.with_columns(
-                    (position_factor_ * (pl.col(self.value_column_name) - pl.col(self.ma_column_name)) > 0)
-                    .cast(pl.Int8).diff().alias("Position")
-                )
-
-                # Generate a dataframe of position starts
-                inputs_df_ = prices_df.filter(pl.col('Position') == 1).select(['BarNumber', 'Close', 'PercentChange'])
-                # Generate a dataframe of position outputs
-                outputs_df_ = prices_df.filter(pl.col('Position') == -1).select(['BarNumber', 'Close'])
-
-                # Perform early skip checks
-                if inputs_df_.height < 2 or outputs_df_.height < 2:
-                    # Skipping the MA, not enough signals
-                    continue
-
-                # If there is an output prior to an input: remove the first output row
-                if inputs_df_[0, 'BarNumber'] > outputs_df_[0, 'BarNumber']:
-                    outputs_df_ = outputs_df_.slice(1)  # Remove with slicing
-
-                # If there are more inputs than outputs...
-                if inputs_df_.height > outputs_df_.height:
-                    # ...append an output row, fake because the position is open, with the last [Close] price
-                    outputs_df_ = pl.concat([outputs_df_,
-                                             pl.DataFrame({
-                                                 'BarNumber': [analysis_context_.future_bar_number],
-                                                 'Close': [float(analysis_context_.final_price)],
-                                             }, schema={'BarNumber': pl.Int32, 'Close': pl.Float64})
-                                             ])
-
-                # At this point, the lengths of inputs_df and outputs_df should match
-                if inputs_df_.height != outputs_df_.height:
-                    # Log error
-                    message_ = f'Error due to differences between number of inputs and outputs {symbol}.'
-                    verbose(message_, ERROR, verbosity_level)
-                    logger_.error(message_)
-                    continue
-
-                # If there are no valid signals, skip further processing
-                signals_ = inputs_df_.height
-                if signals_ == 0:
-                    continue
-
-                # Method lazy() starts a lazy query from this point, returns a LazyFrame object in which operations
-                # are not executed until they are triggered by the collect() call
-                trades_df_ = (pl.concat(
-                    # Step 1: Create trades_df_ by combining aligned input/output rows into a single DataFrame
-                    [
-                        inputs_df_.lazy(),
-                        outputs_df_.lazy()
-                        .rename({'BarNumber': 'OutputBarNumber', 'Close': 'OutputPrice'})
-                        .select(['OutputBarNumber', 'OutputPrice'])  # Select the necessary columns
-                    ],
-                    how="horizontal"  # Horizontally stack the rows, keeping row alignment
-                ).rename({
-                    'BarNumber': 'InputBarNumber',
-                    'Close': 'InputPrice',
-                    'PercentChange': 'InputPercentChange'
-                }).with_columns([
-                    # Step 2: Calculate the final Result subtracting prices and commissions, ...
-                    ((pl.col('OutputPrice') - pl.col('InputPrice')) * position_factor_
-                     - COMMISSION_PERCENT * (pl.col('InputPrice') + pl.col('OutputPrice')))
-                    .alias('Result').cast(pl.Float64),
-                    # ... and the number of Sessions positioned
-                    (pl.col('OutputBarNumber') - pl.col('InputBarNumber')).alias('Sessions').cast(pl.Int32)
-                ])).collect()
-
-                # Input prices that parameterize the analyzed strategy
+                # Set strategy Inputs. Period that parameterizes the analyzed strategy.
                 inputs_ = {'period': period_}
-                # Calculate trading performance ratios and aggregates
-                ratios_ = self.perfile_performance(analysis_context_, inputs_, signals_, trades_df_, prices_df)
 
+                # Evaluate trades identified, calculate trading performance ratios and aggregates
+                ratios_ = self.perfile_performance_fast(analysis_context_, inputs_,
+                                                        input_bar_numbers_, output_bar_numbers_,
+                                                        close_prices, percent_changes_, prices_df)
                 if not ratios_:
                     continue
 
@@ -212,12 +236,6 @@ class MovingAverage(StrategyABC):
             else:
                 # Set dictionary for better Short strategies
                 analysis_context_.best_short = self.validate_best_strategy(best_ratios_)
-
-        # Release memory
-        if 'inputs_df_' in locals():
-            del inputs_df_, outputs_df_
-            if 'trades_df_' in locals():
-                del trades_df_
 
         # Reset to the original columns
         prices_df = prices_df.select(original_column_names_)
