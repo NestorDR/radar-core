@@ -70,12 +70,12 @@ def _find_trades_sma(values: np.ndarray,
 
     # Calculate the first valid SMA at the end of the first valid window
     # Example: if first_nan_bar_ is 14, due to a RSI(14), and period is 20, the first SMA is at index 33
-    first_valid_sma_bar_  = first_nan_bar_ + period - 1
+    first_valid_sma_bar_ = first_nan_bar_ + period - 1
     previous_sma_ = current_sum_ / period
-    previous_value_ = values[first_valid_sma_bar_ ]
+    previous_value_ = values[first_valid_sma_bar_]
 
     # Iterate starting from the first bar AFTER the initial window
-    for i in range(first_valid_sma_bar_  + 1, total_bars_):
+    for i in range(first_valid_sma_bar_ + 1, total_bars_):
         current_value_ = values[i]
 
         # Update Running Sum: add new value, remove old value leaving the window
