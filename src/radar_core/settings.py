@@ -61,14 +61,14 @@ class Settings:
         """
         # Find an .env file in the current or parent directories
         env_path_ = dotenvy_py.find_upwards('.env', 2)
-        self.verbosity_level = self._get_log_level()
         if env_path_:
             dotenvy_py.from_filename(env_path_)
             message_ = f"Found and loaded environment file {env_path_}"
             message_verbosity_level_ = DEBUG
         else:
-            message_ = "No environment file found. Continuing without loading environment variables."
+            message_ = "No environment file found. Continuing with available environment variables."
             message_verbosity_level_ = WARNING
+        self.verbosity_level = self._get_log_level()
 
         verbose(message_, message_verbosity_level_, self.verbosity_level)
 
