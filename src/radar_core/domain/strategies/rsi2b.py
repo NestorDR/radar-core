@@ -275,11 +275,9 @@ class RsiTwoBands(RsiStrategyABC):
 
             # Gather the best strategies
             if analysis_context_.is_long_position:
-                # Set dictionary for better Long strategies
-                analysis_context_.best_long = self.validate_best_strategy(best_ratios_)
+                analysis_context_.best_long = best_ratios_  # Best Long strategies
             else:
-                # Set dictionary for better Short strategies
-                analysis_context_.best_short = self.validate_best_strategy(best_ratios_)
+                analysis_context_.best_short = best_ratios_  # Best Short strategies
 
         # Release memory
         del contexts_

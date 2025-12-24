@@ -215,6 +215,16 @@ class StrategyABC(ABC):
         self.ratio_crud.session.close()
         self.ratio_crud = None
 
+        # Validate on best strategies Long and Short if they remain as initial "bad seeds"
+        # Check for -infinite in net_profit to determine if a valid strategy was ever found.
+        if analysis_context.best_long.net_profit == -float('inf'):
+            logger_.debug(f"[{analysis_context.symbol}]: No profitable Long {self.strategy_acronym} "
+                         f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
+
+        if analysis_context.best_short.net_profit == -float('inf'):
+            logger_.debug(f"[{analysis_context.symbol}]: No profitable Short {self.strategy_acronym} "
+                         f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
+
         # Set dictionary for better indicator strategies (Long and Short)
         result_ratios_ = dict(symbol=analysis_context.symbol,
                               updatedAt=datetime.now().strftime('%Y-%m-%d %H:%M'),
@@ -222,6 +232,7 @@ class StrategyABC(ABC):
                               bestLong=self.serialize_ratios(analysis_context.best_long),
                               bestShort=self.serialize_ratios(analysis_context.best_short))
 
+        # Final logging and output
         if verbosity_level == DEBUG:
             print(json.dumps(result_ratios_, indent=4))
 
@@ -251,18 +262,6 @@ class StrategyABC(ABC):
                       expected_value=-float('inf'),
                       winnings=-float('inf'),
                       losses=0)
-
-    @staticmethod
-    def validate_best_strategy(best_ratios: Ratios) -> Ratios | None:
-        """
-        Validate the best strategy.
-        :param best_ratios: Best strategy based on net profit and expected value.
-        :return: A 'Ratios' object with the best strategy validated, or None if the strategy is invalid.
-        """
-        if best_ratios.net_profit == -float('inf') or best_ratios.expected_value == -float('inf'):
-            return None
-
-        return best_ratios
 
     @staticmethod
     def track_best_strategy(strategy_to_compare: Ratios,
@@ -352,7 +351,7 @@ class StrategyABC(ABC):
         # Prepare price arrays (vectorized slicing / fancy indexing)
         # Extract input prices and percentages directly using the indices
         input_prices_ = close_prices[input_bar_numbers]
-        input_pct_change_ = percent_changes[input_bar_numbers]
+        input_pct_changes_ = percent_changes[input_bar_numbers]
 
         # Handle output prices for open positions (Mark-to-Market - valuation of assets at current market prices)
         # If OutputBarNumber is future_bar_number (trade open), must be used the last available price.
@@ -388,7 +387,7 @@ class StrategyABC(ABC):
 
         # Min/Max Percentage Change (only on winning trades)
         if winn_trades_ > 0:
-            winn_pcts_ = input_pct_change_[winn_mask_]
+            winn_pcts_ = input_pct_changes_[winn_mask_]
             min_percentage_change_to_win_ = np.min(winn_pcts_)
             max_percentage_change_to_win_ = np.max(winn_pcts_)
         else:
@@ -399,11 +398,6 @@ class StrategyABC(ABC):
         losses_ = np.sum(results_[loss_mask_]) if np.any(loss_mask_) else 0.0
         loss_trades_ = int(np.count_nonzero(loss_mask_))
         losing_sessions_ = np.sum(sessions_[loss_mask_]) if np.any(loss_mask_) else 0
-
-        # Profitability check: if winnings + losses <= 0, the strategy is not profitable
-        # (losses_ is a negative number, sum of negative results).
-        if (winnings_ + losses_) <= 0:
-            return None
 
         # Calculate ratios for the strategy
         first_input_price_ = max(float(input_prices_[0]), 0.00001)
@@ -746,18 +740,20 @@ class StrategyABC(ABC):
             # Handle datetime objects, convert to string
             if isinstance(value, (date, datetime)):
                 serializable_dict_[key] = value.isoformat()
-            # Handle Decimal objects, convert to float values and round to 2 decimals
-            elif isinstance(value, Decimal):
+            # Handle Decimal, float and NumPy floating types, convert to float and round to 2 decimals
+            elif isinstance(value, (Decimal, float, np.floating)):
                 serializable_dict_[key] = round(float(value), 2)
-            # Handle float values and round to 2 decimals
-            elif isinstance(value, float):
-                serializable_dict_[key] = round(value, 2)
-            # Handle the 'strategy_id' field replace it with its acronym
-            elif key == 'strategy_id' and isinstance(value, int):
-                serializable_dict_['strategy'] = self.strategy_acronym
-            # Handle the 'strategy_id' field replace it with its acronym
-            elif key == 'timeframe' and isinstance(value, int):
-                serializable_dict_['timeframe'] = TIMEFRAMES[value]
+            # Handle Python int and NumPy integer types
+            elif isinstance(value, (int, np.integer)):
+                # Handle the 'strategy_id' field replace it with its acronym
+                if key == 'strategy_id' and isinstance(value, int):
+                    serializable_dict_['strategy'] = self.strategy_acronym
+                # Handle the 'timeframe' field: replace it with its name
+                elif key == 'timeframe':
+                    serializable_dict_['timeframe'] = TIMEFRAMES[int(value)]
+                # Convert NumPy integers to native Python int
+                else:
+                    serializable_dict_[key] = int(value)
             # Handle the 'inputs' field if it's a serialized dictionary as string
             elif key == 'inputs' and isinstance(value, str):
                 try:

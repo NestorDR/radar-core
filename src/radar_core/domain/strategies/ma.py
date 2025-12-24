@@ -225,6 +225,9 @@ class MovingAverage(StrategyABC):
                 # Set strategy Inputs. Period that parameterizes the analyzed strategy.
                 inputs_ = {'period': period_}
 
+                # if period_ == 179:
+                #     print(f'Debugging SMA period {period_}')
+
                 # Evaluate trades identified, calculate trading performance ratios and aggregates
                 ratios_ = self.perfile_performance_fast(analysis_context_, inputs_,
                                                         input_bar_numbers_, output_bar_numbers_,
@@ -244,11 +247,9 @@ class MovingAverage(StrategyABC):
 
             # Gather the best strategies
             if analysis_context_.is_long_position:
-                # Set dictionary for better Long strategies
-                analysis_context_.best_long = self.validate_best_strategy(best_ratios_)
+                analysis_context_.best_long = best_ratios_  # Best Long strategies
             else:
-                # Set dictionary for better Short strategies
-                analysis_context_.best_short = self.validate_best_strategy(best_ratios_)
+                analysis_context_.best_short = best_ratios_  # Best Short strategies
 
         # Reset to the original columns
         prices_df = prices_df.select(original_column_names_)
