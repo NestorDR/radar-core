@@ -121,7 +121,7 @@ RUN useradd --uid 1001 --create-home default
 WORKDIR /home/default/app
 
 # Copy settings file and assign the 'default' user property
-COPY --chown=default:default ./src/radar_core/settings.yml ./settings.yml
+#COPY --chown=default:default ./src/radar_core/settings.yml ./settings.yml
 
 # Switch to the non-root user for runtime execution.
 USER default

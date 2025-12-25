@@ -41,18 +41,16 @@ class Settings:
         if Settings._config is not None:
             return
 
+        self.verbosity_level = INFO  # Set the default verbosity level
+        self.module_folder = Path(__file__).resolve().parent
+
         # Load environment variables
-        self.verbosity_level = INFO
         self.load_env()
         self.log_config = self._get_log_config(log_filename)
         self.max_workers = self._get_max_workers()
 
-        # Get the settings file path from the environment variable or use a default
-        module_folder_ = Path(__file__).resolve().parent
-        file_path = os.getenv('RADAR_SETTING_FILE', module_folder_ / 'settings.yml')
-
         # Load YAML settings file
-        Settings._config = self._read_yaml_file(file_path)
+        Settings._config = self._read_yaml_file()
 
     def load_env(self) -> None:
         """
@@ -60,14 +58,14 @@ class Settings:
         This method is idempotent and will only run once per application lifecycle.
         """
         # Find an .env file in the current or parent directories
-        env_path_ = dotenvy_py.find_upwards('.env', 2)
+        env_path_ = dotenvy_py.find_upwards(str(self.module_folder / '.env'), 2)
         self.verbosity_level = self._get_log_level()
         if env_path_:
             dotenvy_py.from_filename(env_path_)
-            message_ = f"Found and loaded environment file {env_path_}"
+            message_ = f"Found and loaded environment vars file {env_path_}"
             message_verbosity_level_ = DEBUG
         else:
-            message_ = "No environment file found. Continuing without loading environment variables."
+            message_ = f"No environment vars file found ({env_path_}), Continuing without it."
             message_verbosity_level_ = WARNING
 
         verbose(message_, message_verbosity_level_, self.verbosity_level)
@@ -132,7 +130,7 @@ class Settings:
             os.makedirs(logs_folder_, exist_ok=True)
 
             if not log_filename:
-                main_file = getattr(sys.modules["__main__"], "__file__", None)  # Get main file of the running stack
+                main_file = getattr(sys.modules["__main__"], "__file__", None)  # Get the main file of the running stack
                 log_filename = Path(main_file).name.removesuffix('.py') if main_file else "app"
 
             log_file_path_ = logs_folder_ / f'{log_filename}.log'
@@ -152,7 +150,7 @@ class Settings:
     def _get_max_workers(self) -> int:
         """
         Retrieves the maximum number of workers based on the RADAR_MAX_WORKERS env var.
-         If the value is a positive integer, it is returned; otherwise, defaults to 0.
+        If the value is a positive integer, it is returned; otherwise, the default value is 0.
         Handles invalid values gracefully by logging a warning message.
 
         :return: The maximum number of workers based on the environment variable,
@@ -172,32 +170,32 @@ class Settings:
             logger_.warning(message_)
             return 0
 
-    def _read_yaml_file(self, file_path) -> dict | None:
+    def _read_yaml_file(self) -> dict | None:
         """
         Reads and parses a YAML file, converting it into a Python object. Handles errors gracefully.
 
-        :param file_path: The path to the YAML file to be read.
-
         :return: A dictionary representation of the parsed YAML file. If there is an error during parsing, None is returned.
         """
-        message_ = f'Reading YAML file {file_path}...'
+        # Get the settings file path from the environment variable or use a default
+        file_path_ = self.module_folder / os.getenv('RADAR_SETTING_FILE', 'settings.yml')
+        message_ = f'Reading YAML file {file_path_}...'
         verbose(message_, INFO, self.verbosity_level)
         logger_.info(message_)
 
         try:
-            with open(file_path, 'r') as file:
+            with open(file_path_, 'r') as file:
                 return yaml.safe_load(file)
 
         except yaml.YAMLError as e:
             # Log error
-            message_ = f'Error reading YAML file {file_path}.'
+            message_ = f'Error reading YAML file {file_path_}.'
             verbose(message_, ERROR, self.verbosity_level)
             logger_.exception(message_, exc_info=e)
             return None
 
         except FileNotFoundError as e:
             # Log error
-            message_ = f'Settings file not found at {file_path}. Please check the SETTING_FILE environment variable or ensure settings.yml exists.'
+            message_ = f'Settings file not found at {file_path_}. Please check the SETTING_FILE environment variable or ensure settings.yml exists.'
             verbose(message_, ERROR, self.verbosity_level)
             logger_.exception(message_, exc_info=e)
             raise FileNotFoundError(message_) from e
