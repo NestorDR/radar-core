@@ -54,9 +54,6 @@ class PriceProvider:
         # Reset Date index as a column Date and convert the Pandas DataFrame to a Polars DataFrame
         prices_pl_df_ = pl.from_pandas(prices_df.reset_index())
 
-        # Remove rows without "Close" price
-        prices_pl_df_ = prices_pl_df_.filter(pl.col('Close').is_not_nan())
-
         # Round prices to 4 decimal places with Polars DataFrame
         prices_pl_df_ = prices_pl_df_.with_columns([
             pl.col('Date').cast(pl.Date).alias('Date'),
@@ -66,16 +63,31 @@ class PriceProvider:
             pl.col('Close').round(4).alias('Close')
         ])
 
+        # Filtering and casting in a single optimized Polars context
+        prices_pl_df_ = (
+            prices_pl_df_
+            # Remove rows without "Close" prices
+            .filter(pl.col('Close').is_not_nan())
+            .with_columns([
+                pl.col('Date').cast(pl.Date),
+                pl.col('Open').round(4),
+                pl.col('High').round(4),
+                pl.col('Low').round(4),
+                pl.col('Close').round(4)
+            ])
+            .with_columns(
+                # Calculate percentage change
+                (pl.col("Close").pct_change() * 100).alias("PercentChange")
+            )
+        )
+
         # To check if a DataFrame is empty, use the shape attribute and check if the row count is zero
-        if not prices_pl_df_.height == 0:
+        if prices_pl_df_.height > 0:
             # Report the last Close price
-            last_close_ = prices_pl_df_.select('Close').tail(1).to_numpy()[0][0]
+            last_close_ = prices_pl_df_['Close'][-1]
             message_ = f'{symbol} - Last Close: ${last_close_:.2f}'
             verbose(message_, DEBUG, self.verbosity_level)
             logger_.info(message_)
-
-        # Calculate percentage change
-        prices_pl_df_ = prices_pl_df_.with_columns((pl.col("Close").pct_change() * 100).alias("PercentChange"))
 
         return prices_pl_df_[ORDERED_PRICE_COLS]
 
@@ -83,7 +95,7 @@ class PriceProvider:
                    symbols: list[str],
                    max_workers: int = 10) -> dict[str, pl.DataFrame]:
         """
-        Downloads historical prices for a list of symbols concurrently using yfinance's built-in capabilities.
+        Downloads historical prices for a list of symbols concurrently using yfinance built-in capabilities.
 
         :param symbols: A list of security symbols to download (e.g., ['SPY', 'NDQ']).
         :param max_workers: The maximum number of threads yfinance should use for the concurrent downloads.
@@ -186,11 +198,11 @@ if __name__ == '__main__':
         print(f"{test_symbol_} - Shape: {data_.shape}")
         print(data_.tail(2))
 
-    message_ = (init_dt_.strftime('Concurrent download executed from %Y-%m-%d %H:%M:%S ')
+    message = (init_dt_.strftime('Concurrent download executed from %Y-%m-%d %H:%M:%S ')
                 + end_dt_.strftime('to %Y-%m-%d %H:%M:%S')
                 + f' - Elapsed time {(end_dt_ - init_dt_).total_seconds() / 60:.1f} min')
-    verbose(message_, INFO, settings.verbosity_level)
-    logger_.info(message_)
+    verbose(message, INFO, settings.verbosity_level)
+    logger_.info(message)
 
     end_logging(logger_)
     raise SystemExit(0)

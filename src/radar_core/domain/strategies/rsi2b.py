@@ -143,6 +143,7 @@ class RsiTwoBands(RsiStrategyABC):
                  only_long_positions,
                  prices_df: pl.DataFrame,
                  close_prices: np.ndarray,
+                 percent_changes: np.ndarray,
                  verbosity_level: int = DEBUG) -> dict:
         """
         Identifies the best combinations of bands input and output for the RSI strategy,
@@ -157,6 +158,7 @@ class RsiTwoBands(RsiStrategyABC):
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe with required columns [Date, Close, Volume, PercentChange], indexed by numbers.
         :param close_prices: Close prices for the given symbol and timeframe.
+        :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
 
@@ -173,7 +175,6 @@ class RsiTwoBands(RsiStrategyABC):
 
         # Pre-calculate arrays for Numba. Convert Polars columns to Numpy-arrays once to avoid overhead due to loops.
         rsi_values_ = prices_df['Rsi'].to_numpy()
-        percent_changes_ = prices_df['PercentChange'].to_numpy()
 
         # Pre-calculate min/max RSI to skip impossible conditions in loops; nanmin/nanmax ignore initial NaN values (first 14 periods)
         min_rsi_ = np.nanmin(rsi_values_)
@@ -240,7 +241,7 @@ class RsiTwoBands(RsiStrategyABC):
                     # Evaluate trades identified, calculate trading performance ratios and aggregates
                     ratios_ = self.perfile_performance_fast(analysis_context_, inputs_,
                                                             input_bar_numbers_, output_bar_numbers_,
-                                                            close_prices, percent_changes_, prices_df)
+                                                            close_prices, percent_changes, prices_df)
                     if not ratios_:
                         continue
 

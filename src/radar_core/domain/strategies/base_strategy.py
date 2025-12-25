@@ -117,6 +117,7 @@ class StrategyABC(ABC):
                  only_long_positions: bool,
                  prices_df: pl.DataFrame,
                  close_prices: np.ndarray,
+                 percent_changes: np.ndarray,
                  verbosity_level: int = DEBUG) -> dict:
         """
         Iterates a number of periods or levels to calculate a tech indicator and evaluate its profitability.
@@ -128,6 +129,7 @@ class StrategyABC(ABC):
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe with required columns.
         :param close_prices: Close prices for the given symbol and timeframe.
+        :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
         :param verbosity_level: Importance level of messages.
 
         :return: Dictionary of strategies with the best ratios based on its profitability.
@@ -219,11 +221,11 @@ class StrategyABC(ABC):
         # Check for -infinite in net_profit to determine if a valid strategy was ever found.
         if analysis_context.best_long.net_profit == -float('inf'):
             logger_.debug(f"[{analysis_context.symbol}]: No profitable Long {self.strategy_acronym} "
-                         f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
+                          f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
 
         if analysis_context.best_short.net_profit == -float('inf'):
             logger_.debug(f"[{analysis_context.symbol}]: No profitable Short {self.strategy_acronym} "
-                         f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
+                          f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
 
         # Set dictionary for better indicator strategies (Long and Short)
         result_ratios_ = dict(symbol=analysis_context.symbol,
@@ -355,12 +357,11 @@ class StrategyABC(ABC):
 
         # Handle output prices for open positions (Mark-to-Market - valuation of assets at current market prices)
         # If OutputBarNumber is future_bar_number (trade open), must be used the last available price.
-        # Create a safe index array subject to the last valid index of close_prices.
         last_bar_number_ = len(close_prices) - 1
 
+        # Create a safe index array subject to the last valid index of close_prices.
         # np.minimum ensures that any index >= len(close_prices) (like future_bar_number) becomes last_bar_number_
-        safe_output_bar_numbers_ = np.minimum(output_bar_numbers, last_bar_number_)
-        output_prices_ = close_prices[safe_output_bar_numbers_]
+        output_prices_ = close_prices[np.minimum(output_bar_numbers, last_bar_number_)]
 
         # Identify the position type under analysis: long (1) or short (-1).
         position_type_ = 1 if analysis_context.is_long_position else -1
@@ -410,25 +411,22 @@ class StrategyABC(ABC):
         # Extracts the relevant dates
         # Accessing Polars by index (.item()) is efficient for single scalars
         first_input_date_ = prices_df[int(input_bar_numbers[0]), 'Date']
-        last_input_date_ = prices_df[int(input_bar_numbers[-1]), 'Date']
-
-        last_output_bar_number_ = int(output_bar_numbers[-1])
-        future_bar_number_ = analysis_context.future_bar_number
-
-        last_output_date_ = None if last_output_bar_number_ >= future_bar_number_ \
-            else prices_df[last_output_bar_number_, 'Date']
 
         # Extract last trade info
-        # Identify the input price for the last trade/position
+        # Identify the input price and date for the last trade/position
         last_input_price_ = Decimal(input_prices_[-1]).quantize(PRICE_PRECISION)
+        last_input_date_ = prices_df[int(input_bar_numbers[-1]), 'Date']
 
-        # Identify the output price for the last trade/position
-        # (use Mark-to-market output price logic if the position is still opened)
-        if last_output_bar_number_ >= future_bar_number_:
-            # If trade is still open (output in future), use the last available close
+        # Identify the output price and date for the last trade/position
+        last_output_bar_number_ = int(output_bar_numbers[-1])
+        if last_output_bar_number_ >= analysis_context.future_bar_number:
+            # The position is still opened
             last_output_price_ = None
+            last_output_date_ = None
         else:
+            # The position is already closed
             last_output_price_ = Decimal(output_prices_[-1]).quantize(PRICE_PRECISION)
+            last_output_date_ = prices_df[last_output_bar_number_, 'Date']
 
         # Identify stop loss for the last trade/position
         if {'LongStopLoss', 'ShortStopLoss'}.issubset(prices_df.columns):
@@ -491,171 +489,6 @@ class StrategyABC(ABC):
             last_stop_loss=last_stop_loss_,
         )
 
-    def perfile_performance(self,
-                            analysis_context: AnalysisContext,
-                            inputs: dict,
-                            signals: int,
-                            trades_df: pl.DataFrame,
-                            prices_df: pl.DataFrame) -> Ratios | None:
-        """
-        Calculates and organizes aggregates and ratios to profile the strategy’s trade performance.
-
-        Visite
-            - https://estrategiastrading.com/ratios-para-evaluar-sistemas-de-trading/
-            - https://estrategiastrading.com/calcular-la-esperanza-matematica-del-sistema-de-trading/
-            - https://estrategiastrading.com/profit-factor/
-
-        :param analysis_context: Analysis context for the strategy.
-        :param inputs: Input prices that parameterize a strategy.
-        :param signals: Number of trade signals identified by the strategy.
-        :param trades_df: The dataframe with info about trades including prices, session details, and results.
-        :param prices_df: The dataFrame with prices, indexed by bar numbers and containing the required column Date.
-
-        :return: If winnings exceed the losses returns a Ratios object with the ratios and aggregates calculated for
-          trade performance, otherwise returns None.
-          The Ratios object contains the following attributes:
-            - symbol: Security symbol to update or insert the ratios for.
-            - strategy_id: Identifier of the trading strategy.
-            - inputs: Input prices that parameterizes a strategy.
-            - timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
-            - is_long_position: True if the ratios are for long trading positions,
-            - from_date: The initial date from which the strategy was evaluated.
-            - to_date: The final date to which the strategy was evaluated.
-            - initial_price: Price of the security when the 1º input signal was identified.
-            - final_price: Price of the security when the last output signal was identified.
-            - net_change: Percentage change of the final price over the initial price
-            - signals: Number of trade signals identified by the strategy.
-            - winnings: Sum of profits (money) generated by the strategy.
-            - losses: Sum of losses (money) supported through the strategy.
-            - net_profit: Percentage of net profit got following the input and output signals
-                          Formula: (winnings_ - losses_) / initial_price_.
-            - expected_value: Mathematical expectation of the strategy
-                              Formula: (win_probability_ * average_win_) + (loss_probability_ * average_loss_).
-            - win_probability: Percentage of positive/winning operations.
-            - loss_probability: Percentage of negative/losing operations.
-            - average_win: Average profit of the positive/winning operations.
-            - average_loss: Average loss of the negative/losing operations.
-            - min_percentage_change_to_win: Minimum % change of input sessions for the positive/winning operations.
-            - max_percentage_change_to_win: Maximum % change of input sessions for the positive/winning operations.
-            - total_sessions: Total number of sessions to which the strategy has been evaluated
-            - winn_sessions: Number of sessions elapsed during positive/winning trades.
-            - loss_sessions: Number of sessions elapsed during negative/losing trades.
-            - percentage_exposure: Percentage time during which the strategy was active.
-                                   Formula: (winning_sessions + losing_sessions) / total_sessions
-            - first_input_date: Date of the first input signal.
-            - last_input_date: Date of the last input signal.
-            - last_output_date: Date of the last output signal.
-        """
-        # Identify prices and session numbers
-        first_input_price_ = max(float(trades_df[0, 'InputPrice']), 0.00001)
-
-        # Create a 'Group' column based on the trade result (Winnings or Losses) and calculate aggregates in a single pass
-        aggregates_df_ = (
-            trades_df.lazy()
-            .with_columns(
-                pl.when(pl.col('Result') > 0).then(pl.lit('W')).otherwise(pl.lit('L')).alias('Group')
-            )
-            .group_by('Group')
-            .agg(
-                pl.sum('Result').alias('TotalResult'),  # Total winnings|losses in group W|L
-                pl.count('Result').alias('TradesCount'),  # Count of winning|losses trades in group W|L
-                pl.sum('Sessions').alias('TotalSessions'),  # Total sessions for winning|losses trades in group W|L trades
-                pl.min('InputPercentChange').alias('MinPercentChange'),  # Minimum percent change
-                pl.max('InputPercentChange').alias('MaxPercentChange')  # Maximum percent change
-            )
-            .collect()
-        )
-
-        # Use a dictionary for easier and safer access to results where key is the group name:
-        # {
-        #     'W': {'Group': 'W', 'TotalResult': 5000.0, 'TradesCount': 10, ...},
-        #     'L': {'Group': 'L', 'TotalResult': -2000.0, 'TradesCount': 5, ...}
-        # }
-        aggregates_map_ = {row['Group']: row for row in aggregates_df_.iter_rows(named=True)}
-        winn_aggregates_ = aggregates_map_.get('W', {})
-        loss_aggregates_ = aggregates_map_.get('L', {})
-
-        # Access the calculated values for winnings
-        winnings_ = winn_aggregates_.get('TotalResult', 0.0)
-        winn_trades_ = winn_aggregates_.get('TradesCount', 0)
-        winning_sessions_ = winn_aggregates_.get('TotalSessions', 0)
-        min_percentage_change_to_win_ = winn_aggregates_.get('MinPercentChange', 0.0) or 0  # Handle None or null
-        max_percentage_change_to_win_ = winn_aggregates_.get('MaxPercentChange', 0.0) or 0  # Handle None or null
-
-        # Access the calculated values for losses
-        losses_ = loss_aggregates_.get('TotalResult', 0.0)
-        loss_trades_ = loss_aggregates_.get('TradesCount', 0)
-        losing_sessions_ = loss_aggregates_.get('TotalSessions', 0)
-
-        if winnings_ <= losses_:
-            return None
-
-        # Calculate ratios for the strategy
-        net_profit_, expected_value_, win_probability_, loss_probability_, average_win_, average_loss_ = \
-            self.compute_key_ratios(signals, first_input_price_, winnings_, winn_trades_, losses_, loss_trades_)
-        total_sessions_ = analysis_context.last_bar_number + 1
-
-        # Extracts the relevant dates
-        first_input_date_, last_input_date_, last_output_date_ = self.get_relevant_dates(trades_df, prices_df)
-
-        # Identify input price and stop loss for the last trade/position
-        last_input_price_ = (Decimal(prices_df[int(trades_df[-1, 'InputBarNumber']), 'Close'])
-                             .quantize(PRICE_PRECISION))
-        last_output_price_ = None if last_output_date_ is None else \
-            Decimal(prices_df[int(trades_df[-1, 'OutputBarNumber']), 'Close']).quantize(PRICE_PRECISION)
-
-        if {'LongStopLoss', 'ShortStopLoss'}.issubset(prices_df.columns):
-            stop_loss_column_ = 'LongStopLoss' if analysis_context.is_long_position else 'ShortStopLoss'
-            last_stop_loss_ = (Decimal(prices_df[int(trades_df[-1, 'InputBarNumber']), stop_loss_column_])
-                               .quantize(PRICE_PRECISION))
-        else:
-            last_stop_loss_ = None
-
-        # Initialize support to ratios with available prices at this point
-        return Ratios(
-            # Set the relevant part at this point, of the unique restriction key
-            symbol=analysis_context.symbol,
-            strategy_id=self.strategy_id,
-            timeframe=analysis_context.timeframe,
-            inputs=RatioCrud.serialize_inputs(inputs),
-            is_long_position=analysis_context.is_long_position,
-            is_in_process=False,
-
-            # Set prices
-            from_date=analysis_context.from_date,
-            to_date=analysis_context.to_date,
-            initial_price=analysis_context.initial_price.quantize(PRICE_PRECISION),
-            final_price=analysis_context.final_price.quantize(PRICE_PRECISION),
-            net_change=analysis_context.percent_change if analysis_context.is_long_position else -analysis_context.percent_change,
-
-            signals=signals,
-            winnings=winnings_,
-            losses=losses_,
-            # saved_record_.profit_factor = winnings / losses
-            net_profit=net_profit_,
-            expected_value=expected_value_,
-            win_probability=win_probability_,
-            loss_probability=loss_probability_,
-            average_win=average_win_,
-            average_loss=average_loss_,
-
-            min_percentage_change_to_win=Decimal(min_percentage_change_to_win_).quantize(PRICE_PRECISION),
-            max_percentage_change_to_win=Decimal(max_percentage_change_to_win_).quantize(PRICE_PRECISION),
-
-            total_sessions=total_sessions_,
-            winning_sessions=winning_sessions_,
-            losing_sessions=losing_sessions_,
-            percentage_exposure=(winning_sessions_ + losing_sessions_) / total_sessions_,
-
-            first_input_date=first_input_date_,
-            last_input_date=last_input_date_,
-            last_output_date=last_output_date_,
-
-            last_input_price=last_input_price_,
-            last_output_price=last_output_price_,
-            last_stop_loss=last_stop_loss_,
-        )
-
     @staticmethod
     def compute_key_ratios(signals_: int,
                            first_input_price_: float,
@@ -695,45 +528,21 @@ class StrategyABC(ABC):
         expected_value_ = win_probability_ * average_win_ + loss_probability_ * average_loss_
         return net_profit_, expected_value_, win_probability_, loss_probability_, average_win_, average_loss_
 
-    @staticmethod
-    def get_relevant_dates(trades_df: pl.DataFrame,
-                           prices_df: pl.DataFrame) -> tuple[date, date, date | None]:
-        """
-        Extracts the relevant dates (of the first and last trades) based on bar numbers from the provided
-         trades and prices DataFrames.
-
-        :param prices_df: The dataFrame with prices, indexed by bar numbers and containing the required column Date.
-        :param trades_df: The dataframe with info about trades, including session details as initial and final bars.
-
-        :return: A tuple of three dates representing the start date of the first trade, and the start and close dates
-         of the last trade, in the format "YYYY-MM-DD".
-        """
-
-        # Extracts the relevant dates:
-        # - start date of the first trade
-        first_input_date_ = prices_df[trades_df[0, 'InputBarNumber'], 'Date']
-        # - start date of the last trade
-        last_input_date_ = prices_df[int(trades_df[-1, 'InputBarNumber']), 'Date']
-        # - close date of the last trade.
-        last_output_bar_number_ = int(trades_df[-1, 'OutputBarNumber'])
-        last_output_date_ = None if last_output_bar_number_ >= StrategyABC.future_bar_number(prices_df) \
-            else prices_df[last_output_bar_number_, 'Date']
-
-        return first_input_date_, last_input_date_, last_output_date_
-
     def serialize_ratios(self,
-                         ratios_: Ratios) -> dict:
+                         ratios: Ratios) -> dict:
         """
         Convert a Ratios object into a JSON-serializable dictionary while handling non-serializable fields and removing
          unnecessary properties.
-        :param ratios_: The Ratios object to serialize.
+        
+        :param ratios: The Ratios object to serialize.
+        
         :return: A serialized dictionary with all attributes JSON-ready.
         """
 
         serializable_dict_ = {}
 
         # Use vars() to get the object's attributes as a dictionary and then convert it to a JSON-serializable format
-        for key, value in vars(ratios_).items():
+        for key, value in vars(ratios).items():
             # Ignore some properties
             if key in ('_sa_instance_state', 'id', 'symbol', 'is_in_process'):
                 continue

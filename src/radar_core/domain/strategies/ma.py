@@ -88,8 +88,9 @@ def _find_trades_sma(values: np.ndarray,
         #       Close if (previous value >  previous SMA) and (current value < current SMA)
         # Short: Open if (previous value >= previous SMA) and (current value < current SMA)
         #       Close if (previous value <  previous SMA) and (current value > current SMA)
-        is_above_ = current_value_ > current_sma_
-        was_above_ = previous_value_ > previous_sma_
+        # Use tolerance for comparison
+        is_above_ = current_value_ > current_sma_  # and abs(current_value_ - current_sma_) > 1e-9
+        was_above_ = previous_value_ > previous_sma_  # and abs(previous_value_ - previous_sma_) > 1e-9
 
         # Cross Over: Value crosses SMA from below to above
         cross_over_ = is_above_ and not was_above_
@@ -153,6 +154,7 @@ class MovingAverage(StrategyABC):
                  only_long_positions: bool,
                  prices_df: pl.DataFrame,
                  close_prices: np.ndarray,
+                 percent_changes: np.ndarray,
                  verbosity_level: int = DEBUG) -> dict:
         """
         Iterate from the minimum to the maximum number of periods to calculate the MA and evaluate its profitability
@@ -168,6 +170,7 @@ class MovingAverage(StrategyABC):
         :param prices_df: Dataframe at least with required columns
          [DateTime, {self.value_column_name}, PercentChange, BarNumber].
         :param close_prices: Close prices for the given symbol and timeframe.
+        :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
 
@@ -187,8 +190,6 @@ class MovingAverage(StrategyABC):
         # Pre-calculate arrays for Numba/Vectorized operations
         # Extract values to calculate SMA (usually Close or RSI)
         values_ = prices_df[self.value_column_name].to_numpy()
-        # Extract percent change for stats
-        percent_changes_ = prices_df['PercentChange'].to_numpy()
 
         # Identify
         future_bar_number_ = analysis_context_.future_bar_number
@@ -225,13 +226,10 @@ class MovingAverage(StrategyABC):
                 # Set strategy Inputs. Period that parameterizes the analyzed strategy.
                 inputs_ = {'period': period_}
 
-                # if period_ == 179:
-                #     print(f'Debugging SMA period {period_}')
-
                 # Evaluate trades identified, calculate trading performance ratios and aggregates
                 ratios_ = self.perfile_performance_fast(analysis_context_, inputs_,
                                                         input_bar_numbers_, output_bar_numbers_,
-                                                        close_prices, percent_changes_, prices_df)
+                                                        close_prices, percent_changes, prices_df)
                 if not ratios_:
                     continue
 

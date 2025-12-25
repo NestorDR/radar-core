@@ -10,7 +10,7 @@ from datetime import datetime
 # io: implements the core facilities for file-like objects and I/O streams.
 import io
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, getLogger
+from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, config, getLogger
 # os: allows access to functionalities dependent on the Operating System
 import os
 # time: provides various time-related functions
@@ -42,7 +42,7 @@ logger_ = getLogger(__name__)
 
 
 def clean(symbols: list[str],
-          verbosity_level: int = DEBUG):
+          verbosity_level: int = DEBUG) -> None:
     """
     Deletes obsolete ratios from the database. Deletes ratios from symbols that are not in the list provided.
 
@@ -53,6 +53,18 @@ def clean(symbols: list[str],
         deleted_ratios = ratio_crud_.delete_symbols_not_in(symbols)
 
     verbose(f'Cleaned {deleted_ratios} rows from the database for deprecated symbols.', INFO, verbosity_level)
+
+
+def init_worker(log_config: dict) -> None:
+    """
+    Initializes the logging configuration for the worker process, required for Windows & macOS (spawn).
+    This ensures that logs from child processes are correctly handled and written to the log file.
+
+
+    :param log_config: Dictionary with logging configuration from the main process.
+    """
+    if log_config:
+        config.dictConfig(log_config)
 
 
 def valid_prices(timeframe: int,
@@ -87,7 +99,7 @@ def analyze(timeframe: int,
             only_long_positions: bool,
             prices_df: pl.DataFrame,
             strategies: Strategies,
-            verbosity_level: int = DEBUG):
+            verbosity_level: int = DEBUG) -> None:
     """
     Analyze the prices dataframe for the specified timeframe.
 
@@ -110,19 +122,22 @@ def analyze(timeframe: int,
     # Add a row counter as a column, required to the analysis (is a zero-based bar number)
     prices_df = prices_df.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber'))
 
-    # Extract Close prices to an array to speed up prices access
+    # Extract vectors only once per timeframe to maximize performance
     close_prices_ = prices_df['Close'].to_numpy()
+    percent_changes_ = prices_df['PercentChange'].to_numpy()
 
-    # Get profitable strategies for daily time frame
+    # Profitable SMAs identification
     if strategies.sma:
-        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, percent_changes_, verbosity_level)
 
-    # Calculate RSI once for the RSI-based strategies only if needed
+    # Profitable RSI-based identification
     if strategies.rsi_sma or strategies.rsi_rc or strategies.rsi_2b:
+        # Calculate RSI only once for the RSI-based strategies
         prices_df = RSI(prices_df)
 
         if strategies.rsi_sma:
-            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
+                                        percent_changes_, verbosity_level)
 
         # Calculate the stop loss prices only once for the following strategies
         if strategies.rsi_2b or strategies.rsi_rc:
@@ -130,12 +145,14 @@ def analyze(timeframe: int,
             prices_df = RsiStrategyABC.identify_where_to_stop_loss(timeframe, prices_df, close_prices_)
 
             if strategies.rsi_2b:
-                strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+                strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
+                                           percent_changes_, verbosity_level)
             if strategies.rsi_rc:
-                strategies.rsi_rc.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, verbosity_level)
+                strategies.rsi_rc.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
+                                           percent_changes_, verbosity_level)
 
-            # Release memory
-            del close_prices_
+    # Release memory
+    del close_prices_, percent_changes_
 
 
 def process_symbol(symbol: str,
@@ -145,7 +162,7 @@ def process_symbol(symbol: str,
                    verbosity_level: int) -> str:
     """
     Worker function to analyze a single symbol.
-    Captures stdout/stderr to prevent interleaved logs in concurrent execution.
+    Captures activity to prevent interleaved logs.
 
     :param symbol: The symbol to analyze.
     :param prices_df: The price data for the symbol.
@@ -153,13 +170,16 @@ def process_symbol(symbol: str,
     :param shortable_symbols: A list of symbols that can be shorted.
     :param verbosity_level: The logging verbosity level.
 
-    :return: A string containing the captured logs.
+    :return: A string containing the captured activity logs.
     """
     symbol_started_at_ = time.monotonic()
     symbol_ = symbol.upper()
+
+    # Log inside the child process (traceable)
     message_ = f'[{symbol}]: Launching parallel worker process at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
     verbose(message_, INFO, verbosity_level)
     logger_.info(message_)
+
     only_long_positions_ = symbol_ not in shortable_symbols
 
     # Create an in-memory buffer to capture text output
@@ -173,9 +193,9 @@ def process_symbol(symbol: str,
                 analyze(DAILY, symbol_, only_long_positions_, prices_df, strategies, verbosity_level)
 
                 # Prepare weekly prices dataframe
-                prices_df_weekly_ = to_weekly_timeframe(prices_df)
-                if valid_prices(WEEKLY, symbol_, prices_df_weekly_, verbosity_level):
-                    analyze(WEEKLY, symbol_, only_long_positions_, prices_df_weekly_, strategies, verbosity_level)
+                prices_df_ = to_weekly_timeframe(prices_df)
+                if valid_prices(WEEKLY, symbol_, prices_df_, verbosity_level):
+                    analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies, verbosity_level)
 
             symbol_elapsed_ = time.monotonic() - symbol_started_at_
             message_ = f"[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min"
@@ -197,9 +217,15 @@ def process_symbol(symbol: str,
 def analyzer(settings: Settings,
              symbols: list[str] | None = None) -> int:
     """
-    Analyzes financial symbols using various technical strategies. The analysis includes retrieving daily and weekly
-     historical price data, validating the data, and applying multiple trading strategies.
+    Orchestrates the parallel analysis of financial symbols using various technical strategies.
+    The analysis includes retrieving daily and weekly historical price data, validating the data,
+     and applying multiple trading strategies.
     The function supports verbosity for logging and handles errors effectively to provide robust execution.
+
+    Architecture:
+        - Pandas is the ‘adapter’ needed to interact with yfinance.
+        - Polars is the ‘efficient in-memory database’.
+        - NumPy/Numba is the ‘high-speed calculator’.
 
     :param settings: Application settings object.
     :param symbols: A list of symbols (e.g., stock tickers) to analyze. Defaults to None,
@@ -242,13 +268,10 @@ def analyzer(settings: Settings,
             }
 
             # Build kwargs dynamically based on enabled strategies in settings.yml
-            active_strategies_ = {}
             # get_evaluable_strategies() returns a list of strings matching the keys in strategy_map_
-            for strategy_key_ in settings.get_evaluable_strategies():
-                if factory_ := strategy_map_.get(strategy_key_):
-                    # The key in the map is the attribute name
-                    active_strategies_[strategy_key_] = factory_()
-
+            # The strategy key in the map is the attribute name
+            active_strategies_: dict = {strategy_key_: factory_() for strategy_key_, factory_ in strategy_map_.items() if
+                                        strategy_key_ in settings.get_evaluable_strategies()}
             # Instantiate strategies container only with active strategies
             strategies_ = Strategies(**active_strategies_)
 
@@ -272,7 +295,12 @@ def analyzer(settings: Settings,
             verbose(message_, INFO, verbosity_level_)
             logger_.info(message_)
 
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers_) as executor:
+            # Use initializer to configure logging once per worker process
+            with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=num_workers_,
+                    initializer=init_worker,
+                    initargs=(settings.log_config,)
+            ) as executor:
                 # Use a set to store futures
                 futures_ = []
 
@@ -365,7 +393,7 @@ if __name__ == "__main__":
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['SOXL']
+    symbols_ = ['SPY']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)
