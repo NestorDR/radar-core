@@ -5,7 +5,7 @@ cffi==2.0.0
 cfgv==3.5.0
 charset-normalizer==3.4.4
 colorama==0.4.6
-curl-cffi==0.14.0
+curl-cffi==0.13.0
 distlib==0.4.0
 dotenvy-py==0.1.0
 filelock==3.20.1
@@ -42,10 +42,10 @@ six==1.17.0
 soupsieve==2.8.1
 sqlalchemy==2.0.45
 ta-lib @ https://github.com/cgohlke/talib-build/releases/download/v0.6.8/ta_lib-0.6.8-cp313-cp313-win_amd64.whl
-ty==0.0.5
+ty==0.0.7
 typing-extensions==4.15.0
 tzdata==2025.3
 urllib3==2.6.2
 virtualenv==20.35.4
 websockets==15.0.1
-yfinance==0.2.66
+yfinance==1.0
