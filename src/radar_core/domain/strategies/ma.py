@@ -88,9 +88,8 @@ def _find_trades_sma(values: np.ndarray,
         #       Close if (previous value >  previous SMA) and (current value < current SMA)
         # Short: Open if (previous value >= previous SMA) and (current value < current SMA)
         #       Close if (previous value <  previous SMA) and (current value > current SMA)
-        # Use tolerance for comparison
-        is_above_ = current_value_ > current_sma_  # and abs(current_value_ - current_sma_) > 1e-9
-        was_above_ = previous_value_ > previous_sma_  # and abs(previous_value_ - previous_sma_) > 1e-9
+        is_above_ = current_value_ > current_sma_
+        was_above_ = previous_value_ > previous_sma_
 
         # Cross Over: Value crosses SMA from below to above
         cross_over_ = is_above_ and not was_above_

@@ -67,7 +67,6 @@ class Settings:
         else:
             message_ = f"No environment vars file found ({env_path_}), Continuing without it."
             message_verbosity_level_ = WARNING
-        self.verbosity_level = self._get_log_level()
 
         verbose(message_, message_verbosity_level_, self.verbosity_level)
 
