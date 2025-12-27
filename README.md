@@ -1,17 +1,19 @@
 # Radar Core — Financial Strategy Analyzer
 
-Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, processes them with Polars DataFrames, and evaluates speculative trading strategies using performance metrics such as net profit and percentage of success.
+Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, manages them using **Polars** as an efficient in-memory database, and executes high-speed strategy evaluation using **vectorized NumPy operations** and **Numba JIT compilation**.
 
-The project follows High Performance Practices, utilizing concurrent processing to analyze multiple symbols simultaneously, and is under active development and continuous optimization.
+The project follows High Performance Practices, utilizing concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously.
 
 ## Features
-- Yahoo Finance integration via yfinance for historical daily prices
-- High‑performance data processing using Polars
-- **Concurrent symbol analysis** using Python's `ProcessPoolExecutor` for scalability
-- **JIT Compilation**: Critical mathematical functions are optimized using **Numba** for near-native execution speed.
-- **Database Maintenance**: Automatic cleanup of deprecated symbols and data synchronization.
-- Built‑in technical analysis and strategies (e.g., Moving Average and RSI‑based variants)
-- Performance metrics and logs (e.g., net profit, success rate)
+## Features
+- **Hybrid Data Architecture**:
+    - **Polars**: High-performance DataFrame management for data ingestion and storage.
+    - **NumPy & Numba**: Strategy logic is decoupled into JIT-compiled kernels for near-native execution speed.
+- **Concurrent Analysis**: Multi-symbol processing using Python's `ProcessPoolExecutor`.
+- **Yahoo Finance Integration**: Automated download of historical daily and weekly prices.
+- **Technical Analysis & Strategies**: Built-in support for Moving Averages (SMA) and complex RSI-based variants (Two Bands, Rollercoaster).
+- **Performance Metrics**: Detailed profiling including net profit, success rate, mathematical expectation, and risk-adjusted ratios.
+- **Database Synchronization**: Automated management of trading ratios and symbol cleanup via SQLAlchemy.
 - Configurable settings (symbols, shortable assets, verbosity, concurrency)
     
 
@@ -57,11 +59,18 @@ You can run the analyzer directly from the repository without installing the pac
   - python -m radar_core.analyzer
 
 By default, the analyzer will:
-- Initialize settings (symbols, logging)
-- Download daily prices from Yahoo Finance
-- **Auto-detect CPU cores** and launch parallel workers for analysis
-- Evaluate strategies for daily and weekly timeframes
-- Print buffered logs per symbol to ensure atomic output
+- Initialize settings and database connections.
+- Download prices and synchronize the in-memory Polars store.
+- **Vectorize price data** and dispatch high-speed kernels for strategy identification.
+- **Auto-detect CPU cores** for parallel worker execution.
+- Evaluate strategies for daily and weekly timeframes.
+- Print atomic, buffered logs per symbol.
+
+## Architecture
+The system follows a three-tier performance model:
+1. **Adapter Layer**: Pandas/yfinance for external data compatibility.
+2. **Storage Layer**: **Polars** for lightning-fast in-memory data manipulation and grouping.
+3. **Execution Layer**: **NumPy + Numba** for the heavy mathematical lifting (vectorized backtesting).
 
 ## Minimal Example
 Below is a minimal snippet that shows how you might pull prices and run a simple analysis, similar to what the analyzer does internally.

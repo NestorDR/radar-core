@@ -226,9 +226,9 @@ class MovingAverage(StrategyABC):
                 inputs_ = {'period': period_}
 
                 # Evaluate trades identified, calculate trading performance ratios and aggregates
-                ratios_ = self.perfile_performance_fast(analysis_context_, inputs_,
-                                                        input_bar_numbers_, output_bar_numbers_,
-                                                        close_prices, percent_changes, prices_df)
+                ratios_ = self.perfile_performance(analysis_context_, inputs_,
+                                                   input_bar_numbers_, output_bar_numbers_,
+                                                   close_prices, percent_changes, prices_df)
                 if not ratios_:
                     continue
 

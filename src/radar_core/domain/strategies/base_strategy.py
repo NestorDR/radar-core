@@ -287,14 +287,14 @@ class StrategyABC(ABC):
 
     # region Ratios
 
-    def perfile_performance_fast(self,
-                                 analysis_context: AnalysisContext,
-                                 inputs: dict,
-                                 input_bar_numbers: np.ndarray,
-                                 output_bar_numbers: np.ndarray,
-                                 close_prices: np.ndarray,
-                                 percent_changes: np.ndarray,
-                                 prices_df: pl.DataFrame) -> Ratios | None:
+    def perfile_performance(self,
+                            analysis_context: AnalysisContext,
+                            inputs: dict,
+                            input_bar_numbers: np.ndarray,
+                            output_bar_numbers: np.ndarray,
+                            close_prices: np.ndarray,
+                            percent_changes: np.ndarray,
+                            prices_df: pl.DataFrame) -> Ratios | None:
         """
         Calculates and organizes aggregates and ratios to profile the strategy’s trade performance,
          using vectorized NumPy operations.
