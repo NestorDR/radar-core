@@ -1,4 +1,5 @@
 # IDEs
+.aiassistant/
 .idea/
 .vscode/
 *.swp
@@ -13,15 +14,6 @@ wheels/
 zero/
 settings.*.yml
 
-# Logs
-logs/
-.log
-
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-
 # Environment
 .venv
 env/
@@ -34,8 +26,14 @@ venv.bak/
 .env.*
 !.env.template
 
-# C extensions
-*.so
+# Logs
+logs/
+.log
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
 # Distribution / packaging
 .Python
@@ -119,3 +117,6 @@ celerybeat-schedule
 
 # mypy
 .mypy_cache/
+
+# C extensions
+*.so
