@@ -2,7 +2,7 @@
 # This file is used to configure the build system and project metadata for the radar-core package.
 [project]
 name = "radar-core"
-version = "0.4.0"
+version = "0.5.0"
 description = "Financial speculation strategies evaluation using yfinance, polars, and ta-lib."
 readme = "README.md"
 authors = [
@@ -21,9 +21,9 @@ dependencies = [
     "SQLAlchemy>=2.0",
     "yfinance>=0.2.65",
     # --- For TA-Lib ---
-    # In Windows run manually: uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.8/ta_lib-0.6.8-cp313-cp313-win_amd64.whl --no-cache-dir
+    # In Windows run manually: uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.X/ta_lib-0.6.X-cp313-cp313-win_amd64.whl --no-cache-dir
     # In other systems (like Linux in Docker) use environment markers and install from PyPI.
-    'ta-lib==0.6.8; sys_platform != "win32"',
+    'ta-lib==0.6.4; sys_platform != "win32"',
 ]
 
 [dependency-groups]

@@ -1,0 +1,52 @@
+# docker-compose.e2e.yml
+
+services:
+  # --- PostgreSQL database service ---
+  db:
+    image: postgres:17-alpine                 # https://github.com/docker-library/docs/blob/master/postgres/README.md
+    container_name: radar-db
+    env_file:
+      - ../envs/.env.e2e                      # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
+    volumes:
+      # Mount initialization scripts (00, 01, ...) to initialize the database on the first run
+      - ../database/init:/docker-entrypoint-initdb.d
+      # Bind mounts (https://docs.docker.com/engine/storage/bind-mounts/)
+      # When you use a "bind mount", a file or dir on the host machine is mounted directly from the host into a container. In general, this is preferred.
+      - ../database/docker_volume:/var/lib/postgresql/data
+      # By contrast, when you use (Named) Volumes, they are persistent data stores created and managed by Docker.
+      # - postgres_data:/var/lib/postgresql/data
+    networks:
+      - radar-network                         # Shared network for inter-service communication
+    # Wait until the database is ready to accept commands before declaring it healthy.
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 15s                           # Time between health checks
+      timeout: 5s                             # Timeout for each health check
+      retries: 5                              # Nº of retries before considering the container unhealthy
+      start_period: 30s                       # Initial delay before starting health checks
+
+  # --- Unattended analysis service ---
+  core:
+    build:
+      context: ..                              # Service directory relative to this file
+      dockerfile: docker/Dockerfile
+    image: radar-core:dev-0.5.0
+    container_name: radar-core
+    depends_on:
+      # The 'core' service will not start until the 'db' service is healthy.
+      db:
+        condition: service_healthy
+    env_file:
+      - ../envs/.env.e2e                      # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
+    environment:
+      # POSTGRES_HOST=host.docker.internal    # Special name resolved to the host IP address (host PostgreSQL instance)
+      - POSTGRES_HOST=db                      # DB engine host is the service named 'db'
+    networks:
+      - radar-network                         # Shared network for inter-service communication
+
+# Network configuration for service communication
+networks:
+  # Define the shared bridge network for inter-service communication.
+  radar-network:
+    name: radar-network                       # Network name
+    driver: bridge                            # Standard bridge network for local deployment

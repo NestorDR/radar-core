@@ -101,7 +101,7 @@ class Settings:
         :return: A dictionary with the logging configuration.
         """
         main_folder_ = Path(__file__).resolve().parent  # radar_core folder
-        enable_file_logging_ = os.getenv('RADAR_ENABLE_FILE_LOGGING', 'true').lower() in ('true', '1', 't')
+        enable_file_logging_ = os.getenv('RADAR_ENABLE_FILE_LOGGING', 'false').lower() in ('true', '1', 't')
         handlers_ = ["console"]
         config_: dict = {
             "version": 1,

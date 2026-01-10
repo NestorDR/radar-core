@@ -148,7 +148,7 @@ Prerequisites:
 
 Build the image:
 ```
-docker build -t radar-core:dev-0.4.0 .
+docker build -t radar-core:dev-0.5.0 .
 ```
 
 Run the analyzer directly with Docker (connecting to an existing PostgreSQL):
@@ -163,19 +163,19 @@ docker run --rm \
     -e RADAR_ENABLE_FILE_LOGGING=false \
     -e RADAR_LOG_LEVEL=20 \
     -e RADAR_MAX_WORKERS=4 \
-    radar-core:dev-0.4.0
+    radar-core:dev-0.5.0
 ```
 
 Using Docker Compose (spins up Postgres + the app):
-- Ensure you have an env file with DB credentials at src/radar_core/.env.production (can be created from src/radar_core/.env.template). Start both services:
+- Ensure you have an env file with DB credentials at envs/.env.e2e (can be created from envs/.env.template). Start both services:
 ```textmate
-docker compose -f docker-compose.dev.yml up -d --build
+docker compose -f docker-compose.e2e.yml up -d --build
 ```
 
 Notes:
 - The Compose file builds the image and waits for the database to become healthy before starting the analyzer.
 - To override configuration without rebuilding, you can bind-mount a custom settings.yml:
-  - `docker run --rm -v %cd%\src\radar_core\settings.yml:/home/default/app/settings.yml:ro radar-core:dev-0.4.0`
+  - `docker run --rm -v %cd%\src\radar_core\settings.yml:/home/default/app/settings.yml:ro radar-core:dev-0.5.0`
   - On Linux/macOS, adjust the host path accordingly.
 - If you connect the containerized app to a host PostgreSQL, `POSTGRES_HOST=host.docker.internal` is convenient on Docker Desktop. On native Linux, you may need an extra_hosts entry mapping host.docker.internal to the host gateway.
 

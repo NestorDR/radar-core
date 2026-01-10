@@ -8,11 +8,12 @@
 # project
 auto/
 docs/
-notes/
+docker_volume/
 sql/
 wheels/
 zero/
 settings.*.yml
+
 
 # Environment
 .venv

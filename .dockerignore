@@ -1,9 +1,16 @@
-# Dockerignore file to exclude unnecessary files from the Docker build context
-# Exclude everything by default
+# .dockerignore
+# This file excludes unnecessary files from the Docker build context.
+
+# Exclude all files by default
 *
-# Include only the necessary files and directories
+
+# Explicitly include the source code and config
 !src/
-!tests/
 !pyproject.toml
-!poetry.lock
 !README.md
+
+#  Exclusions, even if they are inside !src/
+# Python caches
+__pycache__/
+*$py.class
+settings.yml

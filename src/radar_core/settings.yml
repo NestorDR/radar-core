@@ -1,12 +1,10 @@
+# settings.yml
 symbols:
   - 'SPY'
   - 'QQQ'
-  - 'SOXX'
-  - 'TECL'
 shortables:
   - 'SPY'
   - 'QQQ'
-  - 'SOXX'
 evaluable_strategies:  # Use attribute name in `class Strategies`, module `types.py`
   - sma       # Profitable SMA
   - rsi_sma   # Profitable RSI(14) SMA

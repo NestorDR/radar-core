@@ -5,7 +5,7 @@
 FROM --platform=$BUILDPLATFORM python:3.13-slim-bookworm AS builder
 
 # Copy the 'uv' binary for the specific version from the official image
-COPY --from=ghcr.io/astral-sh/uv:0.8.11 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Install build-time dependencies for TA-Lib, psycopg2, and other tools.
 # - apt-get update: Refreshes package index with latest versions
@@ -36,6 +36,7 @@ RUN apt-get update && \
 # - make install: Install the compiled library into the system directories
 # - cd ..: Go back to the parent directory, and
 # - rm -rf ta-lib*: Clean up downloaded/extracted files
+
 RUN wget https://github.com/ta-lib/ta-lib/releases/download/v0.6.4/ta-lib-0.6.4-src.tar.gz && \
     tar -xzf ta-lib-0.6.4-src.tar.gz && \
     cd ta-lib-0.6.4/ && \
@@ -56,11 +57,7 @@ WORKDIR /app
 RUN mkdir -p /wheels
 
 # Copy pyproject.toml (the only true source, not use requirements.txt)
-COPY ./pyproject.toml .
-
-#RUN uv sync --no-dev
-#RUN uv pip freeze > requirements.txt
-#RUN uv run pip wheel --wheel-dir=/wheels -r requirements.txt
+COPY ../pyproject.toml .
 
 # Compile (download & package) deps as wheels in a single atomic layer to optimize caching
 # (this layer will only be rebuilt if pyproject.toml changes).
@@ -86,17 +83,21 @@ FROM python:3.13-slim-bookworm AS final
 
 # Metadata of the Docker image
 LABEL maintainer="ndr1970@gmail.com"
-LABEL version="0.1.0"
+LABEL version="0.2.0"
 
 # Environment variables for better Python behavior in containers
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# Numba Cache: Ensure it writes to a user-writable directory
+ENV NUMBA_CACHE_DIR=/tmp/numba_cache
 
 # Install only runtime dependencies
 # - libpq5: The PostgreSQL client library needed by psycopg2 to connect
-# - curl: A useful utility for health checks or debugging.
+# - libgomp1: GNU OpenMP required for Numba parallel execution-support
+# - curl: A useful utility for health checks (or debugging)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        libgomp1 \
         libpq5 \
         curl &&  \
     apt-get clean &&  \
@@ -121,7 +122,7 @@ RUN useradd --uid 1001 --create-home default
 WORKDIR /home/default/app
 
 # Copy settings file and assign the 'default' user property
-#COPY --chown=default:default ./src/radar_core/settings.yml ./settings.yml
+COPY --chown=default:default ./src/radar_core/settings.yml ./settings.yml
 
 # Switch to the non-root user for runtime execution.
 USER default
