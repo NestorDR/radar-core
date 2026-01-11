@@ -51,16 +51,16 @@ def verbose(message: str,
             task_verbosity_level: int,
             end: str = '\n') -> None:
     """
-    Display the message on console if the level of verbosity allows so.
+    Display the message on the console if the level of verbosity allows so.
     Uses flush=True to ensure immediate output in containerized environments.
 
-    :param message: Message to be displayed on console.
+    :param message: Message to be displayed on the console.
     :param message_verbosity_level: Level of the message to be displayed.
-    :param task_verbosity_level: Minimum level of importance allowed, it reduces the verbosity and
+    :param task_verbosity_level: A minimum level of importance is allowed, it reduces the verbosity and
      should be set at the module/class level.
     :param end: String appended after the last value, default a newline.
     """
     # task_verbosity_level ....: reduces the verbosity and should be set at the module/class level.
-    # DEFAULT_CONSOLE_LOG_LEVEL: avoids displaying a message which will be logged anyway in console by logger.
+    # DEFAULT_CONSOLE_LOG_LEVEL: it avoids displaying a message which will be logged anyway in the console by logger.
     if task_verbosity_level <= message_verbosity_level <= DEFAULT_CONSOLE_LOG_LEVEL:
         print(message, end=end, flush=True)  # flush=True is critical for Docker logs to appear in real-time

@@ -252,8 +252,8 @@ def analyzer(settings: Settings,
             symbols = settings.get_symbols()
         shortable_symbols_ = settings.get_shortables()
 
-        # Clean deprecated symbols in the database
-        if symbols:
+        if settings.clean_unlisted and symbols:
+            # Clean from the DB the ratios for symbols not listed in `settings.yml`
             clean(settings.get_undeletable(), verbosity_level_)
 
         if symbols:

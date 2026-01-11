@@ -45,12 +45,20 @@ class Settings:
         self.module_folder = Path(__file__).resolve().parent
 
         # Load environment variables
-        self.load_env()
+        self._initialize_environment()
+        self.clean_unlisted = self._parse_bool_env('RADAR_CLEAN_UNLISTED', False)
         self.log_config = self._get_log_config(log_filename)
         self.max_workers = self._get_max_workers()
 
         # Load YAML settings file
         Settings._config = self._read_yaml_file()
+
+    # region Environment Variables
+
+    def _initialize_environment(self) -> None:
+        """Helper to handle initial environment setup."""
+        if os.getenv('RADAR_ENV') == 'dev':
+            self.load_env()
 
     def load_env(self) -> None:
         """
@@ -78,17 +86,26 @@ class Settings:
 
         :return: The obtained or default logging level.
         """
-        default_log_level_ = INFO
-        env_log_level_ = os.getenv('RADAR_LOG_LEVEL') or str(default_log_level_)
-
+        env_log_level_ = os.getenv('RADAR_LOG_LEVEL')
         try:
-            log_level_ = int(env_log_level_)
-
+            log_level_ = int(env_log_level_) if env_log_level_ else INFO
             # Calculate level by flooring to the nearest 10. If outside range 10-59, return default
-            return (log_level_ // 10) * 10 if 10 <= log_level_ <= 59 else default_log_level_
+            return (log_level_ // 10) * 10 if 10 <= log_level_ <= 59 else INFO
 
         except ValueError:
-            return default_log_level_
+            return INFO
+
+    @staticmethod
+    def _parse_bool_env(env_var: str, default: bool = False) -> bool:
+        """
+        Parse a boolean environment variable.
+
+        :param env_var: Name of the environment variable
+        :param default: Default value if not set
+
+        :return: Boolean value
+        """
+        return os.getenv(env_var, str(default)).lower() in ('true', '1', 't')
 
     def _get_log_config(self,
                         log_filename: str | None = None) -> dict:
@@ -101,7 +118,7 @@ class Settings:
         :return: A dictionary with the logging configuration.
         """
         main_folder_ = Path(__file__).resolve().parent  # radar_core folder
-        enable_file_logging_ = os.getenv('RADAR_ENABLE_FILE_LOGGING', 'false').lower() in ('true', '1', 't')
+        enable_file_logging_ = self._parse_bool_env('RADAR_ENABLE_FILE_LOGGING', False)
         handlers_ = ["console"]
         config_: dict = {
             "version": 1,
@@ -127,11 +144,14 @@ class Settings:
 
         if enable_file_logging_:
             logs_folder_ = main_folder_ / "logs"
-            os.makedirs(logs_folder_, exist_ok=True)
+            logs_folder_.mkdir(exist_ok=True)
 
             if not log_filename:
-                main_file = getattr(sys.modules["__main__"], "__file__", None)  # Get the main file of the running stack
-                log_filename = Path(main_file).name.removesuffix('.py') if main_file else "app"
+                # Get the main file of the running stack
+                main_module_ = sys.modules["__main__"]
+                main_file = getattr(main_module_, "__file__", None)
+                # stem: final component of the path without extension
+                log_filename = Path(main_file).stem if main_file else "app"
 
             log_file_path_ = logs_folder_ / f'{log_filename}.log'
 
@@ -139,7 +159,7 @@ class Settings:
                 "class": "logging.handlers.RotatingFileHandler",
                 "formatter": "default",
                 "filename": str(log_file_path_),
-                "maxBytes": 524288,
+                "maxBytes": 524288,     # Default is 512KB
                 "backupCount": 3,
                 "level": self.verbosity_level,
             }
@@ -156,19 +176,21 @@ class Settings:
         :return: The maximum number of workers based on the environment variable,
             or 0 if the value is not a positive integer or invalid.
         """
-        env_max_workers_ = os.getenv('RADAR_MAX_WORKERS') or '0'
+        env_max_workers_ = os.getenv('RADAR_MAX_WORKERS', '0')
 
         try:
-            max_workers_ = int(env_max_workers_)
-
             # Return the value only if it's a positive integer, otherwise 0.
-            return max_workers_ if max_workers_ > 0 else 0
+            return max(int(env_max_workers_), 0)
 
         except ValueError:
             message_ = f"Invalid value for RADAR_MAX_WORKERS: '{env_max_workers_}'. Must be an integer. Defaulting to all available cores."
             verbose(message_, WARNING, self.verbosity_level)
             logger_.warning(message_)
             return 0
+
+    # endregion Environment Variables
+
+    # region YAML Settings File
 
     def _read_yaml_file(self) -> dict | None:
         """
@@ -177,7 +199,8 @@ class Settings:
         :return: A dictionary representation of the parsed YAML file. If there is an error during parsing, None is returned.
         """
         # Get the settings file path from the environment variable or use a default
-        file_path_ = self.module_folder / os.getenv('RADAR_SETTING_FILE', 'settings.yml')
+        file_name_ = os.getenv('RADAR_SETTING_FILE', 'settings.yml')
+        file_path_ = self.module_folder / file_name_
         message_ = f'Reading YAML file {file_path_}...'
         verbose(message_, INFO, self.verbosity_level)
         logger_.info(message_)
@@ -217,10 +240,12 @@ class Settings:
         # Get the 'raw' shortables list
         raw_shortables_ = self._config.get('shortables', [])
 
-        # Filter shortables: only those that are also in the symbol set, and return the result as a list
+        # Filter shortables: only those that are also in the symbol set and return the result as a list
         # Use list comprehension: [expression for item in iterable if condición]
         return [shortable_ for shortable_ in raw_shortables_ if shortable_ in symbols_set_]
 
     def get_evaluable_strategies(self) -> list[str]:
         """Returns the list of strategy Acronyms that can be evaluated."""
         return self._config.get('evaluable_strategies', []) if self._config else []
+
+    # endregion YAML Settings File
