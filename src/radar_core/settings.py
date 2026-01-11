@@ -57,7 +57,7 @@ class Settings:
 
     def _initialize_environment(self) -> None:
         """Helper to handle initial environment setup."""
-        if os.getenv('RADAR_ENV') == 'dev':
+        if os.getenv('RADAR_ENV', 'dev') == 'dev':
             self.load_env()
 
     def load_env(self) -> None:
