@@ -1,4 +1,4 @@
-# docker-compose.e2e.yml
+# docker/docker-compose.e2e.yml
 
 services:
   # --- Unattended analysis core service ---
@@ -9,12 +9,16 @@ services:
     image: radar-core:dev-0.5.0
     container_name: radar-core
     restart: unless-stopped                   # Automatically restart unless manually stopped
+    shm_size: '2gb'                           # CRITICAL for HPC/Polars: Increase shared memory size
     env_file:
       - ..\envs\.env.core                     # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
     environment:
       - POSTGRES_HOST=host.docker.internal    # Special name resolved to the host IP address (host PostgreSQL instance)
     networks:
       - radar-network                         # Shared network for inter-service communication
+    # Required to connect from the container to the Windows host DB
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Maps host.docker.internal to the host IP
     # Resource limits - a similar concept used in K8S
     # deploy:
     #    resources:
@@ -24,9 +28,6 @@ services:
     #      reservations:
     #        cpus: '0.50'                        # Reserve % of one CPU core
     #        memory: 1024M                       # Reserve MB RAM
-    # Required to connect from the container to the Windows host DB
-    extra_hosts:
-      - "host.docker.internal:host-gateway"   # Maps host.docker.internal to the host IP
 
 # Network configuration for service communication
 networks:

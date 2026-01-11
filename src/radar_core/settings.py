@@ -56,18 +56,24 @@ class Settings:
     # region Environment Variables
 
     def _initialize_environment(self) -> None:
-        """Helper to handle initial environment setup."""
+        """
+        If the RADAR_ENV environment variable is 'dev', loads the .env file and configures the log/verbosity level.
+        Otherwise, it sets the verbosity level based on the current logging variable from the real environment.
+        """
         if os.getenv('RADAR_ENV', 'dev') == 'dev':
             self.load_env()
+            return
+
+        self.verbosity_level = self._get_log_level()
 
     def load_env(self) -> None:
         """
-        Finds and loads the .env file into the process's environment variables.
-        This method is idempotent and will only run once per application lifecycle.
+        Attempts to find an .env file in the current directory or any of its parent dirs up to 2 levels.
+        If found, it loads the environment variables from the file and configures the log/verbosity level accordingly.
+        If not found, it carries on without loading and sets the verbosity level based on existing env vars or defaults.
         """
         # Find an .env file in the current or parent directories
         env_path_ = dotenvy_py.find_upwards(str(self.module_folder / '.env'), 2)
-        self.verbosity_level = self._get_log_level()
         if env_path_:
             dotenvy_py.from_filename(env_path_)
             message_ = f"Found and loaded environment vars file {env_path_}"
@@ -76,6 +82,10 @@ class Settings:
             message_ = f"No environment vars file found ({env_path_}), Continuing without it."
             message_verbosity_level_ = WARNING
 
+        # Adjust logging and verbosity level based on the environment variable from the real environment or `.env` file
+        self.verbosity_level = self._get_log_level()
+
+        # Display result
         verbose(message_, message_verbosity_level_, self.verbosity_level)
 
     @staticmethod
@@ -120,6 +130,14 @@ class Settings:
         main_folder_ = Path(__file__).resolve().parent  # radar_core folder
         enable_file_logging_ = self._parse_bool_env('RADAR_ENABLE_FILE_LOGGING', False)
         handlers_ = ["console"]
+
+        logger_config = {
+            "level": self.verbosity_level,
+            "handlers": [],
+            "propagate": True,
+        }
+        loggers = ['radar-core', 'numba', 'numpy', 'peewee', 'polars', 'psycopg', 'SQLAlchemy', 'yfinance']
+
         config_: dict = {
             "version": 1,
             "disable_existing_loggers": False,
@@ -140,7 +158,16 @@ class Settings:
                 "level": DEBUG,
                 "handlers": handlers_,
             },
+            "loggers": {x: logger_config.copy() for x in loggers}
         }
+
+        config_['loggers']['numba']['level'] = 'WARNING'
+        config_['loggers']['numpy']['level'] = 'WARNING'
+        config_['loggers']['peewee']['level'] = 'WARNING'
+        config_['loggers']['polars']['level'] = 'WARNING'
+        config_['loggers']['psycopg']['level'] = 'WARNING'
+        config_['loggers']['SQLAlchemy']['level'] = 'WARNING'
+        config_['loggers']['yfinance']['level'] = 'WARNING'
 
         if enable_file_logging_:
             logs_folder_ = main_folder_ / "logs"

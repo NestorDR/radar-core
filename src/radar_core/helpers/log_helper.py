@@ -62,5 +62,5 @@ def verbose(message: str,
     """
     # task_verbosity_level ....: reduces the verbosity and should be set at the module/class level.
     # DEFAULT_CONSOLE_LOG_LEVEL: it avoids displaying a message which will be logged anyway in the console by logger.
-    if task_verbosity_level <= message_verbosity_level <= DEFAULT_CONSOLE_LOG_LEVEL:
+    if task_verbosity_level <= message_verbosity_level <= DEFAULT_CONSOLE_LOG_LEVEL and message != '':
         print(message, end=end, flush=True)  # flush=True is critical for Docker logs to appear in real-time

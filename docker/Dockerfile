@@ -1,4 +1,4 @@
-# Dockerfile
+# docker/Dockerfile
 
 # Stage 1 Builder: contains build tools to build the radar_core wheel
 # The --platform=$BUILDPLATFORM ensures this stage runs on your host's native architecture.

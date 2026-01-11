@@ -4,13 +4,15 @@
 # concurrent.futures: provides a high-level interface for asynchronously executing callables.
 import concurrent.futures
 # contextlib: provides utilities for working with context managers, including stream redirection.
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 # datetime: provides classes for manipulating dates and times.
 from datetime import datetime
 # io: implements the core facilities for file-like objects and I/O streams.
 import io
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, config, getLogger
+# multiprocessing: needed to force 'spawn' context on Linux/Docker
+import multiprocessing
 # os: allows access to functionalities dependent on the Operating System
 import os
 # time: provides various time-related functions
@@ -59,7 +61,6 @@ def init_worker(log_config: dict) -> None:
     """
     Initializes the logging configuration for the worker process, required for Windows & macOS (spawn).
     This ensures that logs from child processes are correctly handled and written to the log file.
-
 
     :param log_config: Dictionary with logging configuration from the main process.
     """
@@ -162,7 +163,8 @@ def process_symbol(symbol: str,
                    verbosity_level: int) -> str:
     """
     Worker function to analyze a single symbol.
-    Captures activity to prevent interleaved logs.
+    - If verbosity is DEBUG: Prints directly to stdout (Live Mode) for diagnosing hangs/crashes.
+    - If verbosity > DEBUG: Buffers output (Atomic Mode) to prevent log interleaving in the main console.
 
     :param symbol: The symbol to analyze.
     :param prices_df: The price data for the symbol.
@@ -174,19 +176,28 @@ def process_symbol(symbol: str,
     """
     symbol_started_at_ = time.monotonic()
     symbol_ = symbol.upper()
+    only_long_positions_ = symbol_ not in shortable_symbols
 
-    # Log inside the child process (traceable)
-    message_ = f'[{symbol}]: Launching parallel worker process at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
+    # Log inside the child process (always goes to file/console depending on config, before buffering starts)
+    message_ = f'[{symbol}]: Analysis started at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
     verbose(message_, INFO, verbosity_level)
     logger_.info(message_)
 
-    only_long_positions_ = symbol_ not in shortable_symbols
+    # Determine if we should capture (Buffer) or stream live (Debug)
+    # Live mode helps diagnose where the process hangs without waiting for buffer flush
+    is_live_mode_ = verbosity_level <= DEBUG
 
-    # Create an in-memory buffer to capture text output
-    log_capture_buffer_ = io.StringIO()
+    # Create buffer only if needed
+    log_capture_buffer_ = io.StringIO() if not is_live_mode_ else None
 
-    # Redirect both stdout (print/verbose) and stderr (some logs) to the buffer
-    with redirect_stdout(log_capture_buffer_), redirect_stderr(log_capture_buffer_):
+    # Use ExitStack to conditionally enter context managers (redirect_stdout/stderr)
+    # This avoids duplicating the try/except block for both modes
+    with ExitStack() as stack_:
+        if not is_live_mode_:
+            # Redirect both stdout (print/verbose) and stderr (logs) to a buffer to ensure atomicity in the parent console
+            stack_.enter_context(redirect_stdout(log_capture_buffer_))
+            stack_.enter_context(redirect_stderr(log_capture_buffer_))
+
         try:
             # Strategy Analysis
             if valid_prices(DAILY, symbol_, prices_df, verbosity_level):
@@ -207,11 +218,14 @@ def process_symbol(symbol: str,
             verbose(message_, ERROR, verbosity_level)
             logger_.exception(message_, exc_info=e)
 
-        # Get the captured stdout value for returning, close the buffer (although GC handles it)
-        captured_output_ = log_capture_buffer_.getvalue()
-        log_capture_buffer_.close()
+    # Return results
+    if is_live_mode_:
+        return ""  # Nothing to return, already printed live
 
-        return captured_output_
+    # Get the captured stdout value for returning, close the buffer (although GC handles it)
+    captured_output_ = log_capture_buffer_.getvalue()
+    log_capture_buffer_.close()
+    return captured_output_
 
 
 def analyzer(settings: Settings,
@@ -295,9 +309,14 @@ def analyzer(settings: Settings,
             verbose(message_, INFO, verbosity_level_)
             logger_.info(message_)
 
+            # CRITICAL FIX FOR LINUX/DOCKER:
+            # Use 'spawn' context to avoid Polars thread pool deadlocks caused by 'fork' default.
+            mp_context = multiprocessing.get_context('spawn')
+
             # Use initializer to configure logging once per worker process
             with concurrent.futures.ProcessPoolExecutor(
                     max_workers=num_workers_,
+                    mp_context=mp_context,  # Force spawn
                     initializer=init_worker,
                     initargs=(settings.log_config,)
             ) as executor:
@@ -393,7 +412,7 @@ if __name__ == "__main__":
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['XLF']
+    symbols_ = ['SPY', 'QQQ']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)
