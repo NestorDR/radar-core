@@ -4,7 +4,7 @@ services:
   # --- PostgreSQL database service ---
   db:
     image: postgres:17-alpine                 # https://github.com/docker-library/docs/blob/master/postgres/README.md
-    container_name: radar-db
+    container_name: radar-e2e-db
     env_file:
       - ../envs/.env.e2e                      # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
     volumes:
@@ -19,7 +19,8 @@ services:
       - radar-network                         # Shared network for inter-service communication
     # Wait until the database is ready to accept commands before declaring it healthy.
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      # $$ Prevents Docker tries to expand the variable before sending it to the container
+      test: [ "CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}" ]
       interval: 15s                           # Time between health checks
       timeout: 5s                             # Timeout for each health check
       retries: 5                              # Nº of retries before considering the container unhealthy
@@ -30,16 +31,16 @@ services:
     build:
       context: ..                              # Service directory relative to this file
       dockerfile: docker/Dockerfile
-    image: radar-core:dev-0.5.0
-    container_name: radar-core
+    image: radar-core:e2e-0.5.0
+    container_name: radar-e2e-core
+    restart: 'no'                             # It will either run manually or remain paused after execution
+    shm_size: '2gb'                           # CRITICAL for HPC/Polars: Increase shared memory size
     depends_on:
-      # The 'core' service will not start until the 'db' service is healthy.
-      db:
+      db:                                     # The 'core' service will not start until the 'db' service is healthy.
         condition: service_healthy
     env_file:
       - ../envs/.env.e2e                      # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
     environment:
-      # POSTGRES_HOST=host.docker.internal    # Special name resolved to the host IP address (host PostgreSQL instance)
       - POSTGRES_HOST=db                      # DB engine host is the service named 'db'
     networks:
       - radar-network                         # Shared network for inter-service communication

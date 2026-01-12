@@ -8,7 +8,7 @@ services:
       dockerfile: docker/Dockerfile
     image: radar-core:dev-0.5.0
     container_name: radar-core
-    restart: unless-stopped                   # Automatically restart unless manually stopped
+    restart: 'no'                             # It will either run manually or remain paused after execution
     shm_size: '2gb'                           # CRITICAL for HPC/Polars: Increase shared memory size
     env_file:
       - ..\envs\.env.core                     # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
