@@ -41,11 +41,10 @@ class Settings:
         if Settings._config is not None:
             return
 
-        self.verbosity_level = INFO  # Set the default verbosity level
-        self.module_folder = Path(__file__).resolve().parent
+        self._module_folder = Path(__file__).resolve().parent
 
         # Load environment variables
-        self._initialize_environment()
+        self.verbosity_level = self._initialize_environment()
         self.clean_unlisted = self._parse_bool_env('RADAR_CLEAN_UNLISTED', False)
         self.log_config = self._get_log_config(log_filename)
         self.max_workers = self._get_max_workers()
@@ -55,38 +54,32 @@ class Settings:
 
     # region Environment Variables
 
-    def _initialize_environment(self) -> None:
+    def _initialize_environment(self) -> int:
         """
         If the RADAR_ENV environment variable is 'dev', loads the .env file and configures the log/verbosity level.
-        Otherwise, it sets the verbosity level based on the current logging variable from the real environment.
+        Otherwise, it sets the verbosity level based on the variable from the real environment or default.
         """
+        message_verbosity_level_ = DEBUG
         if os.getenv('RADAR_ENV', 'dev') == 'dev':
-            self.load_env()
-            return
-
-        self.verbosity_level = self._get_log_level()
-
-    def load_env(self) -> None:
-        """
-        Attempts to find an .env file in the current directory or any of its parent dirs up to 2 levels.
-        If found, it loads the environment variables from the file and configures the log/verbosity level accordingly.
-        If not found, it carries on without loading and sets the verbosity level based on existing env vars or defaults.
-        """
-        # Find an .env file in the current or parent directories
-        env_path_ = dotenvy_py.find_upwards(str(self.module_folder / '.env'), 2)
-        if env_path_:
-            dotenvy_py.from_filename(env_path_)
-            message_ = f"Found and loaded environment vars file {env_path_}"
-            message_verbosity_level_ = DEBUG
+            # Attempts to find an .env file in the current directory or any of its parent dirs up to 2 levels.
+            env_path_ = dotenvy_py.find_upwards(str(self._module_folder / '.env'), 2)
+            if env_path_:
+                # Load the environment variables from the file
+                dotenvy_py.from_filename(env_path_)
+                message_ = f"Found and loaded environment vars file {env_path_}"
+            else:
+                # Carry on without loading and sets the verbosity level based on the real environment or default.
+                message_ = f"No environment variables file found ({env_path_}), Continuing without it."
+                message_verbosity_level_ = WARNING
         else:
-            message_ = f"No environment vars file found ({env_path_}), Continuing without it."
-            message_verbosity_level_ = WARNING
+            message_ = f"RADAR_ENV is in mode `{os.getenv('RADAR_ENV')}`."
 
-        # Adjust logging and verbosity level based on the environment variable from the real environment or `.env` file
-        self.verbosity_level = self._get_log_level()
-
+        # Set logging/verbosity level based on the env vars from the real environment or `.env` file read
+        verbosity_level_ = self._get_log_level()
         # Display result
-        verbose(message_, message_verbosity_level_, self.verbosity_level)
+        verbose(message_, message_verbosity_level_, verbosity_level_)
+
+        return verbosity_level_
 
     @staticmethod
     def _get_log_level() -> int:
@@ -227,7 +220,7 @@ class Settings:
         """
         # Get the settings file path from the environment variable or use a default
         file_name_ = os.getenv('RADAR_SETTING_FILE', 'settings.yml')
-        file_path_ = self.module_folder / file_name_
+        file_path_ = self._module_folder / file_name_
         message_ = f'Reading YAML file {file_path_}...'
         verbose(message_, INFO, self.verbosity_level)
         logger_.info(message_)
