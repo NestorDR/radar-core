@@ -85,7 +85,11 @@ class SecurityRepository:
                 return None
 
             # Add new security
-            self.__security_crud.add_security(Securities(symbol=symbol, description=company_name_))
+            self.__security_crud.add_security(
+                Securities(
+                    symbol=symbol,
+                    description=company_name_,
+                    is_bear=any(keyword in company_name_.lower() for keyword in ['bear', 'inverse', 'short'])))
 
             message_ = f"Added new security: {symbol} to the DB."
             verbose(message_, INFO, self.verbosity_level)

@@ -33,6 +33,8 @@ class Securities(BaseModel):
     symbol: Mapped[str] = mapped_column(String(10), nullable=False,
                                         comment='Acronym identifier of financial instrument')
     description: Mapped[str] = mapped_column(String(100), nullable=False)
+    is_bear: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'),
+                                          comment='Flag indicating that its price increases during bear markets')
     store_locally: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('false'),
                                                 comment='Flag indicating whether prices obtained from the cloud should be saved in the database')
 
