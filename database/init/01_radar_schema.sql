@@ -11,67 +11,20 @@ CREATE TABLE IF NOT EXISTS public.securities
     id            integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     symbol        character varying(10)  NOT NULL UNIQUE,
     description   character varying(100) NOT NULL,
+    is_bear       boolean DEFAULT false  NOT NULL,
     store_locally boolean DEFAULT false  NOT NULL
 );
 COMMENT ON TABLE public.securities IS 'Marketable financial instruments';
 COMMENT ON COLUMN public.securities.id IS 'Internal unique identifier';
 COMMENT ON COLUMN public.securities.symbol IS 'Acronym identifier of the financial instrument';
 COMMENT ON COLUMN public.securities.description IS 'Description of the financial instrument';
+COMMENT ON COLUMN public.securities.is_bear IS 'Flag indicating that its price increases during bear markets';
 COMMENT ON COLUMN public.securities.store_locally IS 'Flag indicating whether prices obtained from the cloud should be saved in the database';
 
-INSERT INTO public.securities (id, symbol, description, store_locally) OVERRIDING SYSTEM VALUE
-VALUES (1, 'SPX', 'S&P 500 Index', true),
-       (2, 'NDQ', 'NASDAQ 100 Index', true),
-       (3, 'GOLD', 'Gold USD', false),
-       (10, 'SPY', 'SPDR S&P 500 ETF Trust', false),
-       (11, 'QQQ', 'Invesco QQQ Trust', false),
-       (12, 'SOXX', 'iShares Semiconductor ETF', false),
-       (13, 'XBI', 'SPDR S&P Biotech ETF', false),
-       (14, 'AIQ', 'Global X Artificial Intelligence & Technology ETF', false),
-       (15, 'TQQQ', 'ProShares UltraPro QQQ', false),
-       (16, 'TECL', 'Direxion Daily Technology Bull 3X Shares', false),
-       (17, 'SOXL', 'Direxion Daily Semiconductor Bull 3X Shares', false),
-       (18, 'AIBU', 'Direxion Daily AI And Big Data Bull 2X Shares', false),
-       (19, 'SPXL', 'Direxion Daily S&P500 Bull 3X Shares', false),
-       (20, 'UBOT', 'Direxion Daily Robotics, Artificial Intelligence & Automation Index Bull 2X Shares', false),
-       (21, 'SQQQ', 'ProShares UltraPro Short QQQ', false),
-       (22, 'SOXS', 'Direxion Daily Semiconductor Bear 3X Shares', false),
-       (23, 'AIBD', 'Direxion Daily AI And Big Data Bear 2X Shares', false),
-       (24, 'SPXS', 'Direxion Daily S&P 500 Bear 3X Shares', false),
-       (25, 'LABU', 'Direxion Daily S&P Biotech Bull 3X Shares', false),
-       (26, 'LABD', 'Direxion Daily S&P Biotech Bear 3X Shares', false),
-       (27, 'IWM', 'iShares Russell 2000 ETF', false),
-       (28, 'TNA', 'Direxion Daily Small Cap Bull 3X Shares', false),
-       (29, 'TZA', 'Direxion Daily Small Cap Bear 3X Shares', false),
-       (30, 'AAPL', 'Apple Inc.', false),
-       (31, 'AMZN', 'Amazon.com, Inc.', false),
-       (32, 'AVGO', 'Broadcom Inc.', false),
-       (33, 'GOOGL', 'Alphabet Inc.', false),
-       (34, 'META', 'Meta Platforms, Inc.', false),
-       (35, 'MSFT', 'Microsoft Corporation', false),
-       (36, 'NFLX', 'Netflix, Inc.', false),
-       (37, 'NVDA', 'NVIDIA Corporation', false),
-       (38, 'TSLA', 'Tesla, Inc.', false),
-       (39, 'ADBE', 'Adobe Inc.', false),
-       (40, 'BABA', 'Alibaba Group Holding Limited', false),
-       (41, 'MELI', 'MercadoLibre, Inc.', false),
-       (42, 'ORCL', 'Oracle Corporation', false),
-       (43, 'BTC-USD', 'Bitcoin USD', false),
-       (44, 'BITX', '2x Bitcoin Strategy ETF', false),
-       (45, 'IBIT', 'iShares Bitcoin Trust ETF', false),
-       (46, 'WGMI', 'Valkyrie Bitcoin Miners ETF', false),
-       (47, 'XLF', 'State Street Financial Select Sector SPDR ETF', false),
-       (48, 'FAS', 'Direxion Daily Financial Bull 3X Shares', false),
-       (49, 'FAZ', 'Direxion Daily Financial Bear 3X Shares', false),
-       (50, 'FXI', 'iShares China Large-Cap ETF', false),
-       (51, 'YINN', 'Direxion Daily FTSE China Bull 3X Shares', false),
-       (52, 'EEM', 'iShares MSCI Emerging Markets ETF', false),
-       (53, 'EDC', 'Direxion Daily MSCI Emerging Markets Bull 3X Shares', false),
-       (54, 'EDZ', 'Direxion Daily MSCI Emerging Markets Bear 3X Shares', false),
-       (55, 'VGK', 'Vanguard FTSE Europe ETF', false),
-       (56, 'GDX', 'VanEck Gold Miners ETF', false),
-       (57, 'NUGT', 'Direxion Daily Gold Miners Index Bull 2X Shares', false),
-       (58, 'DUST', 'Direxion Daily Gold Miners Index Bear 2X Shares', false);
+INSERT INTO public.securities (id, symbol, description, is_bear, store_locally) OVERRIDING SYSTEM VALUE
+VALUES (1, 'SPX', 'S&P 500 Index', false, false),
+       (2, 'NDQ', 'NASDAQ 100 Index', false, false),
+       (3, 'GOLD', 'Gold USD', false, false);
 
 SELECT setval('public.securities_id_seq', COALESCE(MAX(id), 0) + 1, false)
 FROM public.securities;

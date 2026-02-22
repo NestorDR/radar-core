@@ -24,7 +24,7 @@ services:
       interval: 15s                           # Time between health checks
       timeout: 5s                             # Timeout for each health check
       retries: 5                              # Nº of retries before considering the container unhealthy
-      start_period: 30s                       # Initial delay before starting health checks
+      start_period: 60s                       # Initial delay before starting health checks
 
   # --- Unattended analysis service ---
   core:

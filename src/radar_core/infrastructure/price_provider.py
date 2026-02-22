@@ -51,8 +51,31 @@ class PriceProvider:
         :param prices_df: The raw pandas DataFrame to process.
         :return: A processed Polars DataFrame.
         """
-        # Reset Date index as a column Date and convert the Pandas DataFrame to a Polars DataFrame
-        prices_pl_df_ = pl.from_pandas(prices_df.reset_index())
+        # Reset Date index as a column Date
+        prices_df = prices_df.reset_index()
+
+        # Make sure that only required columns are part of the Pandas Dataframe to avoid future conversion issues
+        prices_df = prices_df.loc[:, ["Date", "Open", "High", "Low", "Close", "Volume"]]
+
+        # Normalize dtypes to numpy-backed ones and avoid use of `pyarrow`
+        # When set to 'coerce', any non-numeric values will be converted to NaN
+        # Date -> datetime64[ns] (naive)
+        prices_df['Date'] = prices_df['Date'].astype('datetime64[ns]')
+
+        # OHLC -> float64
+        for col in ("Open", "High", "Low", "Close"):
+            prices_df[col] = prices_df[col].astype('float64')
+
+        # Volume -> int64 if possible else float64 (because NaN cannot live in int64)
+        if "Volume" in prices_df.columns:
+            prices_df["Volume"] = (
+                prices_df["Volume"].astype("float64")
+                if prices_df["Volume"].isna().any()
+                else prices_df["Volume"].astype("int64")
+            )
+
+        # Convert the Pandas DataFrame to a Polars DataFrame
+        prices_pl_df_ = pl.from_pandas(prices_df)
 
         # Round prices to 4 decimal places with Polars DataFrame
         prices_pl_df_ = prices_pl_df_.with_columns([
@@ -178,7 +201,7 @@ if __name__ == '__main__':
 
     # --- Test Case 1: Download a single symbol that requires translation ---
     print("--- Testing single download ---")
-    test_symbol_ = 'NDQ'
+    test_symbol_ = 'QQQ'
     prices_data_ = price_provider_.get_prices([test_symbol_])
     if test_symbol_ in prices_data_:
         data_ = prices_data_[test_symbol_]
