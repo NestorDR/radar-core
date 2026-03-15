@@ -1,0 +1,54 @@
+# radar-core/.github/workflows/build-prod.yml
+
+name: Build and Publish ARM64 Image
+
+# Trigger the workflow only when code is pushed to the 'main' branch
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-push:
+    # Use GitHub's native ARM64 runner for public repositories (No QEMU needed)
+    runs-on: ubuntu-24.04-arm
+    
+    # Define permissions needed to push the image to GitHub Container Registry (GHCR)
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # Step 1: Download the repository code into the runner
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Authenticate to GitHub Container Registry using the automatic GitHub token
+      # No manual secret configuration is needed for GITHUB_TOKEN; GitHub provisions it per run.
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 3: Extract metadata (tags, labels) for Docker
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=prod-arm64
+            type=sha,format=short
+
+      # Step 4: Build the Docker image and push it to GHCR
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          # Tag the image using the metadata generated in the previous step
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
