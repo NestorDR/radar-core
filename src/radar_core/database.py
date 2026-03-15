@@ -91,4 +91,6 @@ def _get_connection_str():
     if db_options:
         connection_str_ += f"&options={db_options}"
 
+    logger_.debug(f"Database connection string: {connection_str_}")
+
     return connection_str_
