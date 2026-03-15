@@ -40,14 +40,14 @@ Option A — using uv:
    - uv venv
    - uv sync
 3. Windows + TA‑Lib only (if needed):
-   - uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.8/ta_lib-0.6.8-cp313-cp313-win_amd64.whl --no-cache-dir
+   - uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl --no-cache-dir
 
 Option B — using pip:
 1. Create and activate a virtual environment
 2. Install dependencies from pyproject (via pip):
    - pip install -e .
 3. Windows + TA‑Lib only (if needed):
-   - pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.8/ta_lib-0.6.8-cp313-cp313-win_amd64.whl --no-cache-dir
+   - pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl --no-cache-dir
 
 ## Quick Start
 You can run the analyzer directly from the repository without installing the package system‑wide.
@@ -147,8 +147,8 @@ Prerequisites:
 - Docker Compose v2 (optional, recommended for local DB + app)
 
 Build the image:
-```
-docker build -t radar-core:dev-0.5.0 .
+```textmate
+docker build -t radar-core:dev-0.5.0 -f docker/Dockerfile .
 ```
 
 Run the analyzer directly with Docker (connecting to an existing PostgreSQL):
@@ -166,21 +166,32 @@ docker run --rm \
     radar-core:dev-0.5.0
 ```
 
-Using Docker Compose (spins up Postgres + the app):
-- Ensure you have an env file with DB credentials at envs/.env.e2e (can be created from envs/.env.template). Start both services:
-```textmate
-docker compose -f docker-compose.e2e.yml up -d --build
-```
+Using Docker Compose:
+The project includes a compose file in the `docker/` directory for development:
+
+1. **Development/Core (`docker/docker-compose.core.yml`)**: Runs the analyzer connecting to a PostgreSQL instance on the host (Windows).
+   ```textmate
+   docker compose -f docker/docker-compose.core.yml up -d --build
+   ```
 
 Notes:
-- The Compose file builds the image and waits for the database to become healthy before starting the analyzer.
-- To override configuration without rebuilding, you can bind-mount a custom settings.yml:
+- The Compose file builds the image and handles network configuration.
+- To override configuration without rebuilding, you can bind-mount a custom `settings.yml`:
   - `docker run --rm -v %cd%\src\radar_core\settings.yml:/home/default/app/settings.yml:ro radar-core:dev-0.5.0`
-  - On Linux/macOS, adjust the host path accordingly.
-- If you connect the containerized app to a host PostgreSQL, `POSTGRES_HOST=host.docker.internal` is convenient on Docker Desktop. On native Linux, you may need an extra_hosts entry mapping host.docker.internal to the host gateway.
+- If you connect the containerized app to a host PostgreSQL, `POSTGRES_HOST=host.docker.internal` is used.
+
+## Automation Scripts
+The `auto/` directory contains Windows Command scripts to simplify common tasks:
+
+- **`auto\dc.cmd <target>`**: Helper for Docker Compose.
+  - Usage: `auto\dc.cmd core`.
+  - It handles environment file injection and project naming.
+
+- **`auto\update.cmd`**: Updates the development environment.
+  - Updates `uv`, activates the virtual environment, upgrades `uv.lock`, syncs dependencies, and reinstalls TA-Lib from the prebuilt wheel.
 
 ## Project Status
-In active development and continuous improvement. Expect updates, refactoring, and performance tuning.
+In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base) is managed in the `radar-infra` project.
 
 ## License
 This project is licensed under the MIT License. See the LICENSE file if available; otherwise, you may consider the standard MIT terms applicable by default.
