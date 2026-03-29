@@ -5,7 +5,6 @@ Radar Core is a Python application that downloads financial asset prices from Ya
 The project follows High Performance Practices, utilizing concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously.
 
 ## Features
-## Features
 - **Hybrid Data Architecture**:
     - **Polars**: High-performance DataFrame management for data ingestion and storage.
     - **NumPy & Numba**: Strategy logic is decoupled into JIT-compiled kernels for near-native execution speed.
@@ -167,18 +166,25 @@ docker run --rm \
 ```
 
 Using Docker Compose:
-The project includes a compose file in the `docker/` directory for development:
+The project includes several compose files in the `docker/` directory for different development scenarios. They rely on `.env` files located in the `envs/` directory.
 
-1. **Development/Core (`docker/docker-compose.core.yml`)**: Runs the analyzer connecting to a PostgreSQL instance on the host (Windows).
+1. **Hybrid Core (`docker/docker-compose.core.yml`)**: Runs the analyzer. It is configured to connect to either a PostgreSQL instance on the host (Windows) or a containerized PostgreSQL in an external Docker network.
+   - **Host Database**: Set `POSTGRES_HOST=host.docker.internal` in `envs/.env.core`.
+   - **Container Database**: Set `POSTGRES_HOST=radar-postgres` in `envs/.env.core`. Note: The external network `radar-network` must be created first (usually managed by the database compose file in the `radar-infra` project).
    ```textmate
    docker compose -f docker/docker-compose.core.yml up -d --build
    ```
 
+2. **Isolated Metabase (`docker/docker-compose.mb.yml`)**: Runs a standalone Metabase instance strictly restricted to connect only to the host machine's database. It is deliberately disconnected from the shared Docker network.
+   ```textmate
+   docker compose -f docker/docker-compose.mb.yml up -d
+   ```
+
 Notes:
-- The Compose file builds the image and handles network configuration.
+- The Core Compose file builds the image. The Metabase Compose uses the official pre-built image.
+- To avoid port collisions when running both host and containerized PostgreSQL instances, the containerized DB exposes a different port to the host (e.g., `5433:5432`, configurable via `POSTGRES_EXTERNAL_PORT`).
 - To override configuration without rebuilding, you can bind-mount a custom `settings.yml`:
   - `docker run --rm -v %cd%\src\radar_core\settings.yml:/home/default/app/settings.yml:ro radar-core:dev-0.5.0`
-- If you connect the containerized app to a host PostgreSQL, `POSTGRES_HOST=host.docker.internal` is used.
 
 ## Automation Scripts
 The `auto/` directory contains Windows Command scripts to simplify common tasks:
