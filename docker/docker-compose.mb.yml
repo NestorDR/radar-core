@@ -1,0 +1,15 @@
+# radar-infra/docker-compose.mb.yml
+# Isolated Metabase service: deliberately disconnected from Docker networks to enforce connection to the host's PostgreSQL only (via host.docker.internal).
+
+services:
+  metabase:
+    image: metabase/metabase:latest
+    container_name: metabase
+    restart: unless-stopped
+    env_file:
+      - ../envs/.env.mb                       # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
+    ports:
+      - "${METABASE_UI_PORT:-3000}:3000"      # Syntax: ${ENV_VAR_FOR_HOST_PORT:-DEFAULT_VALUE} : CONTAINER_PORT
+    # Required to connect from the container to a PostgreSQL hosted on Windows
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Maps host.docker.internal to the host IP
