@@ -6,11 +6,14 @@
 *.swo
 
 # project
+database/
 docs/
-sql/
 zero/
 settings.*.yml
-
+*.rar
+*.tar
+*.zip
+*.7z
 
 # Environment
 .venv
@@ -22,12 +25,11 @@ venv.bak/
 #.env files
 .env
 .env.*
-!.env.core.template
-!.env.mb.template
+!.env.*.template
 
 # Logs
 logs/
-.log
+*.log
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
