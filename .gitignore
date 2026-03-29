@@ -6,7 +6,6 @@
 *.swo
 
 # project
-auto/
 docs/
 sql/
 zero/
@@ -24,6 +23,7 @@ venv.bak/
 .env
 .env.*
 !.env.core.template
+!.env.mb.template
 
 # Logs
 logs/
