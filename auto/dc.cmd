@@ -13,7 +13,7 @@ SET SCRIPT_DIR=%~dp0
 CD /D "!SCRIPT_DIR!..!"
 
 :: Capture 1st argument
-@SET TARGET_DEPLOY=%1
+SET TARGET_DEPLOY=%1
 if "!TARGET_DEPLOY!"=="" (
     ECHO Parameter is required. Usage: %0 ^<target_deploy^>
     ECHO Valid values for target_deploy: core, mb
@@ -24,12 +24,12 @@ if "!TARGET_DEPLOY!"=="" (
 :: Make sure to use lowercase letters, as docker-compose is case-sensitive.
 :: /i : Case insensitive
 if /i "!TARGET_DEPLOY!"=="core" (
-    @SET TARGET_DEPLOY=
-    @SET TARGET_DEPLOY=core
+    SET TARGET_DEPLOY=
+    SET TARGET_DEPLOY=core
 )
 if /i "!TARGET_DEPLOY!"=="mb" (
-    @SET TARGET_DEPLOY=
-    @SET TARGET_DEPLOY=mb
+    SET TARGET_DEPLOY=
+    SET TARGET_DEPLOY=mb
 )
 
 :compose
