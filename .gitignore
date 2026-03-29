@@ -27,7 +27,7 @@ venv.bak/
 #.env files
 .env
 .env.*
-!.env.template
+!.env.core.template
 
 # Logs
 logs/
