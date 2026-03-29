@@ -170,7 +170,7 @@ The project includes several compose files in the `docker/` directory for differ
 
 1. **Hybrid Core (`docker/docker-compose.core.yml`)**: Runs the analyzer. It is configured to connect to either a PostgreSQL instance on the host (Windows) or a containerized PostgreSQL in an external Docker network.
    - **Host Database**: Set `POSTGRES_HOST=host.docker.internal` in `envs/.env.core`.
-   - **Container Database**: Set `POSTGRES_HOST=radar-postgres` in `envs/.env.core`. Note: The external network `radar-network` must be created first (usually managed by the database compose file in the `radar-infra` project).
+   - **Container Database**: Set `POSTGRES_HOST=radar-postgres` in `envs/.env.core`. Note: The external network `radar-network` must be created first (usually managed by the database compose file in the sibling project `radar-infra`).
    ```textmate
    docker compose -f docker/docker-compose.core.yml up -d --build
    ```
@@ -197,7 +197,7 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - Updates `uv`, activates the virtual environment, upgrades `uv.lock`, syncs dependencies, and reinstalls TA-Lib from the prebuilt wheel.
 
 ## Project Status
-In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base) is managed in the `radar-infra` project.
+In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
 ## License
 This project is licensed under the MIT License. See the LICENSE file if available; otherwise, you may consider the standard MIT terms applicable by default.
