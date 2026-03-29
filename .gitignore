@@ -8,14 +8,10 @@
 # project
 auto/
 docs/
-docker_volume/
 sql/
-wheels/
 zero/
 settings.*.yml
-# docker-compose override files
-docker-compose.*.yml
-!docker-compose.core.yml
+
 
 # Environment
 .venv

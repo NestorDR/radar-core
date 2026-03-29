@@ -1,4 +1,5 @@
 # docker/docker-compose.core.yml
+# Hybrid Core service: attached to both host and external Docker networks to allow switching the PostgreSQL target via .env configuration.
 
 services:
   # --- Unattended analysis core service ---
@@ -11,14 +12,13 @@ services:
     restart: 'no'                             # It will either run manually or remain paused after execution
     shm_size: '2gb'                           # CRITICAL for HPC/Polars: Increase shared memory size
     env_file:
-      - ..\envs\.env.core                     # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
-    environment:
-      - POSTGRES_HOST=host.docker.internal    # Special name resolved to the host IP address (host PostgreSQL instance)
-    networks:
-      - radar-network                         # Shared network for inter-service communication
-    # Required to connect from the container to the Windows host DB
+      - ../envs/.env.core                     # Unversioned file .env with secure credentials, its path is relative to this docker-compose.yml
+    # Required to connect from the container to a PostgreSQL hosted on Windows
     extra_hosts:
       - "host.docker.internal:host-gateway"   # Maps host.docker.internal to the host IP
+    # Required to connect from this container to an external PostgreSQL container
+    networks:
+      - radar-network                         # Shared network for inter-service communication
     # Resource limits - a similar concept used in K8S
     # deploy:
     #    resources:
@@ -31,7 +31,6 @@ services:
 
 # Network configuration for service communication
 networks:
-  # Define the shared bridge network for inter-service communication.
-  radar-network:
-    name: radar-network                       # Network name
-    driver: bridge                            # Standard bridge network for local deployment
+  # Shared external network to communicate with the PostgreSQL container from project `radar-infra` (see `docker-compose.dev.yml`)
+  radar-network:                              # Network name
+    external: true                            # Use an existing network created outside of this `compose` file (e.g.`docker network create radar-network`)
