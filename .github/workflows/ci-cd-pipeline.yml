@@ -1,0 +1,121 @@
+# .github/workflows/ci-cd-pipeline.yml
+# PURPOSE: Master CI/CD Pipeline for Radar-Core
+# FLOW: Tests (Placeholder) -> Build & Push Image (x86_64) -> Deploy to a VPS
+
+name: Radar Core CI/CD Pipeline
+
+# 1. TRIGGERS: When does this pipeline run?
+# Only trigger this automated process when code is merged or pushed to 'main'.
+on:
+  push:
+    branches:
+      - main
+      - feature/setup-ci-cd
+
+# 2. JOBS: The stages of the pipeline
+jobs:
+  # ---------------------------------------------------------
+  # STAGE 1: TESTING (Placeholder)
+  # ---------------------------------------------------------
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      # TODO: Future implementation. 
+      # Here install 'uv', set up Python, and run 'pytest'.
+      - name: Placeholder for Pytest
+        run: |
+          echo "Unit tests stage placeholder."
+          echo "Once tests are implemented, this step will block the build if tests fail."
+
+  # ---------------------------------------------------------
+  # STAGE 2: BUILD AND PUSH
+  # ---------------------------------------------------------
+  build-and-push:
+    name: Build & Push Docker Image
+    # 'needs' ensures this job only starts if 'test' completes successfully
+    needs: test 
+    # Standard x86_64 Ubuntu runner provided by GitHub
+    runs-on: ubuntu-latest
+
+    # Permissions required to publish packages to GitHub Container Registry (GHCR)
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Authenticate in GHCR to have permission to upload the final image.
+      # GITHUB_TOKEN is automatically provided by GitHub Actions per run.
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Extract metadata to automatically tag the image.
+      # Use the tag 'latest' for the deployment script, and also with the short git SHA for rollback purposes.
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=short
+
+      # Build the image using the Dockerfile and push it to GHCR.
+      # By running on 'ubuntu-latest', Docker natively builds an x86_64 image.
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ---------------------------------------------------------
+  # STAGE 3: DEPLOY TO A VPS
+  # ---------------------------------------------------------
+  deploy:
+    name: Deploy to Production VM
+    # Only deploy if the build-and-push stage was successful
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    # TODO: Change to 'true' or delete this line when the Cloud VPS is ready.
+    # Deactivate this job temporarily using 'if: false' to prevent it from running.
+    if: false
+
+    steps:
+      # Use an SSH action to connect to the cloud VM securely
+      - name: Execute remote SSH commands to deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          # These secrets must be configured in the GitHub Repository:
+          # Settings -> Secrets and variables -> Actions -> Repository secrets
+          host: ${{ secrets.HETZNER_HOST_IP }}
+          username: radar-admin
+          key: ${{ secrets.HETZNER_SSH_PRIVATE_KEY }}
+          
+          # The script executed INSIDE the cloud VM
+          # 1. Pulls the new image just built.
+          # 2. The next time the Systemd Timer fires (e.g., 10:30), it will automatically use this new 'latest' image.
+          script: |
+            echo "Connected to cloud VM."
+            echo "Pulling the latest radar-core image..."
+            
+            # Use 'sudo' if your user requires it to run docker, or if the user is in the 'docker' group, 'docker pull' is enough.
+            docker pull ghcr.io/${{ github.repository }}:latest
+            
+            # Optional cleanup: remove old unused images to prevent disk space issues on the VM over time.
+            docker image prune -a -f --filter "until=24h"
+            
+            echo "Deployment successful. New image ready for the next scheduled run."
