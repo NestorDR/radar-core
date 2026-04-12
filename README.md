@@ -28,7 +28,7 @@ The project follows High Performance Practices, utilizing concurrent processing 
 
 TA‑Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA‑Lib can be installed from PyPI (see environment markers in pyproject.toml).
 
-Note: The project was developed on Windows 11, Python 3.13, Pycharm 2025, and Docker Desktop 4.50 
+Note: The project is developed on a Windows 11 host. All listed tools (Python 3.13, PyCharm 2026, PostgreSQL 17.x, and Docker Desktop 4.68+) are running locally on this host.
 
 ## Installation
 You can install with either uv (recommended for this project) or pip.
