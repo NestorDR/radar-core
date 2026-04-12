@@ -1,4 +1,4 @@
-# radar-core/.github/workflows/build-prod.yml
+# .github/workflows/build-prod.yml
 
 name: Build and Publish ARM64 Image
 
