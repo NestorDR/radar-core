@@ -5,7 +5,7 @@
 name: Radar Core CI/CD Pipeline
 
 # 1. TRIGGERS: When does this pipeline run?
-# Only trigger this automated process when code is merged or pushed to 'main'.
+# Only trigger this automated process when code is merged or pushed to 'branches listed' below.
 on:
   push:
     branches:
@@ -38,7 +38,7 @@ jobs:
     name: Build & Push Docker Image
     # 'needs' ensures this job only starts if 'test' completes successfully
     needs: test 
-    # Standard x86_64 Ubuntu runner provided by GitHub
+    # Standard x86_64 Ubuntu runner (temporary virtual server) provided by GitHub
     runs-on: ubuntu-latest
 
     # Permissions required to publish packages to GitHub Container Registry (GHCR)
@@ -47,6 +47,7 @@ jobs:
       packages: write
 
     steps:
+      # Check out (clone, download) the repository to the runner (temporary virtual server).
       - name: Checkout repository
         uses: actions/checkout@v4
 
