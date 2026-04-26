@@ -171,7 +171,7 @@ class Settings:
                 main_module_ = sys.modules["__main__"]
                 main_file = getattr(main_module_, "__file__", None)
                 # stem: final component of the path without extension
-                log_filename = Path(main_file).stem if main_file else "app"
+                log_filename = Path(str(main_file)).stem if main_file else "app"
 
             log_file_path_ = logs_folder_ / f'{log_filename}.log'
 
@@ -179,8 +179,8 @@ class Settings:
                 "class": "logging.handlers.RotatingFileHandler",
                 "formatter": "default",
                 "filename": str(log_file_path_),
-                "maxBytes": 524288,     # Default is 512KB
-                "backupCount": 3,
+                "maxBytes": 1024 * 64,
+                "backupCount": 12,
                 "level": self.verbosity_level,
             }
             handlers_.append("file")
@@ -220,6 +220,10 @@ class Settings:
         """
         # Get the settings file path from the environment variable or use a default
         file_name_ = os.getenv('RADAR_SETTING_FILE', 'settings.yml')
+
+        # Build the settings file path (with `pathlib.Path` the result depends on whether `file_name_` is relative or absolute.)
+        # - relative paths are resolved from the module folder,
+        # - while absolute paths are preserved.
         file_path_ = self._module_folder / file_name_
         message_ = f'Reading YAML file {file_path_}...'
         verbose(message_, INFO, self.verbosity_level)

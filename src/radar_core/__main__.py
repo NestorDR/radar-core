@@ -12,19 +12,21 @@ from radar_core.settings import Settings
 # analyzer: defines the application's main logic.
 from radar_core.analyzer import analyzer
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.log_helper import begin_logging, end_logging
+from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
 
 # Use of __name__ & __main__
 # When the Python interpreter reads a code file, it completely executes the code in it.
 # For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be '__main__',
 # however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
 # 'my_module'
-if __name__ == "__main__":
-    log_filename_ = "main.analyzer"
+if __name__ == '__main__':
+    log_filename_ = 'main.analyzer'
     # Initialize app settings
     settings = Settings(log_filename_)
-    # Get root logger and log start messages
+    # Logger initialization
     logging.config.dictConfig(settings.log_config)
+    rotate_log_at_startup()
+    # Get root logger and log start messages
     logger_ = getLogger(__name__)
     begin_logging(logger_, log_filename_, INFO)
 

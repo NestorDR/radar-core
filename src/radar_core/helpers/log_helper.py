@@ -4,14 +4,29 @@
 # datetime: provides classes for manipulating dates and times.
 from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-from logging import INFO, WARNING, Logger
-
+from logging import INFO, WARNING, getLogger, Logger
+from logging.handlers import RotatingFileHandler
+# os: allows access to functionalities dependent on the Operating System
+import os
 
 DEFAULT_CONSOLE_LOG_LEVEL = WARNING  # Console handler logs only warning, error and critical levels
 
 
+def rotate_log_at_startup() -> None:
+    """
+    Rotates configured file logs once at startup, before worker processes are created.
+    This keeps startup messages in a fresh log file and reduces rollover contention during multiprocessing.
+    """
+    logger_ = getLogger()
+
+    for handler_ in logger_.handlers:
+        if isinstance(handler_, RotatingFileHandler) and os.path.exists(handler_.baseFilename):
+            if os.path.getsize(handler_.baseFilename) > 0:
+                handler_.doRollover()
+
+
 def begin_logging(logger: Logger,
-                  script_name: str,
+                  script_name: str | bytes,
                   verbosity_level: int = INFO) -> None:
     """
     Logs the startup process for a given script using the provided logger.

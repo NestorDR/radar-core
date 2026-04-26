@@ -55,7 +55,7 @@ class PriceProvider:
         prices_df = prices_df.reset_index()
 
         # Make sure that only required columns are part of the Pandas Dataframe to avoid future conversion issues
-        prices_df = prices_df.loc[:, ["Date", "Open", "High", "Low", "Close", "Volume"]]
+        prices_df = prices_df.loc[:, ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
 
         # Normalize dtypes to numpy-backed ones and avoid use of `pyarrow`
         # When set to 'coerce', any non-numeric values will be converted to NaN
@@ -63,15 +63,15 @@ class PriceProvider:
         prices_df['Date'] = prices_df['Date'].astype('datetime64[ns]')
 
         # OHLC -> float64
-        for col in ("Open", "High", "Low", "Close"):
+        for col in ('Open', 'High', 'Low', 'Close'):
             prices_df[col] = prices_df[col].astype('float64')
 
         # Volume -> int64 if possible else float64 (because NaN cannot live in int64)
-        if "Volume" in prices_df.columns:
-            prices_df["Volume"] = (
-                prices_df["Volume"].astype("float64")
-                if prices_df["Volume"].isna().any()
-                else prices_df["Volume"].astype("int64")
+        if 'Volume' in prices_df.columns:
+            prices_df['Volume'] = (
+                prices_df['Volume'].astype('float64')
+                if prices_df['Volume'].isna().any()
+                else prices_df['Volume'].astype('int64')
             )
 
         # Convert the Pandas DataFrame to a Polars DataFrame
@@ -89,7 +89,7 @@ class PriceProvider:
         # Filtering and casting in a single optimized Polars context
         prices_pl_df_ = (
             prices_pl_df_
-            # Remove rows without "Close" prices
+            # Remove rows without 'Close' prices
             .filter(pl.col('Close').is_not_nan())
             .with_columns([
                 pl.col('Date').cast(pl.Date),
@@ -100,7 +100,7 @@ class PriceProvider:
             ])
             .with_columns(
                 # Calculate percentage change
-                (pl.col("Close").pct_change() * 100).alias("PercentChange")
+                (pl.col('Close').pct_change() * 100).alias('PercentChange')
             )
         )
 
@@ -126,7 +126,7 @@ class PriceProvider:
         :return: A dictionary mapping each symbol to its Polars DataFrame. Symbols with errors will be omitted.
         """
         if not symbols:
-            logger_.warning("List of symbols empty.")
+            logger_.warning('List of symbols empty.')
             return {}
 
         # Step 1: Translate internal symbols to provider tickers (currently only Yahoo Finance is supported)
@@ -135,7 +135,7 @@ class PriceProvider:
 
         # Step 2: Download data using the translated tickers
         results_: dict[str, pl.DataFrame] = {}
-        message_ = f"Starting download for {len(tickers_)} tickers from Yahoo Finance..."
+        message_ = f'Starting download for {len(tickers_)} tickers from Yahoo Finance...'
         verbose(message_, INFO, self.verbosity_level)
         logger_.info(message_)
 
@@ -144,10 +144,10 @@ class PriceProvider:
             #        https://github.com/pydata/pandas-datareader/issues/170
             #        https://pypi.org/project/yfinance/
 
-            # Download prices from prices source with this parameter list:
+            # Download prices from price source with this parameter list:
             # tickers, start = None, end = None, actions = False, threads = True,
             # ignore_tz = None, group_by = 'column', auto_adjust = None, back_adjust = False,
-            # repair = False, keepna = False, progress = True, period = None, interval = "1d",
+            # repair = False, keepna = False, progress = True, period = None, interval = '1d',
             # prepost = False, proxy = _SENTINEL_, rounding = False, timeout = 10, session = None,
             # multi_level_index = True
             multi_symbol_df_ = yf.download(tickers_, self.start_date, self.end_date,
@@ -155,7 +155,7 @@ class PriceProvider:
                                            threads=max_workers, group_by='ticker')
 
             if multi_symbol_df_.empty:
-                logger_.warning("Download returned an empty DataFrame for all tickers.")
+                logger_.warning('Download returned an empty DataFrame for all tickers.')
                 return {}
 
             # Step 3: Process results, mapping tickers back to original symbols
@@ -163,7 +163,7 @@ class PriceProvider:
                 # For single ticker downloads, yfinance might not use multi-level columns unless group_by is used.
                 # The current code handles both multi-level and single-level column structures.
                 if ticker not in multi_symbol_df_.columns:
-                    logger_.warning(f"No data downloaded for symbol: {symbol} (ticker: {ticker})")
+                    logger_.warning(f'No data downloaded for symbol: {symbol} (ticker: {ticker})')
                     continue
 
                 symbol_df_ = multi_symbol_df_[ticker].dropna(how='all')
@@ -175,7 +175,7 @@ class PriceProvider:
             logger_.error(f'An exception occurred during download: {e_}', exc_info=True)
 
         logger_.log(self.verbosity_level,
-                    f"Successfully processed data for {len(results_)} out of {len(symbols)} symbols.")
+                    f'Successfully processed data for {len(results_)} out of {len(symbols)} symbols.')
         return results_
 
 
@@ -187,44 +187,46 @@ if __name__ == '__main__':
     import logging.config
     # --- App modules ---
     from radar_core.settings import Settings
-    from radar_core.helpers.log_helper import begin_logging, end_logging
+    from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
 
     # Initialize app settings
-    settings = Settings()
-    # Logger initialisation
-    script_name_ = os.path.basename(__file__)
-    logging.config.dictConfig(settings.log_config)
+    settings_ = Settings()
+    # Logger initialization
+    logging.config.dictConfig(settings_.log_config)
+    rotate_log_at_startup()
+    # Get root logger and log start messages
     logger_ = getLogger(__name__)
+    script_name_ = os.path.basename(__file__)
     begin_logging(logger_, script_name_, INFO)
 
     price_provider_ = PriceProvider()
 
     # --- Test Case 1: Download a single symbol that requires translation ---
-    print("--- Testing single download ---")
+    print('--- Testing single download ---')
     test_symbol_ = 'QQQ'
     prices_data_ = price_provider_.get_prices([test_symbol_])
     if test_symbol_ in prices_data_:
         data_ = prices_data_[test_symbol_]
-        print(f"{test_symbol_} - Shape: {data_.shape}")
+        print(f'{test_symbol_} - Shape: {data_.shape}')
         print(data_.head(2))
         print(data_.tail(2))
 
     # --- Test Case 2: Download multiple symbols ---
-    print("\n--- Testing multiple symbols download ---")
-    test_symbols_ = settings.get_symbols()
+    print('\n--- Testing multiple symbols download ---')
+    test_symbols_ = settings_.get_symbols()
     init_dt_ = datetime.now()  # Identify the date and time when the process is started
     prices_data_ = price_provider_.get_prices(test_symbols_)
     end_dt_ = datetime.now()
 
-    print("\nConcurrent download complete. Results:")
+    print('\nConcurrent download complete. Results:')
     for test_symbol_, data_ in prices_data_.items():
-        print(f"{test_symbol_} - Shape: {data_.shape}")
+        print(f'{test_symbol_} - Shape: {data_.shape}')
         print(data_.tail(2))
 
     message = (init_dt_.strftime('Concurrent download executed from %Y-%m-%d %H:%M:%S ')
                 + end_dt_.strftime('to %Y-%m-%d %H:%M:%S')
                 + f' - Elapsed time {(end_dt_ - init_dt_).total_seconds() / 60:.1f} min')
-    verbose(message, INFO, settings.verbosity_level)
+    verbose(message, INFO, settings_.verbosity_level)
     logger_.info(message)
 
     end_logging(logger_)

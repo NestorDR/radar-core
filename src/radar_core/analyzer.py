@@ -88,7 +88,7 @@ def valid_prices(timeframe: int,
                and REQUIRED_PRICE_COLS.issubset(set(prices_df.columns)))
 
     if not result_:
-        message_ = f"[{symbol}]: Its {TIMEFRAMES[timeframe]} prices dataframe is not valid."
+        message_ = f'[{symbol}]: Its {TIMEFRAMES[timeframe]} prices dataframe is not valid.'
         verbose(message_, WARNING, verbosity_level)
         logger_.warning(message_)
 
@@ -129,7 +129,8 @@ def analyze(timeframe: int,
 
     # Profitable SMAs identification
     if strategies.sma:
-        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, percent_changes_, verbosity_level)
+        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, percent_changes_,
+                                verbosity_level)
 
     # Profitable RSI-based identification
     if strategies.rsi_sma or strategies.rsi_rc or strategies.rsi_2b:
@@ -209,12 +210,12 @@ def process_symbol(symbol: str,
                     analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies, verbosity_level)
 
             symbol_elapsed_ = time.monotonic() - symbol_started_at_
-            message_ = f"[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min"
-            verbose(message_ + "\n", INFO, verbosity_level)
+            message_ = f'[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min'
+            verbose(message_ + '\n', INFO, verbosity_level)
             logger_.info(message_)
 
         except Exception as e:
-            message_ = f"[{symbol_}]: Error while analyzing prices due to error: {e}."
+            message_ = f'[{symbol_}]: Error while analyzing prices due to error: {e}.'
             verbose(message_, ERROR, verbosity_level)
             logger_.exception(message_, exc_info=e)
 
@@ -284,14 +285,15 @@ def analyzer(settings: Settings,
             # Build kwargs dynamically based on enabled strategies in settings.yml
             # get_evaluable_strategies() returns a list of strings matching the keys in strategy_map_
             # The strategy key in the map is the attribute name
-            active_strategies_: dict = {strategy_key_: factory_() for strategy_key_, factory_ in strategy_map_.items() if
+            active_strategies_: dict = {strategy_key_: factory_() for strategy_key_, factory_ in strategy_map_.items()
+                                        if
                                         strategy_key_ in settings.get_evaluable_strategies()}
             # Instantiate strategies container only with active strategies
             strategies_ = Strategies(**active_strategies_)
 
             # If no strategy is active, skip processing
             if not any(vars(strategies_).values()):
-                message_ = "No active strategies configured to run."
+                message_ = 'No active strategies configured to run.'
                 verbose(message_, WARNING, verbosity_level_)
                 logger_.warning(message_)
                 return 0
@@ -305,7 +307,7 @@ def analyzer(settings: Settings,
                 num_workers_ = (os.cpu_count() or 2)
 
             # Use a ProcessPoolExecutor to analyze symbols in parallel
-            message_ = f"Starting parallel analysis for {len(prices_data_)} symbols using {num_workers_} workers..."
+            message_ = f'Starting parallel analysis for {len(prices_data_)} symbols using {num_workers_} workers...'
             verbose(message_, INFO, verbosity_level_)
             logger_.info(message_)
 
@@ -354,7 +356,7 @@ def analyzer(settings: Settings,
 
                     except Exception as e:
                         # This will catch errors from within the process_symbol function
-                        message_ = f"A task generated an exception: {e}"
+                        message_ = f'A task generated an exception: {e}'
                         verbose(message_, ERROR, verbosity_level_)
                         logger_.exception(message_, exc_info=e)
         else:
@@ -373,16 +375,16 @@ def analyzer(settings: Settings,
 
     except OperationalError as e:
         # Log the critical error using your application's logger
-        message_ = "Database connection error. CRITICAL app terminating."
-        verbose(f"{message_} Error: {e}", CRITICAL, verbosity_level_)
+        message_ = 'Database connection error. CRITICAL app terminating.'
+        verbose(f'{message_} Error: {e}', CRITICAL, verbosity_level_)
         logger_.exception(message_, exc_info=e)
 
         return 1  # Exit code to indicate failure
 
     except Exception as e:
         # Catch any other unexpected exceptions
-        message_ = "An unexpected error occurred. CRITICAL app terminating."
-        verbose(f"{message_} Error: {e}", CRITICAL, verbosity_level_)
+        message_ = 'An unexpected error occurred. CRITICAL app terminating.'
+        verbose(f'{message_} Error: {e}', CRITICAL, verbosity_level_)
         logger_.exception(message_, exc_info=e)
 
         # Include traceback for unexpected errors
@@ -394,19 +396,20 @@ def analyzer(settings: Settings,
 
 # Use of __name__ & __main__
 # When the Python interpreter reads a code file, it completely executes the code in it.
-# For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be '__main__',
-#  however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
-#  'my_module'
-if __name__ == "__main__":
+# For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be equal to '__main__'.
+# However, if it is called by importing it from another module: import my_module, the __name__ attribute will be 'my_module'.
+if __name__ == '__main__':
     # --- Python modules ---
     import logging.config
     # --- App modules ---
-    from radar_core.helpers.log_helper import begin_logging, end_logging
+    from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
 
     # Initialize app settings
     settings_ = Settings()
-    # Logger initialisation
+    # Logger initialization
     logging.config.dictConfig(settings_.log_config)
+    rotate_log_at_startup()
+    # Get root logger and log start messages
     logger_ = getLogger(__name__)
     script_name_ = os.path.basename(__file__)
     begin_logging(logger_, script_name_, INFO)
