@@ -1,5 +1,4 @@
 # IDEs
-.aiassistant/
 .idea/
 .vscode/
 *.swp
@@ -7,7 +6,7 @@
 
 # project
 database/
-docs/
+notes/
 zero/
 settings.*.yml
 *.rar
