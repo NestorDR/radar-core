@@ -10,7 +10,8 @@ from datetime import datetime
 # io: implements the core facilities for file-like objects and I/O streams.
 import io
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
-from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, config, getLogger
+from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, getLogger
+from logging.handlers import QueueHandler, QueueListener
 # multiprocessing: needed to force 'spawn' context on Linux/Docker
 import multiprocessing
 # os: allows access to functionalities dependent on the Operating System
@@ -57,15 +58,23 @@ def clean(symbols: list[str],
     verbose(f'Cleaned {deleted_ratios} rows from the database for deprecated symbols.', INFO, verbosity_level)
 
 
-def init_worker(log_config: dict) -> None:
+def init_worker(log_queue,
+                log_level: int) -> None:
     """
-    Initializes the logging configuration for the worker process, required for Windows & macOS (spawn).
-    This ensures that logs from child processes are correctly handled and written to the log file.
+    Initializes worker logging through a queue, required for safe multiprocessing logging.
+    Workers must not write directly to rotating log files.
 
-    :param log_config: Dictionary with logging configuration from the main process.
+    :param log_queue: Multiprocessing queue used to send log records to the parent process.
+    :param log_level: Minimum logging level configured for the worker process.
     """
-    if log_config:
-        config.dictConfig(log_config)
+    root_logger_ = getLogger()
+
+    for handler_ in root_logger_.handlers[:]:
+        root_logger_.removeHandler(handler_)
+        handler_.close()
+
+    root_logger_.setLevel(log_level)
+    root_logger_.addHandler(QueueHandler(log_queue))
 
 
 def valid_prices(timeframe: int,
@@ -220,13 +229,14 @@ def process_symbol(symbol: str,
             logger_.exception(message_, exc_info=e)
 
     # Return results
-    if is_live_mode_:
-        return ""  # Nothing to return, already printed live
+    if log_capture_buffer_ is not None:
+        # It is not live mode, so we need to return the captured logs
+        # Get the captured stdout value for returning, close the buffer (although GC handles it)
+        captured_output_ = log_capture_buffer_.getvalue()
+        log_capture_buffer_.close()
+        return captured_output_
 
-    # Get the captured stdout value for returning, close the buffer (although GC handles it)
-    captured_output_ = log_capture_buffer_.getvalue()
-    log_capture_buffer_.close()
-    return captured_output_
+    return ''
 
 
 def analyzer(settings: Settings,
@@ -315,50 +325,61 @@ def analyzer(settings: Settings,
             # Use 'spawn' context to avoid Polars thread pool deadlocks caused by 'fork' default.
             mp_context = multiprocessing.get_context('spawn')
 
-            # Use initializer to configure logging once per worker process
-            with concurrent.futures.ProcessPoolExecutor(
-                    max_workers=num_workers_,
-                    mp_context=mp_context,  # Force spawn
-                    initializer=init_worker,
-                    initargs=(settings.log_config,)
-            ) as executor:
-                # Use a set to store futures
-                futures_ = []
+            # Use a logging queue so worker processes never write directly to rotating file handlers.
+            # The parent process remains the only owner of the real console/file handlers.
+            log_queue_ = mp_context.Queue()
+            log_listener_ = QueueListener(log_queue_, *getLogger().handlers, respect_handler_level=True)
+            log_listener_.start()
 
-                # Create a future for each symbol analysis task using destructive iteration to free memory in the main
-                # process immediately. The items are popped from the dictionary one by one.
-                # Once passed to executor.submit, the main process no longer needs the DataFrame reference.
-                # ---
-                # Update symbols to those whose prices have actually been downloaded
-                # and keep the original order (FIFO: First-In, First-Out) by emptying the dictionary to free resources
-                symbols = list(prices_data_.keys())
-                for symbol_ in symbols:
-                    # .pop(symbol_) returns the DataFrame and removes the entry from the dict immediately
-                    prices_df_ = prices_data_.pop(symbol_)
+            try:
+                # Use initializer to configure logging once per worker process
+                with concurrent.futures.ProcessPoolExecutor(
+                        max_workers=num_workers_,
+                        mp_context=mp_context,  # Force spawn
+                        initializer=init_worker,
+                        initargs=(log_queue_, verbosity_level_)
+                ) as executor:
+                    # Use a set to store futures
+                    futures_ = []
 
-                    # Submit the task to the Executor Pool
-                    future_ = executor.submit(process_symbol,
-                                              symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_)
-                    futures_.append(future_)
+                    # Create a future for each symbol analysis task using destructive iteration to free memory in the main
+                    # process immediately. The items are popped from the dictionary one by one.
+                    # Once passed to executor.submit, the main process no longer needs the DataFrame reference.
+                    # ---
+                    # Build the symbol list from prices actually downloaded
+                    # and keep the original order (FIFO: First-In, First-Out) by emptying the dictionary to free resources
+                    downloaded_symbols_ = list(prices_data_.keys())
+                    for symbol_ in downloaded_symbols_:
+                        # .pop(symbol_) returns the DataFrame and removes the entry from the dict immediately
+                        prices_df_ = prices_data_.pop(symbol_)
 
-                    # Explicitly delete the local reference to the DataFrame to encourage GC
-                    del prices_df_
+                        # Submit the task to the Executor Pool
+                        future_ = executor.submit(process_symbol,
+                                                  symbol_, prices_df_, strategies_, shortable_symbols_,
+                                                  verbosity_level_)
+                        futures_.append(future_)
 
-                # Loop over every future to run its process. Wait for all futures to complete and process results
-                for future_ in concurrent.futures.as_completed(futures_):
-                    try:
-                        captured_logs_ = future_.result()  # Get the captured logs string
+                        # Explicitly delete the local reference to the DataFrame to encourage GC
+                        del prices_df_
 
-                        if captured_logs_:
-                            # Print the captured atomic block of logs to the console
-                            # flush=True ensures immediate output in containerized environments (Docker)
-                            print(captured_logs_, end='', flush=True)
+                    # Loop over every future to run its process. Wait for all futures to complete and process results
+                    for future_ in concurrent.futures.as_completed(futures_):
+                        try:
+                            captured_logs_ = future_.result()  # Get the captured logs string
 
-                    except Exception as e:
-                        # This will catch errors from within the process_symbol function
-                        message_ = f'A task generated an exception: {e}'
-                        verbose(message_, ERROR, verbosity_level_)
-                        logger_.exception(message_, exc_info=e)
+                            if captured_logs_:
+                                # Print the captured atomic block of logs to the console
+                                # flush=True ensures immediate output in containerized environments (Docker)
+                                print(captured_logs_, end='', flush=True)
+
+                        except Exception as e:
+                            # This will catch errors from within the process_symbol function
+                            message_ = f'A task generated an exception: {e}'
+                            verbose(message_, ERROR, verbosity_level_)
+                            logger_.exception(message_, exc_info=e)
+            finally:
+                log_listener_.stop()
+
         else:
             message_ = 'No available securities to analyze in the settings file'
             verbose(message_, WARNING, verbosity_level_)

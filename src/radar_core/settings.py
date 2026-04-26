@@ -60,7 +60,7 @@ class Settings:
         Otherwise, it sets the verbosity level based on the variable from the real environment or default.
         """
         message_verbosity_level_ = DEBUG
-        if os.getenv('RADAR_ENV', 'dev') == 'dev':
+        if (os.getenv('RADAR_ENV') or 'dev') == 'dev':
             # Attempts to find an .env file in the current directory or any of its parent dirs up to 2 levels.
             env_path_ = dotenvy_py.find_upwards(str(self._module_folder / '.env'), 2)
             if env_path_:
@@ -120,7 +120,6 @@ class Settings:
 
         :return: A dictionary with the logging configuration.
         """
-        main_folder_ = Path(__file__).resolve().parent  # radar_core folder
         enable_file_logging_ = self._parse_bool_env('RADAR_ENABLE_FILE_LOGGING', False)
         handlers_ = ["console"]
 
@@ -163,8 +162,14 @@ class Settings:
         config_['loggers']['yfinance']['level'] = 'WARNING'
 
         if enable_file_logging_:
-            logs_folder_ = main_folder_ / "logs"
-            logs_folder_.mkdir(exist_ok=True)
+            log_folder_name_ = os.getenv('RADAR_LOG_FOLDER') or 'logs'
+            log_folder_name_ = os.path.expandvars(log_folder_name_)
+
+            # Build the log folder path (with `pathlib.Path` the result depends on whether `log_folder_name_` is relative or absolute.)
+            # - relative paths are resolved from the module folder,
+            # - while absolute paths are preserved.
+            logs_folder_ = self._module_folder / Path(log_folder_name_).expanduser()
+            logs_folder_.mkdir(parents=True, exist_ok=True)
 
             if not log_filename:
                 # Get the main file of the running stack
@@ -179,7 +184,7 @@ class Settings:
                 "class": "logging.handlers.RotatingFileHandler",
                 "formatter": "default",
                 "filename": str(log_file_path_),
-                "maxBytes": 1024 * 64,
+                "maxBytes": 1024 * 1024,
                 "backupCount": 12,
                 "level": self.verbosity_level,
             }
@@ -196,17 +201,17 @@ class Settings:
         :return: The maximum number of workers based on the environment variable,
             or 0 if the value is not a positive integer or invalid.
         """
-        env_max_workers_ = os.getenv('RADAR_MAX_WORKERS', '0')
+        env_max_workers_ = os.getenv('RADAR_MAX_WORKERS') or '1'
 
         try:
             # Return the value only if it's a positive integer, otherwise 0.
-            return max(int(env_max_workers_), 0)
+            return max(int(env_max_workers_), 1)
 
         except ValueError:
             message_ = f"Invalid value for RADAR_MAX_WORKERS: '{env_max_workers_}'. Must be an integer. Defaulting to all available cores."
             verbose(message_, WARNING, self.verbosity_level)
             logger_.warning(message_)
-            return 0
+            return 1
 
     # endregion Environment Variables
 
