@@ -130,13 +130,14 @@ Project settings are managed by the `Settings` class. You can configure the appl
 
 ### Key Environment Variables
 
-| Variable                    | Description                                                         | Default |
-|:----------------------------|:--------------------------------------------------------------------| :--- |
-| `RADAR_LOG_LEVEL`           | Logging verbosity (10=DEBUG, 20=INFO, etc.)                         | `20` (INFO) |
-| `RADAR_ENABLE_FILE_LOGGING` | Write logs to `src/radar_core/logs/`                                | `true` |
-| `RADAR_MAX_WORKERS`         | Number of parallel processes. Set to `0` to use all available CPUs. | `0` (Auto) |
+| Variable                    | Description                                                         | Default                       |
+|:----------------------------|:--------------------------------------------------------------------|:------------------------------|
+| `RADAR_LOG_LEVEL`           | Logging verbosity (10=DEBUG, 20=INFO, etc.)                         | `20` (INFO)                   |
+| `RADAR_ENABLE_FILE_LOGGING` | Write logs to a file                                                | `true`                        |
+| `RADAR_LOG_FOLDER`          | Optional folder for file logs if apply                              | `src/radar_core/logs/`        |
+| `RADAR_MAX_WORKERS`         | Number of parallel processes. Set to `0` to use all available CPUs. | `0` (Auto)                    |
 | `RADAR_SETTING_FILE`        | Custom path to the settings YAML file                               | `src/radar_core/settings.yml` |
-| `POSTGRES_*`                | Database settings                                                   | |
+| `POSTGRES_*`                | Database settings                                                   |                               |
 
 ## Docker
 Containerization is available for a fully reproducible environment. The image is multi-stage and builds the TA-Lib C library inside the container, so you don’t need any TA-Lib setup on your host.
@@ -166,7 +167,7 @@ docker run --rm \
 ```
 
 Using Docker Compose:
-The project includes several compose files in the `docker/` directory for different development scenarios. They rely on `.env` files located in the `envs/` directory.
+The project includes a couple of compose files in the `docker/` directory . They rely on `.env` files located in the `envs/` directory.
 
 1. **Hybrid Core (`docker/docker-compose.core.yml`)**: Runs the analyzer. It is configured to connect to either a PostgreSQL instance on the host (Windows) or a containerized PostgreSQL in an external Docker network.
    - **Host Database**: Set `POSTGRES_HOST=host.docker.internal` in `envs/.env.core`.
@@ -179,6 +180,7 @@ The project includes several compose files in the `docker/` directory for differ
    ```textmate
    docker compose -f docker/docker-compose.mb.yml up -d
    ```
+3. **End-to-End Environments (`radar_infra/docker-compose.*.yml`)**: Define different development or deployment scenarios (dev, e2e, prod) that include both the database and Metabase. These are managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) repository.
 
 Notes:
 - The Core Compose file builds the image. The Metabase Compose uses the official pre-built image.
