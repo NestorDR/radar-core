@@ -16,9 +16,8 @@ from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log
 
 # Use of __name__ & __main__
 # When the Python interpreter reads a code file, it completely executes the code in it.
-# For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be '__main__',
-# however, if it is called by importing it from another module: import my_module, the __name__ attribute will be
-# 'my_module'
+# For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be equal to '__main__'.
+# However, if it is called by importing it from another module: import my_module, the __name__ attribute will be 'my_module'.
 if __name__ == '__main__':
     log_filename_ = 'main.analyzer'
     # Initialize app settings
