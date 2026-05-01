@@ -4,7 +4,7 @@ Models auto-generated through sqlacodegen (https://github.com/agronholm/sqlacode
 """
 
 # --- Python modules ---
-# typing: provides runtime support for type hints
+# typing: provides support for type hints and annotations.
 from typing import TYPE_CHECKING
 
 # --- Third Party Libraries ---

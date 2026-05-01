@@ -3,7 +3,6 @@
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG
-# typing: provides runtime support for type hints.
 
 # --- Third Party Libraries ---
 # numba: JIT compiler that compiles a subset of Python and NumPy code into optimized machine code using the industry-standard LLVM compiler library

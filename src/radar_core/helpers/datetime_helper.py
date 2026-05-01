@@ -32,7 +32,7 @@ def propose_start_dt(timeframe: int = DAILY,
     :param long_term: Specifies whether taking an old date.
     :param use_tuning_days: If the parameter long_term_ = False, flag to add tuning days for Technical Analysis
      indicators, which will backdate the initial date, and then perhaps discarded by a speculation strategy. In intraday
-     frame adds 21 running days. For daily frame, it adds 280 running days. Both cases are equivalent to 200 price bars.
+     frame adds 21 running days. For the daily frame, it adds 280 running days. Both cases are equivalent to 200 price bars.
     :param randomize_from: Flag to request a small additional random time window
 
     :return: Default date from which historical prices will be acquired.
@@ -89,10 +89,10 @@ def to_weekly_timeframe(daily_df: pl.DataFrame,
     """
     Group daily prices into weekly timeframes, using Polars.
 
-    :param daily_df: DataFrame with [OHLCV%] prices on daily time frame.
+    :param daily_df: DataFrame with [OHLCV%] prices on a daily time frame.
     :param column_name: Name of the column containing the DateTime value.
 
-    :return: Polars.DataFrame with [OHLCV%] prices on weekly time frame.
+    :return: Polars.DataFrame with [OHLCV%] prices on a weekly time frame.
     """
     # Convert to a lazy frame for optimization
     lazy_df = daily_df.lazy()

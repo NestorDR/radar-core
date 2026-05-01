@@ -38,7 +38,9 @@ class BaseCrud(object):
     def serialize_inputs(inputs: dict) -> str:
         """
         Accessing and serializing dictionary 'inputs' with parameters of a strategy.
+
         :param inputs: Input prices that parameterize a strategy.
+
         :return: Serialized inputs parameters.
         """
         return json.dumps(inputs)

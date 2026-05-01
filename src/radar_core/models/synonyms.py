@@ -4,7 +4,7 @@ Models auto-generated through sqlacodegen (https://github.com/agronholm/sqlacode
 """
 
 # --- Python modules ---
-# typing: provides runtime support for type hints
+# typing: provides support for type hints and annotations.
 from typing import TYPE_CHECKING
 
 # --- Third Party Libraries ---
@@ -15,8 +15,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 # --- App modules ---
 # models: result of Object-Relational Mapping
 from radar_core.models.base_model import BaseModel
+
 if TYPE_CHECKING:
     from radar_core.models.securities import Securities
+
 
 class Synonyms(BaseModel):
     __tablename__ = 'synonyms'
@@ -25,9 +27,9 @@ class Synonyms(BaseModel):
         PrimaryKeyConstraint('id', name='synonyms_pkey'),
         UniqueConstraint('provider_id', 'security_id', name='synonyms_providerid_securityid_unique'),
         {'comment': 'Synonyms of security symbols in different quote providers.\n'
-                'The providerId column is managed without a master table, and its '
-                'values are:\n'
-                '1 -> Yahoo'}
+                    'The providerId column is managed without a master table, and its '
+                    'values are:\n'
+                    '1 -> Yahoo'}
     )
 
     provider_id: Mapped[int] = mapped_column(Integer, nullable=False)

@@ -21,8 +21,9 @@ if "!TARGET_DEPLOY!"=="" (
     exit /b
 )
 
-:: Make sure to use lowercase letters, as docker-compose is case-sensitive
-:: /i : Case insensitive
+:: Since `docker compose` is case-sensitive, force `TARGET_DEPLOY` to lowercase to match the
+:: `docker-compose.*.yml` and `.env.*` filenames, ensuring consistent resolution regardless of user input casing.
+:: /i : Case-insensitive comparison
 if /i "!TARGET_DEPLOY!"=="core" (
     SET TARGET_DEPLOY=
     SET TARGET_DEPLOY=core

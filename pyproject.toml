@@ -21,8 +21,8 @@ dependencies = [
     "SQLAlchemy>=2.0",
     "yfinance>=0.2.65",
     # --- For TA-Lib ---
-    # In Windows run manually: uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.X/ta_lib-0.6.X-cp313-cp313-win_amd64.whl --no-cache-dir
-    # In other systems (like Linux in Docker) use environment markers and install from PyPI.
+    # On Windows run manually: uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.X/ta_lib-0.6.X-cp313-cp313-win_amd64.whl --no-cache-dir
+    # On non-Windows platforms (like Linux in Docker) installs TA-Lib from PyPI (environment markers exclude Windows)
     'ta-lib==0.6.4; sys_platform != "win32"',
 ]
 
@@ -33,15 +33,12 @@ dev = [
     "ty>=0.0.5",
 ]
 
-[project.scripts]
-radar-core = "radar_core:analyzer"
-
 [build-system]
-requires = ["uv_build>=0.8.0,<0.9.0"]
+requires = ["uv_build>=0.8.0"]
 build-backend = "uv_build"
 
 # uv_build is designed to read the standard [tool.setuptools] table for configuration.
-# [tool.setuptools] section replaces the logic from the original `setup.py`
+# Section [tool.setuptools] replaces the logic from the original `setup.py`
 [tool.setuptools]
 # This directive tells the build backend to auto-discover packages (e.g., the `radar_core` directory),
 #  and replaces `packages=find_packages()` from original `setup.py`
@@ -90,6 +87,9 @@ ignore = [# Ignored rules
 "__main__.py" = [
     "E402", # Ignore module level import not at the top of files
 ]
+
+[tool.ty.environment]
+python-platform = "all"
 
 [tool.ty.rules]
 possibly-missing-attribute = "ignore"

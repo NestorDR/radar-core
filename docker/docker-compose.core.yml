@@ -31,6 +31,6 @@ services:
 
 # Network configuration for service communication
 networks:
-  # Shared external network to communicate with the PostgreSQL container from project `radar-infra` (see `docker-compose.dev.yml`)
+  # Shared external network to communicate with the PostgreSQL container from project `radar-infra` (see there `docker-compose.dev.yml`)
   radar-network:                              # Network name
     external: true                            # Use an existing network created outside of this `compose` file (e.g.`docker network create radar-network`)

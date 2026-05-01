@@ -339,7 +339,7 @@ def analyzer(settings: Settings,
                         initializer=init_worker,
                         initargs=(log_queue_, verbosity_level_)
                 ) as executor:
-                    # Use a set to store futures
+                    #  Use a list to store futures representing the asynchronous execution of tasks
                     futures_ = []
 
                     # Create a future for each symbol analysis task using destructive iteration to free memory in the main
@@ -436,7 +436,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['SPY', 'QQQ']
+    symbols_ = ['BTC-USD', 'BITX']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)

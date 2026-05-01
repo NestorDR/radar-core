@@ -9,7 +9,7 @@ import datetime
 # decimal: provides support for fast correctly rounded decimal floating point arithmetic
 #          it offers several advantages over the float datatype.
 from decimal import Decimal
-# typing: provides runtime support for type hints
+# typing: provides support for type hints and annotations.
 from typing import Optional, TYPE_CHECKING
 
 # --- Third Party Libraries ---
