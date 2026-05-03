@@ -1,5 +1,7 @@
 :: new_uv_venv.cmd
 
+:: $Home replaces %USERPROFILE% in PowerShell
+
 :: Set virtual environment (venv) outside the project folder structure for reusability
 set ENV_FOLDER=%USERPROFILE%\repos\VirtualEnvironments\radar-3.13.13-uv-env
 
