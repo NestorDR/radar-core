@@ -49,15 +49,14 @@ if /i "!TARGET_DEPLOY!"=="mb" (
 :: ```
 
 :: Build and launch all services as detached
+:: --env-file .....: to inject the environment variables from a specific file
 :: -f .............: to specify a particular compose file .yml
 :: -p .............: to add an isolated specific project name
 :: up .............: to raise the services defined in the .yml file
-:: --env-file .....: to inject the environment variables from a specific file
 :: -d .............: to run in background (detached mode), visible in Docker Desktop
 :: --build ........: reconstructs images if it detects changes in the build context or the Dockerfile
 :: --force-recreate: ensures that containers are created again (stops and removes existing containers and creates new ones)
 :: %* .............: for extra arguments
-
 docker compose --env-file envs/.env.!TARGET_DEPLOY! -f docker/docker-compose.!TARGET_DEPLOY!.yml -p radar-!TARGET_DEPLOY! up -d --build
 
 :: Check if the command was successful
