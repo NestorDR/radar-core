@@ -1,7 +1,8 @@
 :: auto/dc.cmd
-:: Script to start the Docker Compose environment for a specific deployment environment: core, mb
+:: Purpose: Start  the Docker Compose environment for a specific deployment environment: core, mb
 :: Usage: auto/dc <target_deploy>
 @ECHO OFF
+CLS
 
 :: Enable `delayed expansion` to handle environment variables correctly within blocks
 SETLOCAL ENABLEDELAYEDEXPANSION

@@ -77,7 +77,7 @@ def _get_connection_str():
     # Visit https://www.postgresql.org/docs/16/libpq-envars.html
     db_host = parse.quote(getenv('POSTGRES_HOST', 'host-here'))
     db_port = parse.quote(getenv('POSTGRES_PORT', '5432'))
-    db_name = parse.quote(getenv('POSTGRES_DB', 'dbname-here'))
+    db_name = parse.quote(getenv('POSTGRES_DB', 'radar'))
     db_username = parse.quote(getenv('POSTGRES_USER', 'user-here'))
     db_password = parse.quote(getenv('POSTGRES_PASSWORD', 'pwd-here'))
     db_ssl_mode = parse.quote(getenv('POSTGRES_SSL_MODE', 'prefer'))

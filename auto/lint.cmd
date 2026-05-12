@@ -1,4 +1,6 @@
-:: Linter and autoformat
+:: auto/lint.cmd
+:: Purpose: Linter and autoformat.
+
 CLS
 
 :: UVX: In most cases, executing a tool with `uvx` is more appropriate than installing the tool (https://docs.astral.sh/uv/concepts/tools/#execution-vs-installation)

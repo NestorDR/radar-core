@@ -199,7 +199,7 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - Updates `uv`, activates the virtual environment, upgrades `uv.lock`, syncs dependencies, and reinstalls TA-Lib from the prebuilt wheel.
 
 ## Project Status
-In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
+In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base, CI/CD pipelines) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
 ## License
 This project is licensed under the MIT License. See the LICENSE file if available; otherwise, you may consider the standard MIT terms applicable by default.
