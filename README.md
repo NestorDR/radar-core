@@ -2,7 +2,7 @@
 
 Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, manages them using **Polars** as an efficient in-memory database, and executes high-speed strategy evaluation using **vectorized NumPy operations** and **Numba JIT compilation**.
 
-The project follows High Performance Practices, utilizing concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously.
+The project follows High Performance Practices, using concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously.
 
 ## Features
 - **Hybrid Data Architecture**:
@@ -15,7 +15,6 @@ The project follows High Performance Practices, utilizing concurrent processing 
 - **Database Synchronization**: Automated management of trading ratios and symbol cleanup via SQLAlchemy.
 - Configurable settings (symbols, shortable assets, verbosity, concurrency)
     
-
 ## Prerequisites
 - Python 3.13+
 - Recommended OS: Windows, Linux, or macOS
@@ -28,7 +27,7 @@ The project follows High Performance Practices, utilizing concurrent processing 
 
 TA‑Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA‑Lib can be installed from PyPI (see environment markers in pyproject.toml).
 
-Note: The project is developed on a Windows 11 host. All listed tools (Python 3.13, PyCharm 2026, PostgreSQL 17.x, and Docker Desktop 4.68+) are running locally on this host.
+Note: The project is developed on a Windows 11 host. All listed tools (Python 3.13, PyCharm 2026.1+, PostgreSQL 17.x, and Docker Desktop v4.75+) are running locally on this host.
 
 ## Installation
 You can install with either uv (recommended for this project) or pip.
@@ -51,11 +50,11 @@ Option B — using pip:
 ## Quick Start
 You can run the analyzer directly from the repository without installing the package system‑wide.
 
-- Run as a script:
-  - python src/radar_core/analyzer.py
+- Run as a module (using the CLI entry point):
+  - `python -m radar_core`
 
-- Or run as a module (after installing the project into your environment):
-  - python -m radar_core.analyzer
+- Or run as an independent script (useful for specific tests, since it supports the `if __name__ == '__main__':` block):
+  - `python src/radar_core/analyzer.py`
 
 By default, the analyzer will:
 - Initialize settings and database connections.
@@ -101,7 +100,7 @@ for symbol_, prices_df_ in prices_data_.items():
 ## Example Output
 A typical console output (truncated) may look like:
 
-```
+```console
 Reading YAML file settings.yml...
 Analyzer.py started at 2025-12-22 09:58:52.
 Cleaned 0 rows from the database for deprecated symbols.
@@ -126,7 +125,7 @@ Analysis executed from 2025-12-22 09:58:52 to 2025-12-22 09:58:59 - Elapsed time
 Note: Actual output will vary based on a symbol list, dates, and verbosity. Output blocks per symbol are printed atomically to prevent interleaving.
 
 ## Configuration
-Project settings are managed by the `Settings` class. You can configure the application via the `src/radar_core/settings.yml` file or by using **Environment Variables** (which take precedence).
+Project settings are managed by the `Settings` class. You can configure the application via the `src/radar_core/settings.yml` file for the financial strategies and using **Environment Variables** for infrastructure-oriented settings (logging, concurrency, database connection, etc.). The application reads both sources at startup and applies the configurations accordingly.
 
 ### Key Environment Variables
 
@@ -167,7 +166,7 @@ docker run --rm \
 ```
 
 Using Docker Compose:
-The project includes a couple of compose files in the `docker/` directory . They rely on `.env` files located in the `envs/` directory.
+The project includes a couple of `compose` files in the `docker/` directory . They rely on `.env` files located in the `envs/` directory.
 
 1. **Hybrid Core (`docker/docker-compose.core.yml`)**: Runs the analyzer. It is configured to connect to either a PostgreSQL instance on the host (Windows) or a containerized PostgreSQL in an external Docker network.
    - **Host Database**: Set `POSTGRES_HOST=host.docker.internal` in `envs/.env.core`.
@@ -197,6 +196,12 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
 
 - **`auto\update.cmd`**: Updates the development environment.
   - Updates `uv`, activates the virtual environment, upgrades `uv.lock`, syncs dependencies, and reinstalls TA-Lib from the prebuilt wheel.
+
+- **`auto\lint.cmd`**: Automatic checks and corrections.
+  - Runs formatting and linting tasks using `ruff`.
+
+## Testing
+Testing and coverage (using `pytest` and `pytest-cov`) are planned to be fully implemented after the completion of the public deployment of the entire `Radar` ecosystem.
 
 ## Project Status
 In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base, CI/CD pipelines) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
