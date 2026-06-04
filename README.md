@@ -2,7 +2,7 @@
 
 Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, manages them using **Polars** as an efficient in-memory database, and executes high-speed strategy evaluation using **vectorized NumPy operations** and **Numba JIT compilation**.
 
-The project follows High Performance Practices, using concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously.
+The project follows High Performance Practices, using concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously. Its cloud deployment is being supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
 ## Features
 - **Hybrid Data Architecture**:
@@ -23,9 +23,9 @@ The project follows High Performance Practices, using concurrent processing and 
   - yfinance
   - SQLAlchemy
   - numpy, PyYAML, dotenvy-py
-  - TA‑Lib (see notes below)
+  - TA-Lib (see notes below)
 
-TA‑Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA‑Lib can be installed from PyPI (see environment markers in pyproject.toml).
+TA-Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA-Lib can be installed from PyPI (see environment markers in pyproject.toml).
 
 Note: The project is developed on a Windows 11 host. All listed tools (Python 3.13, PyCharm 2026.1+, PostgreSQL 17.x, and Docker Desktop v4.75+) are running locally on this host.
 
@@ -37,14 +37,14 @@ Option A — using uv:
 2. Create a virtual environment and install dependencies:
    - uv venv
    - uv sync
-3. Windows + TA‑Lib only (if needed):
+3. Windows + TA-Lib only (if needed):
    - uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl --no-cache-dir
 
 Option B — using pip:
 1. Create and activate a virtual environment
 2. Install dependencies from pyproject (via pip):
    - pip install -e .
-3. Windows + TA‑Lib only (if needed):
+3. Windows + TA-Lib only (if needed):
    - pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl --no-cache-dir
 
 ## Quick Start
