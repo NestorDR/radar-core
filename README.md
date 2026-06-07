@@ -4,6 +4,8 @@ Radar Core is a Python application that downloads financial asset prices from Ya
 
 The project follows High Performance Practices, using concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously. Its cloud deployment is being supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
+The fully operational solution can be visited at https://radar.ndromero.com.
+
 ## Features
 - **Hybrid Data Architecture**:
     - **Polars**: High-performance DataFrame management for data ingestion and storage.
