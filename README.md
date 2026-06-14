@@ -212,4 +212,6 @@ Testing and coverage (using `pytest` and `pytest-cov`) are planned to be fully i
 In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base, CI/CD pipelines) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
 ## License
-This project is licensed under the MIT License. See the LICENSE file if available; otherwise, you may consider the standard MIT terms applicable by default.
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the [LICENSE](LICENSE) file for the full license text.
+
+Under this license, if you modify this software or run it as a network service (SaaS), you must make your modified source code publicly available under the same terms.
