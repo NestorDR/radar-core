@@ -5,9 +5,9 @@ Radar Core is a Python application that downloads financial asset prices from Ya
 The project follows High Performance Practices, using concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously. Its cloud deployment is being supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
 The fully operational results can be visited for public use: 
-- [Ratios for Stocks](https://radar.ndromero.com/public/dashboard/147ee420-badb-451c-a2d5-c30e78688ed0?tab=6-day---open-----%7C&text=#fullscreen&theme=night) 
-- [Ratios for Crypto](https://radar.ndromero.com/dashboard/9-crypto?tab=10-day-open-----%7C&text=#fullscreen&theme=night)
-- [All Ratios](https://radar.ndromero.com/public/dashboard/6e547cac-cbc3-4354-97c3-6745d8540d83?text=#fullscreen&theme=night)
+- [Ratios for Stocks](http://radar.ndromero.com/public/dashboard/147ee420-badb-451c-a2d5-c30e78688ed0#fullscreen&theme=night) 
+- [Ratios for Crypto](http://radar.ndromero.com/public/dashboard/0af531b3-df15-4aa4-a665-69704e95451e#fullscreen&theme=night)
+- [All Ratios](http://radar.ndromero.com/public/dashboard/6e547cac-cbc3-4354-97c3-6745d8540d83#fullscreen&theme=night)
 
 ## Features
 - **Hybrid Data Architecture**:
