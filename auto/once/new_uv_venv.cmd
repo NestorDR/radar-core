@@ -3,11 +3,11 @@
 :: $Home replaces %USERPROFILE% in PowerShell
 
 :: Set virtual environment (venv) outside the project folder structure for reusability
-set ENV_FOLDER=%USERPROFILE%\repos\VirtualEnvironments\radar-3.13.13-uv-env
+set ENV_FOLDER=C:\Development\VirtualEnvs\radar-3.13.14-uv-env
 
 :: Create with uv (universal virtualenv) the venv
 :: --seed : will install pip, setuptools and wheel into the new environment, making it 100% compatible with PyCharm.
-uv venv --python 3.13.13 --seed %ENV_FOLDER%
+uv venv --python 3.13.14 --seed %ENV_FOLDER%
 
 :: Activate
 call %ENV_FOLDER%\Scripts\activate.bat

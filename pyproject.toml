@@ -34,19 +34,8 @@ dev = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.8.0"]
+requires = ["uv_build>=0.11.0"]
 build-backend = "uv_build"
-
-# uv_build is designed to read the standard [tool.setuptools] table for configuration.
-# Section [tool.setuptools] replaces the logic from the original `setup.py`
-[tool.setuptools]
-# This directive tells the build backend to auto-discover packages (e.g., the `radar_core` directory),
-#  and replaces `packages=find_packages()` from original `setup.py`
-packages = { find = { where = ["src"] } }
-[tool.setuptools.package-data]
-# This directive tells the build backend to include `settings.yml` inside the `radar_core` package when creating the wheel,
-#  and replaces `package_data={'radar_core': ['settings.yml']}` from the original `setup.py`
-"radar_core" = ["settings.yml"]
 
 [tool.ruff]
 line-length = 140
