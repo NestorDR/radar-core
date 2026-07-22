@@ -74,10 +74,11 @@ def _find_trades_rc(rsi_values: np.ndarray,
         # Retrieve the pre-calculated stop-loss bar number for this input signal
         stop_loss_bar_number_ = stop_loss_bar_numbers[input_bar_number_]
 
-        # 2. Find over[bought|sold] signal, look for the first signal strictly after the input bar number
+        # 2. Find over[bought|sold] signal, look for the first signal including the input bar number,
+        #  because in the same first session RSI can cross over (Long) or cross under (Short) the over level (over_)
         # But if stop_loss happens before output, close there.
         over_bar_number_ = -1
-        for active_position_bar_number_ in range(input_bar_number_ + 1, total_bars_):
+        for active_position_bar_number_ in range(input_bar_number_, total_bars_):
             # Check stop-loss priority
             if 0 < stop_loss_bar_number_ < active_position_bar_number_:
                 # Stop-loss break happens before finding over[bought|sold], close losing position
