@@ -53,9 +53,9 @@ class Ratios(BaseModel):
                                                      comment='Indicates the date from which the strategy was tested to identify results and ratios')
     to_date: Mapped[datetime.date] = mapped_column(Date, nullable=False,
                                                    comment='Indicates the date up to which the strategy was tested to identify results and ratios.')
-    initial_price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False,
+    initial_price: Mapped[Decimal] = mapped_column(Numeric(24, 2), nullable=False,
                                                    comment='Initial price of the period in which the strategy was tested')
-    final_price: Mapped[Decimal] = mapped_column(Numeric(9, 2), nullable=False,
+    final_price: Mapped[Decimal] = mapped_column(Numeric(24, 2), nullable=False,
                                                  comment='Final price of the period in which the strategy was tested')
     net_change: Mapped[float] = mapped_column(REAL, nullable=False,
                                               comment='Percentage change of the final price over the initial price')
@@ -92,11 +92,11 @@ class Ratios(BaseModel):
     last_input_date: Mapped[datetime.date] = mapped_column(Date, nullable=False,
                                                            comment='Date of the last input signal')
     last_output_date: Mapped[Optional[datetime.date]] = mapped_column(Date, comment='Date of the last output signal')
-    last_input_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2),
+    last_input_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(24, 2),
                                                                 comment='Input price for the last position opened by the tested strategy')
-    last_output_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2),
+    last_output_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(24, 2),
                                                                  comment='Output price for the last position opened by the tested strategy')
-    last_stop_loss: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2),
+    last_stop_loss: Mapped[Optional[Decimal]] = mapped_column(Numeric(24, 2),
                                                               comment='Stop loss for the last position opened by the tested strategy')
 
     strategy: Mapped['Strategies'] = relationship('Strategies', back_populates='ratios', lazy='noload')

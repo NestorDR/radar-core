@@ -37,10 +37,10 @@ class DailyData(BaseModel):
 
     security_id: Mapped[int] = mapped_column(Integer, nullable=False)
     date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[Decimal] = mapped_column(Numeric(13, 4), nullable=False)
-    high: Mapped[Decimal] = mapped_column(Numeric(13, 4), nullable=False)
-    low: Mapped[Decimal] = mapped_column(Numeric(13, 4), nullable=False)
-    close: Mapped[Decimal] = mapped_column(Numeric(13, 4), nullable=False)
+    open: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
+    high: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
+    low: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
+    close: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
     volume: Mapped[int] = mapped_column(BigInteger, nullable=False)
     percent_change: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
 
