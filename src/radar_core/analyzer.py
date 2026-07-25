@@ -338,47 +338,57 @@ def analyzer(settings: Settings,
             log_listener_.start()
 
             try:
-                # Use initializer to configure logging once per worker process
-                with concurrent.futures.ProcessPoolExecutor(
+                # Use initializer to configure logging once per worker process.
+                # Instantiated without 'with' so __exit__ is never called; shutdown() is managed
+                #  explicitly in the `finally` block below, which prevents the implicit `shutdown(wait=True)`
+                #  that 'with' would trigger on KeyboardInterrupt, blocking until active workers finish.
+                executor_ = concurrent.futures.ProcessPoolExecutor(
                         max_workers=num_workers_,
                         mp_context=mp_context,  # Force spawn
                         initializer=init_worker,
                         initargs=(log_queue_, verbosity_level_)
-                ) as executor_:
-                    try:
-                        #  Use a list to store futures representing the asynchronous execution of tasks
-                        futures_ = []
+                )
+                try:
+                    #  Use a list to store futures representing the asynchronous execution of tasks
+                    futures_ = []
 
-                        # Create a future for each symbol analysis task using destructive iteration to free memory in the main
-                        # process immediately. The items are popped from the dictionary one by one.
-                        # Once passed to executor_.submit, the main process no longer needs the DataFrame reference.
-                        # ---
-                        # Build the symbol list from prices actually downloaded
-                        # and keep the original order (FIFO: First-In, First-Out) by emptying the dictionary to free resources
-                        downloaded_symbols_ = list(prices_data_.keys())
-                        for symbol_ in downloaded_symbols_:
-                            # .pop(symbol_) returns the DataFrame and removes the entry from the dict immediately
-                            prices_df_ = prices_data_.pop(symbol_)
+                    # Create a future for each symbol analysis task using destructive iteration to free memory in the main
+                    # process immediately. The items are popped from the dictionary one by one.
+                    # Once passed to executor_.submit, the main process no longer needs the DataFrame reference.
+                    # ---
+                    # Build the symbol list from prices actually downloaded
+                    # and keep the original order (FIFO: First-In, First-Out) by emptying the dictionary to free resources
+                    downloaded_symbols_ = list(prices_data_.keys())
+                    for symbol_ in downloaded_symbols_:
+                        # .pop(symbol_) returns the DataFrame and removes the entry from the dict immediately
+                        prices_df_ = prices_data_.pop(symbol_)
 
-                            # Submit the task to the Executor Pool
-                            future_ = executor_.submit(
-                                process_symbol, symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_
-                            )
-                            futures_.append(future_)
+                        # Submit the task to the Executor Pool
+                        future_ = executor_.submit(
+                            process_symbol, symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_
+                        )
+                        futures_.append(future_)
 
-                            # Explicitly delete the local reference to the DataFrame to encourage GC
-                            del prices_df_
+                        # Explicitly delete the local reference to the DataFrame to encourage GC
+                        del prices_df_
 
-                        # Initialize summary counters
-                        success_count = 0
-                        failed_count = 0
-                        total_securities = len(futures_)
+                    # Initialize summary counters
+                    success_count = 0
+                    failed_count = 0
+                    total_securities = len(futures_)
 
-                        # Loop over every future to run its process. Wait for all futures to complete and process results
-                        for future_ in concurrent.futures.as_completed(futures_):
+                    # Loop over every future to run its process. Wait for all futures to complete and process results.
+                    # Using wait() with timeout instead of as_completed() so the main thread wakes up periodically
+                    # and can deliver a pending KeyboardInterrupt. On Windows, as_completed() blocks inside a native
+                    # WaitForMultipleObjects() call, preventing signal delivery until all workers finish.
+                    pending_ = set(futures_)
+                    while pending_:
+                        done_, pending_ = concurrent.futures.wait(
+                            pending_, timeout=0.5, return_when=concurrent.futures.FIRST_COMPLETED
+                        )
+                        for future_ in done_:
                             try:
-                                # Get the captured logs string and
-                                #  re-raises worker exceptions if any occurred
+                                # Get the captured logs string and re-raises worker exceptions if any occurred
                                 captured_logs_ = future_.result()
 
                                 if captured_logs_:
@@ -396,25 +406,35 @@ def analyzer(settings: Settings,
                                 verbose(message_, ERROR, verbosity_level_)
                                 logger_.exception(message_, exc_info=e)
 
-                        # Final Summary Report
-                        message_ = (
-                            f'\n=================== EXECUTION SUMMARY ===================\n'
-                            f'Total: {total_securities} | Success: {success_count} | Failed: {failed_count}\n'
-                            f'=========================================================\n'
-                        )
-                        verbose(message_, INFO, verbosity_level_)
-                        logger_.info(message_)
+                    # Final Summary Report
+                    message_ = (
+                        f'\n=================== EXECUTION SUMMARY ===================\n'
+                        f'Total: {total_securities} | Success: {success_count} | Failed: {failed_count}\n'
+                        f'=========================================================\n'
+                    )
+                    verbose(message_, INFO, verbosity_level_)
+                    logger_.info(message_)
 
-                    except KeyboardInterrupt:
-                        message_ = '⚠️ Shutdown signal received! Canceling remaining tasks...'
-                        verbose(message_, WARNING, verbosity_level_)
-                        logger_.warning(message_)
+                except KeyboardInterrupt:
+                    message_ = 'Shutdown signal received! Canceling remaining tasks...'
+                    verbose(message_, WARNING, verbosity_level_)
+                    logger_.warning(message_)
 
-                        # Immediately cancel pending futures and stop workers
-                        executor_.shutdown(wait=False, cancel_futures=True)
+                    # Cancel futures are not yet started; wait=False returns immediately
+                    executor_.shutdown(wait=False, cancel_futures=True)
 
-                        # Re-raise so __main__.py can catch it and set the proper exit_code = 130
-                        raise
+                    # Terminate workers already running
+                    for child_ in multiprocessing.active_children():
+                        child_.terminate()
+
+                    # Re-raise so __main__.py can catch it and set the proper exit_code = 130
+                    raise
+
+                finally:
+                    # Explicit non-blocking shutdown on both normal exit and KeyboardInterrupt.
+                    # Because no 'with' block is used, this is the only shutdown call; wait=False
+                    # ensures it returns immediately without waiting for any active workers.
+                    executor_.shutdown(wait=False)
 
             finally:
                 log_listener_.stop()
