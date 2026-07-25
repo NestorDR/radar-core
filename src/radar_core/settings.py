@@ -3,7 +3,7 @@
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import ERROR, DEBUG, INFO, WARNING, getLogger
-# os: allows access to functionalities dependent on the Operating System
+# os: provides operating system interfaces and functionality
 import os
 # pathlib: provides an interface to work with file paths in a more readable and easier way than the older 'os.path'.
 from pathlib import Path

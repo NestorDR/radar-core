@@ -14,8 +14,10 @@ from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, getLogger
 from logging.handlers import QueueHandler, QueueListener
 # multiprocessing: needed to force 'spawn' context on Linux/Docker
 import multiprocessing
-# os: allows access to functionalities dependent on the Operating System
+# os: provides operating system interfaces and functionality
 import os
+# signal: handles process signals and interrupts (e.g., Ctrl+C)
+import signal
 # time: provides various time-related functions
 import time
 
@@ -67,6 +69,10 @@ def init_worker(log_queue,
     :param log_queue: Multiprocessing queue used to send log records to the parent process.
     :param log_level: Minimum logging level configured for the worker process.
     """
+    # 1. Ignore Ctrl+C in child processes so the parent process handles it cleanly
+    signal.signal(signal.SIGINT, signal.SIG_IGN)  # if Signal Interrupt (SIGINT) then Signal Ignored (SIG_IGN)
+
+    # 2. Reset and configure QueueHandler logging
     root_logger_ = getLogger()
 
     for handler_ in root_logger_.handlers[:]:
@@ -338,45 +344,78 @@ def analyzer(settings: Settings,
                         mp_context=mp_context,  # Force spawn
                         initializer=init_worker,
                         initargs=(log_queue_, verbosity_level_)
-                ) as executor:
-                    #  Use a list to store futures representing the asynchronous execution of tasks
-                    futures_ = []
+                ) as executor_:
+                    try:
+                        #  Use a list to store futures representing the asynchronous execution of tasks
+                        futures_ = []
 
-                    # Create a future for each symbol analysis task using destructive iteration to free memory in the main
-                    # process immediately. The items are popped from the dictionary one by one.
-                    # Once passed to executor.submit, the main process no longer needs the DataFrame reference.
-                    # ---
-                    # Build the symbol list from prices actually downloaded
-                    # and keep the original order (FIFO: First-In, First-Out) by emptying the dictionary to free resources
-                    downloaded_symbols_ = list(prices_data_.keys())
-                    for symbol_ in downloaded_symbols_:
-                        # .pop(symbol_) returns the DataFrame and removes the entry from the dict immediately
-                        prices_df_ = prices_data_.pop(symbol_)
+                        # Create a future for each symbol analysis task using destructive iteration to free memory in the main
+                        # process immediately. The items are popped from the dictionary one by one.
+                        # Once passed to executor_.submit, the main process no longer needs the DataFrame reference.
+                        # ---
+                        # Build the symbol list from prices actually downloaded
+                        # and keep the original order (FIFO: First-In, First-Out) by emptying the dictionary to free resources
+                        downloaded_symbols_ = list(prices_data_.keys())
+                        for symbol_ in downloaded_symbols_:
+                            # .pop(symbol_) returns the DataFrame and removes the entry from the dict immediately
+                            prices_df_ = prices_data_.pop(symbol_)
 
-                        # Submit the task to the Executor Pool
-                        future_ = executor.submit(process_symbol,
-                                                  symbol_, prices_df_, strategies_, shortable_symbols_,
-                                                  verbosity_level_)
-                        futures_.append(future_)
+                            # Submit the task to the Executor Pool
+                            future_ = executor_.submit(
+                                process_symbol, symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_
+                            )
+                            futures_.append(future_)
 
-                        # Explicitly delete the local reference to the DataFrame to encourage GC
-                        del prices_df_
+                            # Explicitly delete the local reference to the DataFrame to encourage GC
+                            del prices_df_
 
-                    # Loop over every future to run its process. Wait for all futures to complete and process results
-                    for future_ in concurrent.futures.as_completed(futures_):
-                        try:
-                            captured_logs_ = future_.result()  # Get the captured logs string
+                        # Initialize summary counters
+                        success_count = 0
+                        failed_count = 0
+                        total_securities = len(futures_)
 
-                            if captured_logs_:
-                                # Print the captured atomic block of logs to the console
-                                # flush=True ensures immediate output in containerized environments (Docker)
-                                print(captured_logs_, end='', flush=True)
+                        # Loop over every future to run its process. Wait for all futures to complete and process results
+                        for future_ in concurrent.futures.as_completed(futures_):
+                            try:
+                                # Get the captured logs string and
+                                #  re-raises worker exceptions if any occurred
+                                captured_logs_ = future_.result()
 
-                        except Exception as e:
-                            # This will catch errors from within the process_symbol function
-                            message_ = f'A task generated an exception: {e}'
-                            verbose(message_, ERROR, verbosity_level_)
-                            logger_.exception(message_, exc_info=e)
+                                if captured_logs_:
+                                    # Print the captured atomic block of logs to the console
+                                    # flush=True ensures immediate output in containerized environments (Docker)
+                                    print(captured_logs_, end="", flush=True)
+
+                                # Increment success counter
+                                success_count += 1
+
+                            except Exception as e:
+                                # This will catch unhandled exceptions from within the process_symbol function
+                                failed_count += 1
+                                message_ = f'A task generated an exception: {e}'
+                                verbose(message_, ERROR, verbosity_level_)
+                                logger_.exception(message_, exc_info=e)
+
+                        # Final Summary Report
+                        message_ = (
+                            f'\n=================== EXECUTION SUMMARY ===================\n'
+                            f'Total: {total_securities} | Success: {success_count} | Failed: {failed_count}\n'
+                            f'=========================================================\n'
+                        )
+                        verbose(message_, INFO, verbosity_level_)
+                        logger_.info(message_)
+
+                    except KeyboardInterrupt:
+                        message_ = '⚠️ Shutdown signal received! Canceling remaining tasks...'
+                        verbose(message_, WARNING, verbosity_level_)
+                        logger_.warning(message_)
+
+                        # Immediately cancel pending futures and stop workers
+                        executor_.shutdown(wait=False, cancel_futures=True)
+
+                        # Re-raise so __main__.py can catch it and set the proper exit_code = 130
+                        raise
+
             finally:
                 log_listener_.stop()
 

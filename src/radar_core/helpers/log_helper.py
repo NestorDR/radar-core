@@ -6,7 +6,7 @@ from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import INFO, WARNING, getLogger, Logger
 from logging.handlers import RotatingFileHandler
-# os: allows access to functionalities dependent on the Operating System
+# os: provides operating system interfaces and functionality
 import os
 
 DEFAULT_CONSOLE_LOG_LEVEL = WARNING  # Console handler logs only warning, error and critical levels

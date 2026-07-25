@@ -3,7 +3,7 @@
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import getLogger
-# os: allows access to functionalities dependent on the Operating System
+# os: provides operating system interfaces and functionality
 from os import getenv
 # urllib: collects several modules for working with URLs
 from urllib import parse
