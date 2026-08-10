@@ -8,8 +8,6 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 # datetime: provides classes for manipulating dates and times.
 from datetime import date, datetime
-# json: library for encoding and decoding prices in JSON format.
-import json
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import CRITICAL, DEBUG, INFO, getLogger
 
@@ -199,15 +197,13 @@ class StrategyABC(ABC):
     def finalize_identification(self,
                                 init_dt: datetime,
                                 analysis_context: AnalysisContext,
-                                verbosity_level: int = DEBUG) -> dict:
+                                verbosity_level: int = DEBUG) -> None:
         """
         Finalize the process that identified profitable strategies and logs finalization.
 
         :param analysis_context: Analysis context with the identified profitable strategies.
         :param init_dt: The date and time when the process started.
         :param verbosity_level: An integer specifying the level of verbosity for logging.
-
-        :return: Dictionary with a summary of the best long and short strategies.
         """
 
         # Delete Ratios where is_in_process is True.
@@ -227,17 +223,6 @@ class StrategyABC(ABC):
             logger_.debug(f"[{analysis_context.symbol}]: No profitable Short {self.strategy_acronym} "
                           f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
 
-        # Set dictionary for better indicator strategies (Long and Short)
-        result_ratios_ = dict(symbol=analysis_context.symbol,
-                              updatedAt=datetime.now().strftime('%Y-%m-%d %H:%M'),
-                              # Convert Ratios objects to dictionaries
-                              bestLong=self.serialize_ratios(analysis_context.best_long),
-                              bestShort=self.serialize_ratios(analysis_context.best_short))
-
-        # Final logging and output
-        if verbosity_level == DEBUG:
-            print(json.dumps(result_ratios_, indent=4))
-
         message_ = (init_dt.strftime(f'{self.strategy_acronym:11} on {analysis_context.symbol}:'
                                      f' start %Y-%m-%d %H:%M:%S ...')
                     + datetime.now().strftime(' end %Y-%m-%d %H:%M:%S')
@@ -246,8 +231,6 @@ class StrategyABC(ABC):
             print('', end='\r')
         verbose(message_, INFO, verbosity_level)
         logger_.info(message_)
-
-        return result_ratios_
 
     # endregion Support to identification
 
@@ -527,55 +510,6 @@ class StrategyABC(ABC):
         average_loss_ = 0.0 if loss_trades_ <= 0 else losses_ / loss_trades_
         expected_value_ = win_probability_ * average_win_ + loss_probability_ * average_loss_
         return net_profit_, expected_value_, win_probability_, loss_probability_, average_win_, average_loss_
-
-    def serialize_ratios(self,
-                         ratios: Ratios) -> dict:
-        """
-        Convert a Ratios object into a JSON-serializable dictionary while handling non-serializable fields and removing
-         unnecessary properties.
-        
-        :param ratios: The Ratios object to serialize.
-        
-        :return: A serialized dictionary with all attributes JSON-ready.
-        """
-
-        serializable_dict_ = {}
-
-        # Use vars() to get the object's attributes as a dictionary and then convert it to a JSON-serializable format
-        for key, value in vars(ratios).items():
-            # Ignore some properties
-            if key in ('_sa_instance_state', 'id', 'symbol', 'is_in_process'):
-                continue
-            # Handle datetime objects, convert to string
-            if isinstance(value, (date, datetime)):
-                serializable_dict_[key] = value.isoformat()
-            # Handle Decimal, float and NumPy floating types, convert to float and round to 2 decimals
-            elif isinstance(value, (Decimal, float, np.floating)):
-                serializable_dict_[key] = round(float(value), 2)
-            # Handle Python int and NumPy integer types
-            elif isinstance(value, (int, np.integer)):
-                # Handle the 'strategy_id' field replace it with its acronym
-                if key == 'strategy_id' and isinstance(value, int):
-                    serializable_dict_['strategy'] = self.strategy_acronym
-                # Handle the 'timeframe' field: replace it with its name
-                elif key == 'timeframe':
-                    serializable_dict_['timeframe'] = TIMEFRAMES[int(value)]
-                # Convert NumPy integers to native Python int
-                else:
-                    serializable_dict_[key] = int(value)
-            # Handle the 'inputs' field if it's a serialized dictionary as string
-            elif key == 'inputs' and isinstance(value, str):
-                try:
-                    # Attempt to parse the string as JSON
-                    serializable_dict_[key] = json.loads(value)
-                except json.JSONDecodeError:
-                    # If parsing fails, keep the original string as-is
-                    serializable_dict_[key] = value
-            # Handle other serializable types (or leave unchanged)
-            else:
-                serializable_dict_[key] = value  # Keep as-is if already serializable
-
-        return serializable_dict_
 
     # endregion Ratios
 

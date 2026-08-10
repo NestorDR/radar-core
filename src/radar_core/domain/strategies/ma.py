@@ -154,14 +154,13 @@ class MovingAverage(StrategyABC):
                  prices_df: pl.DataFrame,
                  close_prices: np.ndarray,
                  percent_changes: np.ndarray,
-                 verbosity_level: int = DEBUG) -> dict:
+                 verbosity_level: int = DEBUG) -> None:
         """
         Iterate from the minimum to the maximum number of periods to calculate the MA and evaluate its profitability
          on positions:
          - long: open when the value rises above MA and closed when the value falls below MA
          - short: open when the value falls below MA and closed when the value rises above MA.
         Save the profitable setups (identified Moving Average) in the Database.
-        Returns a dictionary with the strategies with the best ratios.
 
         :param symbol: Security symbol to analyze.
         :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
@@ -172,8 +171,6 @@ class MovingAverage(StrategyABC):
         :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
-
-        :return: Dictionary of strategies with the best ratios based on its profitability.
         """
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
@@ -251,5 +248,5 @@ class MovingAverage(StrategyABC):
         # Reset to the original columns
         prices_df = prices_df.select(original_column_names_)
 
-        # Finalize the process to identify profitable strategies and logs finalization and return results
-        return self.finalize_identification(init_dt_, analysis_context_, verbosity_level)
+        # Finalize the process to identify profitable strategies and logs finalization
+        self.finalize_identification(init_dt_, analysis_context_, verbosity_level)
