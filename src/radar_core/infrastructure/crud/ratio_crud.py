@@ -3,7 +3,7 @@
 # --- Third Party Libraries ---
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
 from sqlalchemy import and_, ColumnElement, not_
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.future import select
 from sqlalchemy.inspection import inspect  # Use mapper inspection to remain refactor-friendly
 
@@ -155,7 +155,7 @@ class RatioCrud(BaseCrud):
             return 0
 
         # Build PostgreSQL insert statement
-        insert_stmt_ = pg_insert(Ratios).values(deduped_data_)
+        insert_stmt_ = insert(Ratios).values(deduped_data_)
 
         # Identify columns to update (all payload columns except primary key 'id' and conflict key columns)
         conflict_keys_ = {'symbol', 'strategy_id', 'inputs', 'timeframe', 'is_long_position', 'id'}
