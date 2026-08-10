@@ -11,7 +11,7 @@ from sqlalchemy.inspection import inspect  # Use mapper inspection to remain ref
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import BaseCrud
 # models: result of Object-Relational Mapping
-from radar_core.models import RATIOS_UNIQUE_CONSTRAINT, Ratios
+from radar_core.models import RATIOS_CONFLICT_COLUMNS, RATIOS_UNIQUE_CONSTRAINT, Ratios
 
 # Precompute the list of attributes to copy once at import-time (refactor-safe and fast at runtime, minimizes overhead)
 _mapper = inspect(Ratios)
@@ -29,6 +29,8 @@ _excluded_attrs = (
 _exclude_keys = {col.key for col in _mapper.primary_key} | {attr.key for attr in _excluded_attrs}
 # Updatable attributes after re-evaluating a strategy
 _COPY_ATTRS = tuple(k for k in _mapper.columns.keys() if k not in _exclude_keys)
+# Conflict key columns excluding updatable payload columns
+_conflict_keys = set(RATIOS_CONFLICT_COLUMNS) | {'id'}
 
 
 class RatioCrud(BaseCrud):
@@ -110,13 +112,7 @@ class RatioCrud(BaseCrud):
         """
         deduped_map_ = {}
         for item_ in ratios_list:
-            key_ = (
-                item_.symbol,
-                item_.strategy_id,
-                item_.inputs,
-                item_.timeframe,
-                item_.is_long_position,
-            )
+            key_ = tuple(getattr(item_, col_name_) for col_name_ in RATIOS_CONFLICT_COLUMNS)
             if key_ not in deduped_map_:
                 deduped_map_[key_] = item_
             else:
@@ -158,11 +154,10 @@ class RatioCrud(BaseCrud):
         insert_stmt_ = insert(Ratios).values(deduped_data_)
 
         # Identify columns to update (all payload columns except primary key 'id' and conflict key columns)
-        conflict_keys_ = {'symbol', 'strategy_id', 'inputs', 'timeframe', 'is_long_position', 'id'}
         update_cols_ = {
             col_.name: insert_stmt_.excluded[col_.name]
             for col_ in Ratios.__table__.columns
-            if col_.name not in conflict_keys_
+            if col_.name not in _conflict_keys
         }
         # Explicitly reset flag field is_in_process to False on update
         update_cols_['is_in_process'] = False

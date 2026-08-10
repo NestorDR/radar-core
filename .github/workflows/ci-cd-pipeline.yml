@@ -15,21 +15,35 @@ on:
 # 2. JOBS: The stages of the pipeline
 jobs:
   # ---------------------------------------------------------
-  # STAGE 1: TESTING (Placeholder)
+  # STAGE 1: TESTING
   # ---------------------------------------------------------
   test:
     name: Run Unit Tests
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Clone the repository source code to the GitHub Actions runner workspace.
       - name: Checkout repository
         uses: actions/checkout@v4
-      
-      # TODO: Future implementation. 
-      # Here install 'uv', set up Python, and run 'pytest'.
-      - name: Placeholder for Pytest
-        run: |
-          echo "Unit tests stage placeholder."
-          echo "Once tests are implemented, this step will block the build if tests fail."
+
+      # Step 2: Download, compile, and install the underlying TA-Lib C library on Ubuntu Linux via helper script.
+      # The Python 'ta-lib' package requires system C headers (/usr/lib/libta-lib.so) to build and execute TA-Lib functions.
+      - name: Install TA-Lib C Library for Unit Testing
+        run: bash auto/ci_test_install_talib.sh
+
+      # Step 3: Provision Python 3.13 environment and Astral 'uv' package manager with dependency caching enabled.
+      - name: Install uv and Python 3.13
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+          enable-cache: true
+
+      # Step 4: Synchronize virtual environment with lockfile, installing all core and dev dependencies (including pytest).
+      - name: Install dependencies
+        run: uv sync
+
+      # Step 5: Execute unit test suite with Pytest using the active uv environment.
+      - name: Run Unit Tests with Pytest
+        run: uv run pytest
 
   # ---------------------------------------------------------
   # STAGE 2: BUILD AND PUSH
