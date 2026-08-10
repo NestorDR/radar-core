@@ -7,7 +7,7 @@ FROM --platform=$BUILDPLATFORM python:3.13-slim-bookworm AS builder
 # Copy the 'uv' binary for the specific version from the official image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install build-time dependencies for TA-Lib, psycopg2, and other tools.
+# Install build-time dependencies for TA-Lib, psycopg, and other tools.
 # - apt-get update: Refreshes package index with latest versions
 # - apt-get install
 #   -y: automatic yes to prompts (non-interactive installation)
@@ -16,7 +16,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 #   wget: Utility to download files from the internet (for TA-Lib source).
 #   build-essential: Provides compilers and libraries for building Python C extensions (includes 'make' utility)
 #   gcc: GNU Compiler Collection (C compiler) needed to compile C code (TA-Lib and Python C-extensions)
-#   libpq-dev: Development headers for PostgreSQL, needed to compile psycopg2
+#   libpq-dev: Development headers for PostgreSQL, needed to compile psycopg
 # - rm -rf /var/lib/apt/lists/*: removes package lists downloaded with `apt-get update`
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -92,7 +92,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV NUMBA_CACHE_DIR=/tmp/numba_cache
 
 # Install only runtime dependencies
-# - libpq5: The PostgreSQL client library needed by psycopg2 to connect
+# - libpq5: The PostgreSQL client library needed by psycopg to connect
 # - libgomp1: GNU OpenMP required for Numba parallel execution-support
 # - curl: A useful utility for health checks (or debugging)
 RUN apt-get update && \
