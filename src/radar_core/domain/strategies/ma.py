@@ -193,6 +193,9 @@ class MovingAverage(StrategyABC):
         # Position types to iterate
         position_types_ = [LONG] + ([] if only_long_positions else [SHORT])
 
+        # Collect positive ratios across position types / periods for batch upsert
+        positive_ratios_ = []
+
         for position_type_ in position_types_:
             # Initialize bad strategy to be evaluated and to get better MAs
             best_ratios_ = self.initialize_bad_strategy()
@@ -230,8 +233,8 @@ class MovingAverage(StrategyABC):
                     continue
 
                 if ratios_.net_profit > 0.0 and ratios_.expected_value > 0.0:
-                    # Save only to positive ratios
-                    self.ratio_crud.upsert(ratios_)
+                    # Save only positive ratios
+                    positive_ratios_.append(ratios_)
 
                 # Check if MA just analyzed is a better indicator for positionings than the previous calculated ones.
                 best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
@@ -244,6 +247,10 @@ class MovingAverage(StrategyABC):
                 analysis_context_.best_long = best_ratios_  # Best Long strategies
             else:
                 analysis_context_.best_short = best_ratios_  # Best Short strategies
+
+        # Perform atomic batch upsert for all positive ratios identified
+        if positive_ratios_:
+            self.ratio_crud.upsert_many(positive_ratios_)
 
         # Reset to the original columns
         prices_df = prices_df.select(original_column_names_)

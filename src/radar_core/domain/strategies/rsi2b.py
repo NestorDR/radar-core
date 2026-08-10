@@ -188,6 +188,9 @@ class RsiTwoBands(RsiStrategyABC):
         contexts_ = [(LONG, 16, 61, STEP_LENGTH_RSI_LEVELS)] + \
                     ([] if only_long_positions else [(SHORT, 84, 39, -STEP_LENGTH_RSI_LEVELS)])
 
+        # Collect positive ratios across position types / levels for batch upsert
+        positive_ratios_ = []
+
         for position_type_, from_in_, to_in_, step_ in contexts_:
             # Initialize bad strategy to be evaluated and to get better RSI-2Bs
             best_ratios_ = self.initialize_bad_strategy()
@@ -258,11 +261,11 @@ class RsiTwoBands(RsiStrategyABC):
                 if (best_ratios_for_in_.net_profit > 0.0 and best_ratios_for_in_.expected_value > 0.0
                         and not best_is_1_level_strategy_):
                     # Save only positive ratios
-                    self.ratio_crud.upsert(best_ratios_for_in_)
+                    positive_ratios_.append(best_ratios_for_in_)
 
                 if ratios_for_1_level_.net_profit > 0.0 and ratios_for_1_level_.expected_value > 0.0:
                     # Save only positive ratios for a particular strategy of only 1 level (input-output) analysis
-                    self.ratio_crud.upsert(ratios_for_1_level_)
+                    positive_ratios_.append(ratios_for_1_level_)
 
                 # Check if the best RSI 2B for this input level is a better indicator for positions
                 # than the previously calculated input levels.
@@ -276,6 +279,10 @@ class RsiTwoBands(RsiStrategyABC):
                 analysis_context_.best_long = best_ratios_  # Best Long strategies
             else:
                 analysis_context_.best_short = best_ratios_  # Best Short strategies
+
+        # Perform atomic batch upsert for all positive ratios identified
+        if positive_ratios_:
+            self.ratio_crud.upsert_many(positive_ratios_)
 
         # Release memory
         del contexts_

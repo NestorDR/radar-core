@@ -3,6 +3,7 @@
 # --- Third Party Libraries ---
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
 from sqlalchemy import and_, ColumnElement, not_
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.future import select
 from sqlalchemy.inspection import inspect  # Use mapper inspection to remain refactor-friendly
 
@@ -10,7 +11,7 @@ from sqlalchemy.inspection import inspect  # Use mapper inspection to remain ref
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import BaseCrud
 # models: result of Object-Relational Mapping
-from radar_core.models import Ratios
+from radar_core.models import RATIOS_UNIQUE_CONSTRAINT, Ratios
 
 # Precompute the list of attributes to copy once at import-time (refactor-safe and fast at runtime, minimizes overhead)
 _mapper = inspect(Ratios)
@@ -97,6 +98,88 @@ class RatioCrud(BaseCrud):
 
         super()._flag_in_process(where_clause_)
 
+    @staticmethod
+    def _deduplicate_batch(ratios_list: list[Ratios]) -> list[dict]:
+        """
+        Deduplicate ratio records in-memory by conflict key (symbol, strategy_id, inputs, timeframe, is_long_position).
+        Keep the best performing ratio (highest net_profit and expected_value) on duplicate keys.
+
+        :param ratios_list: List of Ratios objects.
+
+        :return: List of deduplicated dictionaries with uniform column keys for PostgreSQL insert.
+        """
+        deduped_map_ = {}
+        for item_ in ratios_list:
+            key_ = (
+                item_.symbol,
+                item_.strategy_id,
+                item_.inputs,
+                item_.timeframe,
+                item_.is_long_position,
+            )
+            if key_ not in deduped_map_:
+                deduped_map_[key_] = item_
+            else:
+                existing_ = deduped_map_[key_]
+                new_score_ = (item_.net_profit, item_.expected_value)
+                existing_score_ = (existing_.net_profit, existing_.expected_value)
+                if new_score_ > existing_score_:
+                    deduped_map_[key_] = item_
+
+        # Convert deduplicated Ratios objects to homogeneous dictionaries for pg_insert
+        return [
+            {
+                col_.key: getattr(ratio_, col_.key, None)
+                for col_ in _mapper.column_attrs
+                if col_.key != 'id'
+            }
+            for ratio_ in deduped_map_.values()
+        ]
+
+    def upsert_many(self,
+                    ratios_list: list[Ratios]) -> int:
+        """
+        Perform a batch PostgreSQL upsert (INSERT ... ON CONFLICT DO UPDATE) for strategy ratios.
+
+        :param ratios_list: List of Ratios objects to insert or update.
+
+        :return: The number of rows affected by the batch operation.
+        """
+        if not ratios_list:
+            return 0
+
+        self.session.expire_on_commit = False
+
+        deduped_data_ = self._deduplicate_batch(ratios_list)
+        if not deduped_data_:
+            return 0
+
+        # Build PostgreSQL insert statement
+        insert_stmt_ = pg_insert(Ratios).values(deduped_data_)
+
+        # Identify columns to update (all payload columns except primary key 'id' and conflict key columns)
+        conflict_keys_ = {'symbol', 'strategy_id', 'inputs', 'timeframe', 'is_long_position', 'id'}
+        update_cols_ = {
+            col_.name: insert_stmt_.excluded[col_.name]
+            for col_ in Ratios.__table__.columns
+            if col_.name not in conflict_keys_
+        }
+        # Explicitly reset flag field is_in_process to False on update
+        update_cols_['is_in_process'] = False
+
+        upsert_stmt_ = insert_stmt_.on_conflict_do_update(
+            constraint=RATIOS_UNIQUE_CONSTRAINT,
+            set_=update_cols_
+        )
+
+        try:
+            result_ = self.session.execute(upsert_stmt_)
+            self.session.commit()
+            return result_.rowcount
+        except Exception:
+            self.session.rollback()
+            raise
+
     def upsert(self,
                ratios: Ratios) -> None:
         """
@@ -125,45 +208,8 @@ class RatioCrud(BaseCrud):
             # Copy attributes using a precomputed list, refactor-safe list (no per-call reflection)
             for name in _COPY_ATTRS:
                 setattr(saved_record_, name, getattr(ratios, name))
-
-            """
-            # Set prices
-            saved_record_.from_date = ratios.from_date
-            saved_record_.to_date = ratios.to_date
-            saved_record_.initial_price = ratios.initial_price
-            saved_record_.final_price = ratios.final_price
-            saved_record_.net_change = ratios.net_change
-
-            saved_record_.signals = ratios.signals
-            saved_record_.winnings = ratios.winnings
-            saved_record_.losses = ratios.losses
-            # saved_record_.profit_factor = ratios.profit_factor
-            saved_record_.net_profit = ratios.net_profit
-            saved_record_.expected_value = ratios.expected_value
-            saved_record_.win_probability = ratios.win_probability
-            saved_record_.loss_probability = ratios.loss_probability
-            saved_record_.average_win = ratios.average_win
-            saved_record_.average_loss = ratios.average_loss
-
-            saved_record_.min_percentage_change_to_win = ratios.min_percentage_change_to_win
-            saved_record_.max_percentage_change_to_win = ratios.max_percentage_change_to_win
-
-            saved_record_.total_sessions = ratios.total_sessions
-            saved_record_.winning_sessions = ratios.winning_sessions
-            saved_record_.losing_sessions = ratios.losing_sessions
-            saved_record_.percentage_exposure = ratios.percentage_exposure
-
-            saved_record_.first_input_date = ratios.first_input_date
-            saved_record_.last_input_date = ratios.last_input_date
-            saved_record_.last_output_date = ratios.last_output_date
-
-            saved_record_.last_input_price = ratios.last_input_price
-            saved_record_.last_output_price = ratios.last_output_price
-            saved_record_.last_stop_loss = ratios.last_stop_loss
-
-            self.session.merge(saved_record_)
-            """
         else:
             self.session.add(ratios)
 
         self.session.commit()
+

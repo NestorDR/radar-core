@@ -27,13 +27,16 @@ if TYPE_CHECKING:
     from radar_core.models.strategies import Strategies
 
 
+RATIOS_UNIQUE_CONSTRAINT = 'ratios_symbol_strategy_inputs_timeframe_islong_unique'
+
+
 class Ratios(BaseModel):
     __tablename__ = 'ratios'
     __table_args__ = (
         ForeignKeyConstraint(['strategy_id'], ['strategies.id'], name='ratios_strategies_fkey'),
         PrimaryKeyConstraint('id', name='ratios_pkey'),
         UniqueConstraint('symbol', 'strategy_id', 'inputs', 'timeframe', 'is_long_position',
-                         name='ratios_symbol_strategy_inputs_timeframe_islong_unique'),
+                         name=RATIOS_UNIQUE_CONSTRAINT),
         {'comment': 'ratios to evaluate the performance of speculation/investment '
                     'strategies'}
     )
