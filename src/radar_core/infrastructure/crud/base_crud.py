@@ -45,13 +45,6 @@ class BaseCrud(object):
         """
         return json.dumps(inputs)
 
-    def get_all(self):
-        return self.session.query(self.base_model).all()
-
-    def get_by_id(self,
-                  entity_id: int):
-        return self.session.query(self.base_model).get(entity_id)
-
     def _delete_for(self,
                     where_clause: list | ColumnElement) -> int:
         """

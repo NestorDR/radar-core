@@ -47,11 +47,11 @@ class RatioCrud(BaseCrud):
 
         :param symbols: List of symbols to keep in the database.
 
-        :return: The number of rows deleted.
+        :return: The number of deleted rows.
         """
 
         # Create where clause for symbols not in the provided list
-        where_clause_ = not_(Ratios.symbol.in_(symbols))
+        where_clause_ = [not_(Ratios.symbol.in_(symbols))]
 
         # Delete rows that don't have symbols in the list
         return super()._delete_for(where_clause_)
@@ -67,7 +67,7 @@ class RatioCrud(BaseCrud):
         :param strategy_id: Identifier of the trading strategy flagged as in process.
         :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
 
-        :return: The number of rows deleted.
+        :return: The number of deleted rows.
         """
         where_clause_ = and_(self._base_clause_to_flag(symbol, strategy_id, timeframe),
                              Ratios.is_in_process)
@@ -164,4 +164,3 @@ class RatioCrud(BaseCrud):
         except Exception:
             self.session.rollback()
             raise
-
