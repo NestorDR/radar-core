@@ -1,5 +1,9 @@
 # src/radar_core/infrastructure/crud/ratio_crud.py
 
+# --- Python modules ---
+# operator: exports a set of efficient functions corresponding to intrinsic operators of Python (e.g. attrgetter for fast attribute access)
+from operator import attrgetter
+
 # --- Third Party Libraries ---
 # sqlalchemy: SQL and ORM toolkit for accessing relational databases
 from sqlalchemy import and_, ColumnElement, not_
@@ -12,11 +16,15 @@ from radar_core.infrastructure.crud import BaseCrud
 # models: result of Object-Relational Mapping
 from radar_core.models import RATIOS_CONFLICT_COLUMNS, RATIOS_UNIQUE_CONSTRAINT, Ratios
 
-# Precompute metadata once at import-time (refactor-safe and fast at runtime, minimizes overhead)
+# Precompute metadata and attribute getters once at import-time (refactor-safe and fast at runtime)
 _mapper = inspect(Ratios)
 _conflict_keys = set(RATIOS_CONFLICT_COLUMNS) | {'id'}
 _payload_col_keys = tuple(col_.key for col_ in _mapper.column_attrs if col_.key != 'id')
 _updatable_col_names = tuple(col_.name for col_ in Ratios.__table__.columns if col_.name not in _conflict_keys)
+
+# Fast C-level compiled attribute getters to avoid string lookup overhead in loops
+_get_conflict_key = attrgetter(*RATIOS_CONFLICT_COLUMNS)
+_payload_attr_getters = tuple((key_, attrgetter(key_)) for key_ in _payload_col_keys)
 
 
 class RatioCrud(BaseCrud):
@@ -104,7 +112,7 @@ class RatioCrud(BaseCrud):
         """
         deduped_map_ = {}
         for item_ in ratios_list:
-            key_ = tuple(getattr(item_, col_name_) for col_name_ in RATIOS_CONFLICT_COLUMNS)
+            key_ = _get_conflict_key(item_)
             if key_ not in deduped_map_:
                 deduped_map_[key_] = item_
             else:
@@ -117,8 +125,8 @@ class RatioCrud(BaseCrud):
         # Convert deduplicated Ratios objects to homogeneous dictionaries for pg_insert
         return [
             {
-                key_: getattr(ratio_, key_, None)
-                for key_ in _payload_col_keys
+                key_: getter_(ratio_)
+                for key_, getter_ in _payload_attr_getters
             }
             for ratio_ in deduped_map_.values()
         ]

@@ -223,9 +223,13 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - Runs formatting and linting tasks using `ruff`.
 
 ## Testing
-Testing and coverage (using `pytest` and `pytest-cov`) are planned to be fully implemented after the completion of the public deployment of the entire `Radar` ecosystem.
+Testing and coverage are implemented using `pytest` under the `tests/` directory.
 
-The repository currently has no test files, and the CI test job is still a placeholder rather than a `pytest` gate.
+- **Run Pytest Suite**:
+  ```console
+  uv run --active pytest
+  ```
+  The test suite includes unit tests, metadata CRUD operations, and PostgreSQL integration tests covering batch upserts, conflict resolution, process flagging lifecycle, and error rollback.
 
 ## Project Status
 In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base, CI/CD pipelines) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.

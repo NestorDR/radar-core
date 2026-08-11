@@ -495,7 +495,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['BTC-USD']
+    symbols_ = ['NUGT', 'LABU']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)
