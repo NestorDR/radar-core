@@ -85,17 +85,17 @@ class SecurityRepository:
                 return None
 
             # Add new security
-            self.__security_crud.add_security(
-                Securities(
-                    symbol=symbol,
-                    description=company_name_,
-                    is_bear=any(keyword in company_name_.lower() for keyword in ['bear', 'inverse', 'short'])))
+            new_security_ = Securities(
+                symbol=symbol,
+                description=company_name_,
+                is_bear=any(keyword in company_name_.lower() for keyword in ['bear', 'inverse', 'short']))
+            self.__security_crud.add_security(new_security_)
 
-            message_ = f"Added new security: {symbol} to the DB."
+            message_ = f'Added new security: {symbol} to the DB.'
             verbose(message_, INFO, self.verbosity_level)
             logger_.info(message_)
 
-            return security_
+            return new_security_
 
         except Exception as e_:
             message_ = f'Failed to ensure existence of security {symbol}: {e_}'
@@ -131,13 +131,29 @@ class SecurityRepository:
 
     def map_symbol_to_ticker(self, symbols: list[str], provider_id: int = YAHOO_ID) -> dict[str, str]:
         """
-        Translates symbols to provider tickers using one batch database lookup.
+        Translates symbols to provider tickers using batch database lookup.
+        Symbols missing from the database are automatically created and registered if found in Yahoo Finance.
 
         :param symbols: Symbols to translate.
         :param provider_id: Provider identifier.
-        :return: Mapping from each symbol to its provider ticker.
+
+        :return: Mapping from each valid symbol to its provider ticker.
         """
         if not symbols:
             return {}
 
-        return self.__security_crud.get_tickers_by_symbols(symbols, provider_id)
+        ticker_map_ = self.__security_crud.get_tickers_by_symbols(symbols, provider_id)
+
+        # Identify missing symbols and auto-create them in DB if found on Yahoo Finance
+        for symbol in symbols:
+            if symbol not in ticker_map_:
+                security_ = self._get_or_create_security(symbol)
+                if security_:
+                    ticker_map_[symbol] = self._get_ticker(symbol, provider_id)
+
+        # Preserve the original order of input symbols
+        return {
+            symbol_: ticker_map_[symbol_]
+            for symbol_ in symbols
+            if symbol_ in ticker_map_
+        }

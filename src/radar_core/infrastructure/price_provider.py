@@ -133,6 +133,10 @@ class PriceProvider:
         symbol_to_ticker_map_ = SecurityRepository(self.verbosity_level).map_symbol_to_ticker(symbols)
         tickers_ = list(symbol_to_ticker_map_.values())
 
+        if not tickers_:
+            logger_.warning('No valid tickers found to download.')
+            return {}
+
         # Step 2: Download data using the translated tickers
         results_: dict[str, pl.DataFrame] = {}
         message_ = f'Starting download for {len(tickers_)} tickers from Yahoo Finance...'
