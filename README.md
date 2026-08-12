@@ -77,7 +77,51 @@ The system follows a three-tier performance model:
 2. **Storage Layer**: **Polars** for lightning-fast in-memory data manipulation and grouping.
 3. **Execution Layer**: **NumPy + Numba** for the heavy mathematical lifting (vectorized backtesting).
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/ATR indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` and `SecurityCrud` to translate internal symbols to Yahoo Finance tickers before converting the Pandas response to Polars.
+```mermaid
+flowchart TD
+    subgraph CLI ["CLI & Configuration Entry"]
+        Main["__main__.py / CLI"] --> Settings["Settings (settings.yml & Env Vars)"]
+        Settings --> Analyzer["analyzer.py (Orchestrator)"]
+    end
+
+    subgraph DataIngestion ["1. Adaptation & Ingestion Layer"]
+        Analyzer --> PriceProvider["PriceProvider"]
+        PriceProvider --> SymbolMapping["Symbol & Ticker Translation"]
+        SymbolMapping -->|psycopg3| DB[("PostgreSQL Database")]
+        PriceProvider -->|yfinance / Pandas| YFinance["Yahoo Finance API"]
+    end
+
+    subgraph Storage ["2. In-Memory Storage & Processing Layer"]
+        YFinance -->|Convert to Polars| PolarsData["Polars DataFrames (Daily & Weekly)"]
+        PolarsData --> TechnicalIndicators["Shared TA Indicators (RSI, ATR)"]
+    end
+
+    subgraph Concurrency ["Parallel Worker Dispatch"]
+        Analyzer -->|ProcessPoolExecutor| ParallelWorkers["Worker Processes (spawn context)"]
+        TechnicalIndicators --> ParallelWorkers
+    end
+
+    subgraph Execution ["3. Execution & Calculation Layer"]
+        ParallelWorkers --> StrategyOrch["Strategy Orchestration (StrategyABC)"]
+        StrategyOrch --> MA["MovingAverage"]
+        StrategyOrch --> RSI2B["RsiTwoBands"]
+        StrategyOrch --> RSIRC["RsiRollerCoaster"]
+
+        MA -->|NumPy Arrays| NumbaMA["@njit _find_trades_sma (Numba Kernel)"]
+        RSI2B -->|NumPy Arrays| Numba2B["@njit _find_trades_2b (Numba Kernel)"]
+        RSIRC -->|NumPy Arrays| NumbaRC["@njit _find_trades_rc (Numba Kernel)"]
+    end
+
+    subgraph Persistence ["Persistence Boundary"]
+        NumbaMA & Numba2B & NumbaRC --> RatiosOutput["Ratios Data Objects"]
+        RatiosOutput --> RatioCrud["RatioCrud (psycopg3)"]
+        RatioCrud -->|Parameterized Upsert| DB
+    end
+```
+
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/ATR indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` translates internal symbols to Yahoo Finance tickers before converting the Pandas response to Polars.
+
+
 
 ## Minimal Example
 Below is a minimal snippet that shows how you might pull prices and run a simple analysis, similar to what the analyzer does internally.
