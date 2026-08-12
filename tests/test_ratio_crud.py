@@ -1,8 +1,8 @@
 # --- Python modules ---
 # datetime: provides classes for manipulating dates and times.
 import datetime
-# unittest.mock: provides tools for creating mock objects for use in testing.
-from unittest.mock import MagicMock
+from unittest.mock import patch
+
 
 # --- Third Party Libraries ---
 # pytest: testing framework
@@ -59,94 +59,31 @@ def _create_sample_ratio(symbol: str = 'BTC-USD',
     )
 
 
-def test_deduplicate_batch_empty():
-    """
-    GIVEN an empty list of ratio records
-    WHEN _deduplicate_batch is called
-    THEN it returns an empty list.
-    """
-    result_ = RatioCrud._deduplicate_batch([])
-    assert result_ == []
-
-
-def test_deduplicate_batch_distinct():
-    """
-    GIVEN a list of ratio records with distinct conflict keys
-    WHEN _deduplicate_batch is called
-    THEN all distinct records are preserved in the result.
-    """
-    records_ = [
-        _create_sample_ratio(inputs='{"period": 10}', net_profit=0.15),
-        _create_sample_ratio(inputs='{"period": 20}', net_profit=0.20),
-    ]
-    result_ = RatioCrud._deduplicate_batch(records_)
-    assert len(result_) == 2
-
-
-def test_deduplicate_batch_duplicate_keys():
-    """
-    GIVEN a list of ratio records containing duplicate conflict keys
-    WHEN _deduplicate_batch is called
-    THEN it keeps only the record with higher net profit and expected value.
-    """
-    records_ = [
-        _create_sample_ratio(inputs='{"period": 10}', net_profit=0.10, expected_value=0.02),
-        _create_sample_ratio(inputs='{"period": 10}', net_profit=0.25, expected_value=0.09),
-    ]
-    result_ = RatioCrud._deduplicate_batch(records_)
-    assert len(result_) == 1
-    assert result_[0]['net_profit'] == 0.25
-
-
-def test_deduplicate_batch_with_ratios_objects_mixed_nulls():
-    """
-    GIVEN Ratios ORM objects with mixed null values (e.g. open and closed trades)
-    WHEN _deduplicate_batch is called
-    THEN it outputs dictionaries with homogeneous keys preserving None for nullable columns.
-    """
-    closed_trade_ = _create_sample_ratio(inputs='{"period": 10}', last_output_date=datetime.date(2025, 12, 31))
-    open_trade_ = _create_sample_ratio(inputs='{"period": 20}', last_output_date=None)
-
-    result_ = RatioCrud._deduplicate_batch([closed_trade_, open_trade_])
-
-    assert len(result_) == 2
-    # Ensure both output dictionaries contain exact same keys
-    assert set(result_[0].keys()) == set(result_[1].keys())
-    assert result_[0]['last_output_date'] == datetime.date(2025, 12, 31)
-    assert result_[1]['last_output_date'] is None
-    assert 'id' not in result_[0]
-
-
 def test_upsert_many_empty_returns_zero():
     """
     GIVEN an empty list of ratios
     WHEN upsert_many is called
     THEN it returns 0 immediately without executing any database query.
     """
-    crud_ = MagicMock(spec=RatioCrud)
-    crud_.upsert_many = RatioCrud.upsert_many.__get__(crud_)
+    crud_ = RatioCrud()
     res_ = crud_.upsert_many([])
     assert res_ == 0
+
 
 
 def test_upsert_many_rollback_on_error():
     """
     GIVEN a batch of ratio records and a database execution failure
     WHEN upsert_many is executed
-    THEN it catches the exception and rolls back the session transaction.
+    THEN it catches the exception and raises the error via get_psycopg_connection context manager.
     """
-    mock_session_ = MagicMock()
-    exception_message_ = 'Database connection error'
-    mock_session_.execute.side_effect = Exception(exception_message_)
-
-    crud_ = MagicMock(spec=RatioCrud)
-    crud_.session = mock_session_
-    crud_._deduplicate_batch = RatioCrud._deduplicate_batch
-    crud_.upsert_many = RatioCrud.upsert_many.__get__(crud_)
-
+    crud_ = RatioCrud()
     sample_ratio_ = _create_sample_ratio()
 
-    with pytest.raises(Exception, match=exception_message_):
-        crud_.upsert_many([sample_ratio_])
+    exception_message_ = 'psycopg3 database error'
 
-    mock_session_.rollback.assert_called_once()
+    with patch('radar_core.infrastructure.crud.ratio_crud.get_psycopg_connection') as mock_get_conn_:
+        mock_get_conn_.return_value.__enter__.side_effect = Exception(exception_message_)
+
+        with pytest.raises(Exception, match=exception_message_):
+            crud_.upsert_many([sample_ratio_])

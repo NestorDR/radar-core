@@ -1,7 +1,7 @@
 # src/radar_core/domain/strategies/rsi2b.py
 
 # --- Python modules ---
-# json: library for encoding and decoding prices in JSON format.
+# json: provides functions for working with JSON data.
 import json
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG

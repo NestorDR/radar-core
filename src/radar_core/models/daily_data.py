@@ -1,47 +1,28 @@
 # src/radar_core/models/daily_data.py
-"""
-Models auto-generated through sqlacodegen (https://github.com/agronholm/sqlacodegen/tree/master)
-"""
 
 # --- Python modules ---
 # datetime: provides classes for manipulating dates and times.
 import datetime
-# decimal: provides support for fast correctly rounded decimal floating point arithmetic
-#          it offers several advantages over the float datatype.
+# dataclasses: provides support for defining data-oriented classes.
+from dataclasses import dataclass
+# Decimal: provides fast, correctly rounded decimal floating-point arithmetic with advantages over the built-in float.
 from decimal import Decimal
-# typing: provides support for type hints and annotations.
-from typing import Optional, TYPE_CHECKING
-
-# --- Third Party Libraries ---
-# sqlalchemy: SQL and ORM toolkit for accessing relational databases
-from sqlalchemy import BigInteger, Date, ForeignKeyConstraint, Integer, Numeric, \
-    PrimaryKeyConstraint, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # --- App modules ---
-# models: result of Object-Relational Mapping
+# base_model: provides a base class for all models.
 from radar_core.models.base_model import BaseModel
 
-if TYPE_CHECKING:
-    from radar_core.models.securities import Securities
 
-
+# kw_only=True: indicates that all fields in the dataclass must be passed as arguments
+@dataclass(kw_only=True)
 class DailyData(BaseModel):
     __tablename__ = 'daily_data'
-    __table_args__ = (
-        ForeignKeyConstraint(['security_id'], ['securities.id'], name='dailydata_securities_fkey'),
-        PrimaryKeyConstraint('id', name='dailydata_pkey'),
-        UniqueConstraint('security_id', 'date', name='dailydata_securityid_date_unique'),
-        {'comment': 'Daily prices (OHLC) and indicators for the securities'}
-    )
 
-    security_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    date: Mapped[datetime.date] = mapped_column(Date, nullable=False)
-    open: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
-    high: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
-    low: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
-    close: Mapped[Decimal] = mapped_column(Numeric(24, 4), nullable=False)
-    volume: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    percent_change: Mapped[Optional[Decimal]] = mapped_column(Numeric(8, 2))
-
-    security: Mapped['Securities'] = relationship('Securities', back_populates='daily_data', lazy='noload')
+    security_id: int = 0
+    date: datetime.date | None = None
+    open: Decimal | None = None
+    high: Decimal | None = None
+    low: Decimal | None = None
+    close: Decimal | None = None
+    volume: int = 0
+    percent_change: Decimal | None = None

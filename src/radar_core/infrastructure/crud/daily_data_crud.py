@@ -8,6 +8,14 @@ from radar_core.models import DailyData
 
 
 class DailyDataCrud(BaseCrud):
+    """
+    Legacy CRUD stub for DailyData model.
+
+    NOTE: Unused in active application pipeline. Price data is ingested dynamically from Yahoo Finance
+    into in-memory Polars DataFrames via PriceProvider without database table persistence.
+    """
+
     def __init__(self):
         super().__init__(DailyData)
+
 

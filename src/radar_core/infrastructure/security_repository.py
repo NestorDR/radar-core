@@ -131,27 +131,13 @@ class SecurityRepository:
 
     def map_symbol_to_ticker(self, symbols: list[str], provider_id: int = YAHOO_ID) -> dict[str, str]:
         """
-        Translates a list of internal symbols to their corresponding provider tickers.
+        Translates symbols to provider tickers using one batch database lookup.
 
-        :param symbols: List of security symbols to translate.
-        :param provider_id: The ID of the provider to fetch the synonym for. Defaults to YAHOO_ID.
-
-        :return: Dictionary mapping each valid original symbol to its provider ticker.
+        :param symbols: Symbols to translate.
+        :param provider_id: Provider identifier.
+        :return: Mapping from each symbol to its provider ticker.
         """
-        symbol_to_ticker_map_: dict[str, str] = {}
-        message_ = f"Translating {len(symbols)} symbols to provider tickers..."
-        verbose(message_, INFO, self.verbosity_level)
-        logger_.info(message_)
+        if not symbols:
+            return {}
 
-        for symbol in symbols:
-            if not symbol:
-                message_ = "Empty symbol string provided in the list."
-                verbose(message_, WARNING, self.verbosity_level)
-                logger_.warning(message_)
-                continue
-
-            ticker_ = self._get_ticker(symbol, provider_id)
-            if ticker_:
-                symbol_to_ticker_map_[symbol] = ticker_
-
-        return symbol_to_ticker_map_
+        return self.__security_crud.get_tickers_by_symbols(symbols, provider_id)

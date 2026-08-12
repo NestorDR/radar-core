@@ -1,39 +1,19 @@
 # src/radar_core/models/synonyms.py
-"""
-Models auto-generated through sqlacodegen (https://github.com/agronholm/sqlacodegen/tree/master)
-"""
 
 # --- Python modules ---
-# typing: provides support for type hints and annotations.
-from typing import TYPE_CHECKING
-
-# --- Third Party Libraries ---
-# sqlalchemy: SQL and ORM toolkit for accessing relational databases.
-from sqlalchemy import ForeignKeyConstraint, Integer, PrimaryKeyConstraint, String, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+# dataclasses: provides support for defining data-oriented classes.
+from dataclasses import dataclass
 
 # --- App modules ---
-# models: result of Object-Relational Mapping
+# base_model: provides a base class for all models.
 from radar_core.models.base_model import BaseModel
 
-if TYPE_CHECKING:
-    from radar_core.models.securities import Securities
 
-
+# kw_only=True: indicates that all fields in the dataclass must be passed as arguments
+@dataclass(kw_only=True)
 class Synonyms(BaseModel):
     __tablename__ = 'synonyms'
-    __table_args__ = (
-        ForeignKeyConstraint(['security_id'], ['securities.id'], name='synonyms_securities_fkey'),
-        PrimaryKeyConstraint('id', name='synonyms_pkey'),
-        UniqueConstraint('provider_id', 'security_id', name='synonyms_providerid_securityid_unique'),
-        {'comment': 'Synonyms of security symbols in different quote providers.\n'
-                    'The providerId column is managed without a master table, and its '
-                    'values are:\n'
-                    '1 -> Yahoo'}
-    )
 
-    provider_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    security_id: Mapped[int] = mapped_column(Integer, nullable=False)
-    ticker: Mapped[str] = mapped_column(String(10), nullable=False)
-
-    security: Mapped['Securities'] = relationship('Securities', back_populates='synonyms', lazy='noload')
+    provider_id: int = 0
+    security_id: int = 0
+    ticker: str = ''

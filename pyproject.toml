@@ -18,8 +18,8 @@ dependencies = [
     "psycopg-binary>=3.2",
     "PyYAML>=6.0",
     "setuptools>=80.9",
-    "SQLAlchemy>=2.0",
     "yfinance>=0.2.65",
+
     # --- For TA-Lib ---
     # On Windows run manually: uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.X/ta_lib-0.6.X-cp313-cp313-win_amd64.whl --no-cache-dir
     # On non-Windows platforms (like Linux in Docker) installs TA-Lib from PyPI (environment markers exclude Windows)
@@ -83,3 +83,9 @@ python-platform = "all"
 
 [tool.ty.rules]
 possibly-missing-attribute = "ignore"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: mark test as integration test",
+]
+

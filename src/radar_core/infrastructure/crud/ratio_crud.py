@@ -1,30 +1,80 @@
 # src/radar_core/infrastructure/crud/ratio_crud.py
 
 # --- Python modules ---
-# operator: exports a set of efficient functions corresponding to intrinsic operators of Python (e.g. attrgetter for fast attribute access)
+# contextlib: provides utilities for common tasks involving the context management protocol
+from contextlib import contextmanager
+# operator: exports a set of efficient functions corresponding to intrinsic operators of Python
+#  (e.g., attrgetter for fast attribute access)
 from operator import attrgetter
+# typing: provides runtime support for type hints
+from typing import Iterator
 
 # --- Third Party Libraries ---
-# sqlalchemy: SQL and ORM toolkit for accessing relational databases
-from sqlalchemy import and_, ColumnElement, not_
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.inspection import inspect  # Use mapper inspection to remain refactor-friendly
+# psycopg: PostgreSQL database adapter for Python
+from psycopg import Connection
+from psycopg.sql import Identifier, SQL
 
 # --- App modules ---
+from radar_core.database import get_psycopg_connection
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import BaseCrud
 # models: result of Object-Relational Mapping
-from radar_core.models import RATIOS_CONFLICT_COLUMNS, RATIOS_UNIQUE_CONSTRAINT, Ratios
+from radar_core.models import RATIOS_CONFLICT_COLUMNS, RATIOS_PAYLOAD_COLUMNS, Ratios
 
-# Precompute metadata and attribute getters once at import-time (refactor-safe and fast at runtime)
-_mapper = inspect(Ratios)
-_conflict_keys = set(RATIOS_CONFLICT_COLUMNS) | {'id'}
-_payload_col_keys = tuple(col_.key for col_ in _mapper.column_attrs if col_.key != 'id')
-_updatable_col_names = tuple(col_.name for col_ in Ratios.__table__.columns if col_.name not in _conflict_keys)
+# Module-level table identifier constant
+_RATIOS_TABLE = Identifier(Ratios.__tablename__)
+
+# Precompute metadata and attribute getters once at import-time
+_cols_sql = SQL(', ').join(Identifier(col_) for col_ in RATIOS_PAYLOAD_COLUMNS)
+_params_sql = SQL(', ').join(SQL('%({})s').format(SQL(col_)) for col_ in RATIOS_PAYLOAD_COLUMNS)
+_on_conflict_sql = SQL(', ').join(Identifier(col_) for col_ in RATIOS_CONFLICT_COLUMNS)
+_updatable_col_names = tuple(
+    col_
+    for col_ in RATIOS_PAYLOAD_COLUMNS
+    if col_ not in set(RATIOS_CONFLICT_COLUMNS) | {'id', 'is_in_process'}
+)
+_update_sql = SQL(', ').join(
+    SQL('{col} = EXCLUDED.{col}')
+    .format(col=Identifier(col_)) for col_ in _updatable_col_names
+)
 
 # Fast C-level compiled attribute getters to avoid string lookup overhead in loops
-_get_conflict_key = attrgetter(*RATIOS_CONFLICT_COLUMNS)
-_payload_attr_getters = tuple((key_, attrgetter(key_)) for key_ in _payload_col_keys)
+_payload_attr_getters = tuple(
+    (key_, attrgetter(key_))
+    for key_ in RATIOS_PAYLOAD_COLUMNS
+)
+
+_FLAG_IN_PROCESS_SQL = SQL("UPDATE ") + _RATIOS_TABLE + SQL(
+    " SET is_in_process = TRUE WHERE symbol = %s AND strategy_id = %s AND timeframe = %s")
+
+# Explicitly reset flag field is_in_process to False on update
+_UPSERT_RATIOS_SQL = SQL("INSERT INTO ") + _RATIOS_TABLE + SQL(
+    " ({cols}) VALUES ({params}) ON CONFLICT ({on_conflict}) DO UPDATE SET {update}, is_in_process = FALSE"
+).format(cols=_cols_sql, params=_params_sql, on_conflict=_on_conflict_sql, update=_update_sql)
+
+_DELETE_ALL_RATIOS_SQL = SQL("DELETE FROM ") + _RATIOS_TABLE
+_DELETE_UNLISTED_SYMBOLS_SQL = _DELETE_ALL_RATIOS_SQL + SQL(" WHERE symbol != ALL(%s)")
+_DELETE_FLAGGED_IN_PROCESS_SQL = _DELETE_ALL_RATIOS_SQL + SQL(
+    " WHERE symbol = %s AND strategy_id = %s  AND timeframe = %s AND is_in_process = TRUE")
+
+
+@contextmanager
+def _connection_scope(conn: Connection | None) -> Iterator[Connection]:
+    """
+    Reuse a supplied connection or create an operation-scoped connection.
+
+    :param conn: Optional connection supplied by the caller.
+
+    :return: An active psycopg connection.
+
+    :raises Exception: Re-raises database errors from the managed connection.
+    """
+    if conn is not None:
+        yield conn
+        return
+
+    with get_psycopg_connection() as conn_:
+        yield conn_
 
 
 class RatioCrud(BaseCrud):
@@ -32,143 +82,97 @@ class RatioCrud(BaseCrud):
         super().__init__(Ratios)
 
     @staticmethod
-    def _base_clause_to_flag(symbol: str,
-                             strategy_id: int,
-                             timeframe: int) -> ColumnElement[bool]:
-        """
-        Build the base where clause for flag conditions.
-
-        :param symbol: Security symbol.
-        :param strategy_id: Identifier of the trading strategy.
-        :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
-
-        :return: Base `and_` clause with common conditions.
-        """
-        return and_(Ratios.symbol == symbol,
-                    Ratios.strategy_id == strategy_id,
-                    Ratios.timeframe == timeframe)
-
-    def delete_symbols_not_in(self,
-                              symbols: list[str]) -> int:
+    def delete_unlisted_symbols(symbols: list[str],
+                                conn: Connection | None = None) -> int:
         """
         Delete rows where the symbol is not in the provided list.
 
         :param symbols: List of symbols to keep in the database.
+        :param conn: Optional active psycopg Connection for transaction reuse.
 
         :return: The number of deleted rows.
         """
+        if not symbols:
+            query_ = _DELETE_ALL_RATIOS_SQL
+            params_ = ()
+        else:
+            query_ = _DELETE_UNLISTED_SYMBOLS_SQL
+            params_ = (symbols,)
 
-        # Create where clause for symbols not in the provided list
-        where_clause_ = [not_(Ratios.symbol.in_(symbols))]
+        with _connection_scope(conn) as conn_:
+            with conn_.cursor() as cur_:
+                cur_.execute(query_, params_)
+                return cur_.rowcount
 
-        # Delete rows that don't have symbols in the list
-        return super()._delete_for(where_clause_)
-
-    def delete_flagged_in_process(self,
-                                  symbol: str,
+    @staticmethod
+    def delete_flagged_in_process(symbol: str,
                                   strategy_id: int,
-                                  timeframe: int) -> int:
+                                  timeframe: int,
+                                  conn: Connection | None = None) -> int:
         """
         Delete rows in which its column `is_in_process` is flagged as True.
 
         :param symbol: Security symbol flagged as in process.
         :param strategy_id: Identifier of the trading strategy flagged as in process.
         :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
+        :param conn: Optional active psycopg Connection for transaction reuse.
 
         :return: The number of deleted rows.
         """
-        where_clause_ = and_(self._base_clause_to_flag(symbol, strategy_id, timeframe),
-                             Ratios.is_in_process)
+        with _connection_scope(conn) as conn_:
+            with conn_.cursor() as cur_:
+                cur_.execute(
+                    _DELETE_FLAGGED_IN_PROCESS_SQL,
+                    (symbol, strategy_id, timeframe),
+                )
+                return cur_.rowcount
 
-        # Flagged rows deletion
-        return super()._delete_for(where_clause_)
-
-    def flag_in_process(self,
-                        symbol: str,
+    @staticmethod
+    def flag_in_process(symbol: str,
                         strategy_id: int,
-                        timeframe: int) -> int:
+                        timeframe: int,
+                        conn: Connection | None = None) -> int:
         """
         Update the flag field `is_in_process` to True for a specific symbol, trading strategy, and timeframe.
 
         :param symbol: Security symbol to flag.
         :param strategy_id: Identifier of the trading strategy to flag.
         :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
+        :param conn: Optional active psycopg Connection for transaction reuse.
 
         :return: The number of rows updated.
         """
-        where_clause_ = self._base_clause_to_flag(symbol, strategy_id, timeframe)
-
-        return super()._flag_in_process(where_clause_)
+        with _connection_scope(conn) as conn_:
+            with conn_.cursor() as cur_:
+                cur_.execute(
+                    _FLAG_IN_PROCESS_SQL,
+                    (symbol, strategy_id, timeframe),
+                )
+                return cur_.rowcount
 
     @staticmethod
-    def _deduplicate_batch(ratios_list: list[Ratios]) -> list[dict]:
+    def upsert_many(ratios_list: list[Ratios],
+                    conn: Connection | None = None) -> int:
         """
-        Deduplicate ratio records in-memory by conflict key (symbol, strategy_id, inputs, timeframe, is_long_position).
-        Keep the best performing ratio (highest net_profit and expected_value) on duplicate keys.
-
-        :param ratios_list: List of Ratios objects.
-
-        :return: List of deduplicated dictionaries with uniform column keys for PostgreSQL insert.
-        """
-        deduped_map_ = {}
-        for item_ in ratios_list:
-            key_ = _get_conflict_key(item_)
-            if key_ not in deduped_map_:
-                deduped_map_[key_] = item_
-            else:
-                existing_ = deduped_map_[key_]
-                new_score_ = (item_.net_profit, item_.expected_value)
-                existing_score_ = (existing_.net_profit, existing_.expected_value)
-                if new_score_ > existing_score_:
-                    deduped_map_[key_] = item_
-
-        # Convert deduplicated Ratios objects to homogeneous dictionaries for pg_insert
-        return [
-            {
-                key_: getter_(ratio_)
-                for key_, getter_ in _payload_attr_getters
-            }
-            for ratio_ in deduped_map_.values()
-        ]
-
-    def upsert_many(self,
-                    ratios_list: list[Ratios]) -> int:
-        """
-        Perform a batch PostgreSQL upsert (INSERT ... ON CONFLICT DO UPDATE) for strategy ratios.
+        Perform a batch PostgreSQL upsert (INSERT ... ON CONFLICT DO UPDATE) for strategy ratios using psycopg3.
 
         :param ratios_list: List of Ratios objects to insert or update.
+        :param conn: Optional active psycopg Connection for transaction reuse.
 
         :return: The number of rows affected by the batch operation.
         """
         if not ratios_list:
             return 0
 
-        self.session.expire_on_commit = False
+        payload_data_ = [
+            {
+                key_: getter_(ratio_)
+                for key_, getter_ in _payload_attr_getters
+            }
+            for ratio_ in ratios_list
+        ]
 
-        deduped_data_ = self._deduplicate_batch(ratios_list)
-        if not deduped_data_:
-            return 0
-
-        # Build PostgreSQL insert statement
-        insert_stmt_ = insert(Ratios).values(deduped_data_)
-
-        # Identify columns to update (all payload columns except primary key 'id' and conflict key columns)
-        update_cols_ = {
-            col_name_: insert_stmt_.excluded[col_name_]
-            for col_name_ in _updatable_col_names
-        }
-        # Explicitly reset flag field is_in_process to False on update
-        update_cols_['is_in_process'] = False
-
-        upsert_stmt_ = insert_stmt_.on_conflict_do_update(
-            constraint=RATIOS_UNIQUE_CONSTRAINT,
-            set_=update_cols_
-        )
-
-        try:
-            result_ = self.session.execute(upsert_stmt_)
-            self.session.commit()
-            return result_.rowcount
-        except Exception:
-            self.session.rollback()
-            raise
+        with _connection_scope(conn) as conn_:
+            with conn_.cursor() as cur_:
+                cur_.executemany(_UPSERT_RATIOS_SQL, payload_data_)
+                return cur_.rowcount

@@ -17,7 +17,7 @@ The fully operational results can be visited for public use:
 - **Yahoo Finance Integration**: Automated download of historical daily and weekly prices.
 - **Technical Analysis & Strategies**: Built-in support for Moving Averages (SMA) and RSI-based variants (RSI SMA, Two Bands, Rollercoaster).
 - **Performance Metrics**: Detailed profiling including net profit, success rate, mathematical expectation, and risk-adjusted ratios.
-- **Database Synchronization**: Automated management of trading ratios and symbol cleanup via SQLAlchemy.
+- **Database Synchronization**: Automated management of trading ratios and symbol cleanup via `psycopg3`.
 - Configurable settings (symbols, shortable assets, verbosity, concurrency)
     
 ## Prerequisites
@@ -26,7 +26,6 @@ The fully operational results can be visited for public use:
 - Required libraries (managed via pyproject.toml):
   - polars
   - yfinance
-  - SQLAlchemy
   - numba, numpy, PyYAML, dotenvy-py, psycopg, psycopg-binary, setuptools
   - TA-Lib (see notes below)
 
@@ -78,7 +77,7 @@ The system follows a three-tier performance model:
 2. **Storage Layer**: **Polars** for lightning-fast in-memory data manipulation and grouping.
 3. **Execution Layer**: **NumPy + Numba** for the heavy mathematical lifting (vectorized backtesting).
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/ATR indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` and SQLAlchemy to translate internal symbols to Yahoo Finance tickers before converting the Pandas response to Polars.
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/ATR indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` and `SecurityCrud` to translate internal symbols to Yahoo Finance tickers before converting the Pandas response to Polars.
 
 ## Minimal Example
 Below is a minimal snippet that shows how you might pull prices and run a simple analysis, similar to what the analyzer does internally.
@@ -90,7 +89,7 @@ from radar_core.domain.strategies import MovingAverage
 from radar_core.helpers.constants import DAILY, SMA
 
 # Define a list of symbols to analyze
-symbols_ = ['BTC-USD']
+symbols_ = ["BTC-USD"]
 
 # Download prices data for all symbols to be analyzed
 prices_data_ = PriceProvider(long_term=False).get_prices(symbols_)
@@ -102,11 +101,9 @@ only_long_positions_ = False
 # Iterate over symbols
 for symbol_, prices_df_ in prices_data_.items():
     # The analyzer orchestrates identify() and logging; here we just demonstrate the objects.
-    prices_df_ = prices_df_.with_columns(
-        pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber')
-    )
-    close_prices_ = prices_df_['Close'].to_numpy()
-    percent_changes_ = prices_df_['PercentChange'].to_numpy()
+    prices_df_ = prices_df_.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias("BarNumber"))
+    close_prices_ = prices_df_["Close"].to_numpy()
+    percent_changes_ = prices_df_["PercentChange"].to_numpy()
     ma.identify(symbol_, DAILY, only_long_positions_, prices_df_, close_prices_, percent_changes_)
 
     # See src/radar_core/analyzer.py for a full run.
@@ -155,7 +152,7 @@ Project settings are managed by the `Settings` class. You can configure the appl
 | `RADAR_SETTING_FILE`        | Custom settings YAML path, relative to `src/radar_core` when not absolute                    | `settings.yml`                |
 | `POSTGRES_*`                | PostgreSQL host, port, database, user, and password settings                                  |                               |
 | `POSTGRES_SSL_MODE`         | PostgreSQL connection SSL mode                                                               | `prefer`                      |
-| `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options appended to the SQLAlchemy URL                        | unset                         |
+| `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options appended to the connection string                      | unset                         |
 
 ## Docker
 Containerization is available for a fully reproducible environment. The image is multi-stage and builds the TA-Lib C library inside the container, so you don’t need any TA-Lib setup on your host.
@@ -222,14 +219,8 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
 - **`auto\lint.cmd`**: Automatic checks and corrections.
   - Runs formatting and linting tasks using `ruff`.
 
-## Testing
-Testing and coverage are implemented using `pytest` under the `tests/` directory.
-
-- **Run Pytest Suite**:
-  ```console
-  uv run --active pytest
-  ```
-  The test suite includes unit tests, metadata CRUD operations, and PostgreSQL integration tests covering batch upserts, conflict resolution, process flagging lifecycle, and error rollback.
+- **`auto\test.cmd`**: Testing is implemented using `pytest`. Unit tests are located under the `tests/` directory.
+  - The test suite includes fast, in-memory unit tests using `pytest` and `unittest.mock` covering batch deduplication, model instantiation, error handling, and CRUD methods without external database dependencies.
 
 ## Project Status
 In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base, CI/CD pipelines) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.

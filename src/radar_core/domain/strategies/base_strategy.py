@@ -3,11 +3,12 @@
 # --- Python modules ---
 # abc: abstract base classes (abc) allow implementing interfaces effectively
 from abc import ABC, abstractmethod
-# decimal: provides support for fast correctly rounded decimal floating point arithmetic
-#  it offers several advantages over the float datatype.
+# Decimal: provides fast, correctly rounded decimal floating-point arithmetic with advantages over the built-in float.
 from decimal import Decimal
 # datetime: provides classes for manipulating dates and times.
 from datetime import date, datetime
+# json: provides functions for working with JSON data.
+import json
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import CRITICAL, DEBUG, INFO, getLogger
 
@@ -116,10 +117,9 @@ class StrategyABC(ABC):
                  prices_df: pl.DataFrame,
                  close_prices: np.ndarray,
                  percent_changes: np.ndarray,
-                 verbosity_level: int = DEBUG) -> dict:
+                 verbosity_level: int = DEBUG) -> None:
         """
         Iterates a number of periods or levels to calculate a tech indicator and evaluate its profitability.
-        Returns a dictionary with the strategies with the best ratios.
 
         :param only_long_positions:
         :param symbol: Security symbol to analyze.
@@ -129,8 +129,6 @@ class StrategyABC(ABC):
         :param close_prices: Close prices for the given symbol and timeframe.
         :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
         :param verbosity_level: Importance level of messages.
-
-        :return: Dictionary of strategies with the best ratios based on its profitability.
         """
         pass
 
@@ -208,9 +206,6 @@ class StrategyABC(ABC):
 
         # Delete Ratios where is_in_process is True.
         self.ratio_crud.delete_flagged_in_process(analysis_context.symbol, self.strategy_id, analysis_context.timeframe)
-
-        # Close SQL session and release memory
-        self.ratio_crud.session.close()
         self.ratio_crud = None
 
         # Validate on best strategies Long and Short if they remain as initial "bad seeds"
@@ -240,6 +235,7 @@ class StrategyABC(ABC):
     def initialize_bad_strategy() -> Ratios:
         """
         Set negative infinities as (bad) reference seed values, to be evaluated and to get better strategies setups.
+        
         :return: An object Ratios to support the best strategy.
         """
         return Ratios(inputs='',
@@ -426,7 +422,7 @@ class StrategyABC(ABC):
             symbol=analysis_context.symbol,
             strategy_id=self.strategy_id,
             timeframe=analysis_context.timeframe,
-            inputs=RatioCrud.serialize_inputs(inputs),
+            inputs=json.dumps(inputs),
             is_long_position=analysis_context.is_long_position,
             is_in_process=False,
 

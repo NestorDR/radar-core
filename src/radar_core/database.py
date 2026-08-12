@@ -1,96 +1,68 @@
 # src/radar_core/database.py
 
 # --- Python modules ---
+# contextlib: provides utilities for common tasks involving context managers
+from contextlib import contextmanager, suppress
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import getLogger
 # os: provides operating system interfaces and functionality
 from os import getenv
+# typing: provides runtime support for type hints
+from typing import Generator
 # urllib: collects several modules for working with URLs
 from urllib import parse
 
 # --- Third Party Libraries ---
-# sqlalchemy: SQL and ORM toolkit for accessing relational databases.
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
-from sqlalchemy.exc import OperationalError
+# psycopg: PostgreSQL database adapter for Python
+import psycopg
+from psycopg import Connection
 
 logger_ = getLogger(__name__)
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-# Lazy initialization global variables will be set in the first call to session_factory().
-_engine = None
-_SessionFactory: sessionmaker[Session] | None = None
-
-
-# Visit https://auth0.com/blog/sqlalchemy-orm-tutorial-for-python-developers/#SQLAlchemy-Introduction
-# Use session_factory() to get a new Session
-def session_factory() -> Session:
+def _get_psycopg_conn_kwargs() -> dict:
     """
-    Provides an SQLAlchemy Session.
+    Builds the connection parameters dictionary for psycopg3 from environment variables.
 
-    The engine and session factory are initialized on the first call.
-
-    SQLAlchemy ORM uses Sessions to implement the Unit of Work design pattern. As explained by Martin Fowler,
-     a Unit of Work is used to maintain a list of objects affected by a business transaction and to coordinate the
-     writing out of changes.
-    This means that all modifications tracked by Sessions (Units of Works) will be applied to the underlying database
-     together, or none of them will. In other words, Sessions are used to guarantee the database consistency.
+    :return: A dictionary of connection parameters for psycopg.connect.
     """
-    global _engine, _SessionFactory
+    kwargs_ = {
+        'host': getenv('POSTGRES_HOST', 'localhost'),
+        'port': int(getenv('POSTGRES_PORT', '5432')),
+        'dbname': getenv('POSTGRES_DB', 'radar'),
+        'user': getenv('POSTGRES_USER', 'postgres'),
+        'password': getenv('POSTGRES_PASSWORD', ''),
+        'sslmode': getenv('POSTGRES_SSL_MODE', 'prefer'),
+        'connect_timeout': 10
+    }
+    options_ = getenv('POSTGRES_OPTIONS', None)
+    if options_:
+        kwargs_['options'] = parse.unquote(options_)
 
-    # The first call creates the engine and the session factory.
-    if _engine is None:
-        connection_str_ = _get_connection_str()
+    return kwargs_
 
-        # Add connect_args with connect_timeout for PostgreSQL
-        _engine = create_engine(connection_str_, connect_args={"connect_timeout": 10})
 
-        # Sessionmaker factory generates new Session objects when is called, creating them given configuration arguments, visit
-        #  https://docs.sqlalchemy.org/en/20/orm/session_api.html#sqlalchemy.orm.sessionmaker
-        # Parameters
-        #  bind: an individual session to a connection
-        #  expire_on_commit: default value is True. When True, all instances will completely time out after each commit(),
-        #                    so all access to saved objects after a committed transaction will require a database reread.
-        _SessionFactory = sessionmaker(bind=_engine)
+@contextmanager
+def get_psycopg_connection() -> Generator[Connection, None, None]:
+    """
+    Provides an operation-scoped psycopg3 Connection context manager.
+    - Connects using settings derived from environment variables.
+    - Sets autocommit=False for explicit transaction management.
+    - Automatically commits on normal block completion.
+    - Automatically rolls back on unhandled exceptions.
+    - Deterministically closes connection on exit.
 
+    :return: Yields an active psycopg.Connection object.
+    """
+    kwargs_ = _get_psycopg_conn_kwargs()
+    conn_ = psycopg.connect(**kwargs_, autocommit=False)
     try:
-        # Attempt to create tables (it's an idempotent operation, safe to call multiple times)
-        # and return a new session.
-        Base.metadata.create_all(_engine)
-        return _SessionFactory()
-    except OperationalError as e:
-        logger_.exception('Database connection failed. Could not create session.', exc_info=e)
-        raise  # Re-raise the signal failure exception to the call code
-
-
-def _get_connection_str():
-    """
-    Builds the database connection string from environment variables.
-    This is called only when needed, ensuring .env has already been loaded.
-    """
-
-    # Configure PostgreSQL Database Connection String
-    # Visit https://www.postgresql.org/docs/16/libpq-envars.html
-    db_host = parse.quote(getenv('POSTGRES_HOST', 'host-here'))
-    db_port = parse.quote(getenv('POSTGRES_PORT', '5432'))
-    db_name = parse.quote(getenv('POSTGRES_DB', 'radar'))
-    db_username = parse.quote(getenv('POSTGRES_USER', 'user-here'))
-    db_password = parse.quote(getenv('POSTGRES_PASSWORD', 'pwd-here'))
-    db_ssl_mode = parse.quote(getenv('POSTGRES_SSL_MODE', 'prefer'))
-    db_options = getenv('POSTGRES_OPTIONS', None)
-
-    # Visit https://docs.sqlalchemy.org/en/20/dialects/postgresql.html#module-sqlalchemy.dialects.postgresql.psycopg
-    connection_str_ = (
-        f'postgresql+psycopg://{db_username}:{db_password}@{db_host}:{db_port}/{db_name}'
-        f'?sslmode={db_ssl_mode}'
-    )
-    if db_options:
-        connection_str_ += f"&options={db_options}"
-
-    logger_.debug(f"Database connection string: {connection_str_}")
-
-    return connection_str_
+        yield conn_
+        conn_.commit()
+    except Exception as e_:
+        with suppress(Exception):
+            conn_.rollback()
+        logger_.exception('psycopg3 transaction failed. Rolled back.', exc_info=e_)
+        raise
+    finally:
+        conn_.close()

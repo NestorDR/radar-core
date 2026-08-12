@@ -1,37 +1,20 @@
 # src/radar_core/models/strategies.py
-"""
-Models auto-generated through sqlacodegen (https://github.com/agronholm/sqlacodegen/tree/master)
-"""
 
 # --- Python modules ---
-# typing: provides support for type hints and annotations.
-from typing import TYPE_CHECKING
-
-# --- Third Party Libraries ---
-# sqlalchemy: SQL and ORM toolkit for accessing relational databases.
-from sqlalchemy import PrimaryKeyConstraint, String, UniqueConstraint, text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+# dataclasses: provides support for defining data-oriented classes.
+from dataclasses import dataclass
 
 # --- App modules ---
-# models: result of Object-Relational Mapping
+# base_model: provides a base class for all models.
 from radar_core.models.base_model import BaseModel
 
-# Only import for type checking to avoid runtime circular imports
-if TYPE_CHECKING:
-    from radar_core.models.ratios import Ratios
 
-
+# kw_only=True: indicates that all fields in the dataclass must be passed as arguments
+@dataclass(kw_only=True)
 class Strategies(BaseModel):
     __tablename__ = 'strategies'
-    __table_args__ = (
-        PrimaryKeyConstraint('id', name='strategies_pkey'),
-        UniqueConstraint('acronym', name='strategies_acronym_unique'),
-        {'comment': 'Speculation/investment strategies on financial instruments'}
-    )
 
-    name: Mapped[str] = mapped_column(String(50), nullable=False)
-    acronym: Mapped[str] = mapped_column(String(25), nullable=False)
-    pool: Mapped[str] = mapped_column(String(10), nullable=False, server_default=text("''::character varying"))
-    unit_label: Mapped[str] = mapped_column(String(5), nullable=False, server_default=text("''::character varying"))
-
-    ratios: Mapped[list['Ratios']] = relationship('Ratios', back_populates='strategy', lazy='noload')
+    name: str = ''
+    acronym: str = ''
+    pool: str = ''
+    unit_label: str = ''

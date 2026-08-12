@@ -24,8 +24,9 @@ import time
 # --- Third Party Libraries ---
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
-# sqlalchemy: SQL and ORM toolkit for accessing relational databases - Import the specific exception
-from sqlalchemy.exc import OperationalError
+# psycopg: PostgreSQL database adapter for Python
+from psycopg import OperationalError
+
 
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
@@ -55,7 +56,7 @@ def clean(symbols: list[str],
     :param verbosity_level: Minimum importance level of messages reporting the progress of the process
     """
     with RatioCrud() as ratio_crud_:
-        deleted_ratios = ratio_crud_.delete_symbols_not_in(symbols)
+        deleted_ratios = ratio_crud_.delete_unlisted_symbols(symbols)
 
     verbose(f'Cleaned {deleted_ratios} rows from the database for deprecated symbols.', INFO, verbosity_level)
 
@@ -495,7 +496,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['NUGT', 'LABU']
+    symbols_ = ['BTC-USD']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)
