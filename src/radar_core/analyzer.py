@@ -27,7 +27,6 @@ import polars as pl
 # psycopg: PostgreSQL database adapter
 from psycopg import OperationalError
 
-
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 from radar_core.domain.strategies import MovingAverage, RsiRollerCoaster, RsiTwoBands, RsiStrategyABC
@@ -40,7 +39,7 @@ from radar_core.helpers.datetime_helper import to_weekly_timeframe
 from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.price_provider import PriceProvider
-from radar_core.infrastructure.crud import RatioCrud
+from radar_core.infrastructure.ratio_repository import RatioRepository
 # settings: has the configuration for the radar_core
 from radar_core.settings import Settings
 
@@ -50,15 +49,14 @@ logger_ = getLogger(__name__)
 def clean(symbols: list[str],
           verbosity_level: int = DEBUG) -> None:
     """
-    Deletes obsolete ratios from the database. Deletes ratios from symbols that are not in the list provided.
+    Removes obsolete ratios from the database. Deletes ratios from symbols that are not in the list provided.
 
     :param symbols: List of symbols whose ratios will be maintained in the database.
     :param verbosity_level: Minimum importance level of messages reporting the progress of the process
     """
-    with RatioCrud() as ratio_crud_:
-        deleted_ratios = ratio_crud_.delete_unlisted_symbols(symbols)
+    removed_ = RatioRepository().remove_unlisted_symbols(symbols)
 
-    verbose(f'Cleaned {deleted_ratios} rows from the database for deprecated symbols.', INFO, verbosity_level)
+    verbose(f'Cleaned {removed_} rows from the database for deprecated symbols.', INFO, verbosity_level)
 
 
 def init_worker(log_queue,
@@ -344,10 +342,10 @@ def analyzer(settings: Settings,
                 #  explicitly in the `finally` block below, which prevents the implicit `shutdown(wait=True)`
                 #  that 'with' would trigger on KeyboardInterrupt, blocking until active workers finish.
                 executor_ = concurrent.futures.ProcessPoolExecutor(
-                        max_workers=num_workers_,
-                        mp_context=mp_context,  # Force spawn
-                        initializer=init_worker,
-                        initargs=(log_queue_, verbosity_level_)
+                    max_workers=num_workers_,
+                    mp_context=mp_context,  # Force spawn
+                    initializer=init_worker,
+                    initargs=(log_queue_, verbosity_level_)
                 )
                 try:
                     #  Use a list to store futures representing the asynchronous execution of tasks
@@ -496,7 +494,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['NUGT','LABU']
+    symbols_ = ['NUGT', 'LABU']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)

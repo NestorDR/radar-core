@@ -62,7 +62,7 @@ class RatioCrud(BaseCrud):
         super().__init__(Ratios)
 
     @staticmethod
-    def delete_unlisted_symbols(symbols: list[str],
+    def remove_unlisted_symbols(symbols: list[str],
                                 conn: Connection | None = None) -> int:
         """
         Delete rows where the symbol is not in the provided list.

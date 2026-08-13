@@ -17,6 +17,17 @@ class RatioRepository:
     def __init__(self):
         self.__ratio_crud = RatioCrud()
 
+    def remove_unlisted_symbols(self,
+                                symbols: list[str]) -> int:
+        """
+        Deletes ratios for symbols not included in the supplied list.
+
+        :param symbols: Symbols whose ratios must be retained.
+
+        :return: The number of deleted rows.
+        """
+        return self.__ratio_crud.remove_unlisted_symbols(symbols)
+    
     def flag_in_process(self,
                         symbol: str,
                         strategy_id: int,
