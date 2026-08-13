@@ -75,15 +75,15 @@ def test_upsert_many_rollback_on_error():
     """
     GIVEN a batch of ratio records and a database execution failure
     WHEN upsert_many is executed
-    THEN it catches the exception and raises the error via get_psycopg_connection context manager.
+    THEN it catches the exception and raises the error via connection_scope context manager.
     """
     crud_ = RatioCrud()
     sample_ratio_ = _create_sample_ratio()
 
     exception_message_ = 'psycopg3 database error'
 
-    with patch('radar_core.infrastructure.crud.ratio_crud.get_psycopg_connection') as mock_get_conn_:
-        mock_get_conn_.return_value.__enter__.side_effect = Exception(exception_message_)
+    with patch('radar_core.infrastructure.crud.ratio_crud.connection_scope') as mock_conn_scope_:
+        mock_conn_scope_.return_value.__enter__.side_effect = Exception(exception_message_)
 
         with pytest.raises(Exception, match=exception_message_):
             crud_.upsert_many([sample_ratio_])

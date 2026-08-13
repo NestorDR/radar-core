@@ -1,19 +1,19 @@
 # src/radar_core/database.py
 
 # --- Python modules ---
-# contextlib: provides utilities for common tasks involving context managers
+# contextlib: provides utilities for common tasks involving the context management protocol
 from contextlib import contextmanager, suppress
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import getLogger
 # os: provides operating system interfaces and functionality
 from os import getenv
 # typing: provides runtime support for type hints
-from typing import Generator
+from typing import Generator, Iterator
 # urllib: collects several modules for working with URLs
 from urllib import parse
 
 # --- Third Party Libraries ---
-# psycopg: PostgreSQL database adapter for Python
+# psycopg: PostgreSQL database adapter
 import psycopg
 from psycopg import Connection
 
@@ -45,12 +45,10 @@ def _get_psycopg_conn_kwargs() -> dict:
 @contextmanager
 def get_psycopg_connection() -> Generator[Connection, None, None]:
     """
-    Provides an operation-scoped psycopg3 Connection context manager.
-    - Connects using settings derived from environment variables.
-    - Sets autocommit=False for explicit transaction management.
-    - Automatically commits on normal block completion.
-    - Automatically rolls back on unhandled exceptions.
-    - Deterministically closes connection on exit.
+    Provides an operation-scoped psycopg3 connection for write operations.
+
+    The connection uses explicit transaction management, commits on successful completion,
+    rolls back on failure, and closes deterministically.
 
     :return: Yields an active psycopg.Connection object.
     """
@@ -66,3 +64,61 @@ def get_psycopg_connection() -> Generator[Connection, None, None]:
         raise
     finally:
         conn_.close()
+
+
+@contextmanager
+def connection_scope(conn: Connection | None) -> Iterator[Connection]:
+    """
+    Reuse a supplied writing connection or create an operation-scoped writing connection.
+
+    A supplied connection remains owned by the caller. This helper does not
+    commit, roll back, or close a supplied connection.
+
+    :param conn: Optional active write connection supplied by the caller.
+
+    :return: An active psycopg.Connection object.
+    """
+    if conn is not None:
+        yield conn
+        return
+
+    with get_psycopg_connection() as conn_:
+        yield conn_
+
+
+@contextmanager
+def get_psycopg_read_connection() -> Generator[Connection, None, None]:
+    """
+    Provides an operation-scoped psycopg3 connection for read-only operations.
+
+    Autocommit mode prevents successful SELECT statements from leaving a
+    transaction that requires an explicit commit.
+
+    :return: Yields an active psycopg.Connection object.
+    """
+    kwargs_ = _get_psycopg_conn_kwargs()
+    conn_ = psycopg.connect(**kwargs_, autocommit=True)
+    try:
+        yield conn_
+    finally:
+        conn_.close()
+
+
+@contextmanager
+def read_connection_scope(conn: Connection | None) -> Iterator[Connection]:
+    """
+    Reuse a supplied read connection or create an operation-scoped read connection.
+
+    A supplied connection remains owned by the caller. This helper does not
+    commit, roll back, or close a supplied connection.
+
+    :param conn: Optional active read connection supplied by the caller.
+
+    :return: An active psycopg.Connection object.
+    """
+    if conn is not None:
+        yield conn
+        return
+
+    with get_psycopg_read_connection() as conn_:
+        yield conn_

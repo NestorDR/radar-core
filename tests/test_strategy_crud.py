@@ -16,7 +16,7 @@ def test_strategy_crud_get_by_acronym_existing():
     crud_ = StrategyCrud()
     mock_row_ = (1, "Simple Moving Average", "SMA", "Default", "SMA Unit")
 
-    with patch("radar_core.infrastructure.crud.strategy_crud.get_psycopg_connection") as mock_conn_func_:
+    with patch("radar_core.infrastructure.crud.strategy_crud.read_connection_scope") as mock_conn_func_:
         mock_cur_ = MagicMock()
         mock_cur_.fetchone.return_value = mock_row_
         mock_conn_func_.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = mock_cur_
@@ -36,7 +36,7 @@ def test_strategy_crud_get_by_acronym_nonexistent():
     """
     crud_ = StrategyCrud()
 
-    with patch("radar_core.infrastructure.crud.strategy_crud.get_psycopg_connection") as mock_conn_func_:
+    with patch("radar_core.infrastructure.crud.strategy_crud.read_connection_scope") as mock_conn_func_:
         mock_cur_ = MagicMock()
         mock_cur_.fetchone.return_value = None
         mock_conn_func_.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = mock_cur_

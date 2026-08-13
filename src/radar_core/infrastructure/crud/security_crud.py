@@ -1,11 +1,13 @@
 # src/radar_core/infrastructure/crud/security_crud.py
 
 # --- Third Party Libraries ---
-# psycopg: PostgreSQL database adapter for Python
+# psycopg: PostgreSQL database adapter
+from psycopg import Connection
 from psycopg.sql import Identifier, SQL
 
 # --- App modules ---
-from radar_core.database import get_psycopg_connection
+# database: provides access to database connections
+from radar_core.database import connection_scope, read_connection_scope
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import BaseCrud
 # models: result of Object-Relational Mapping
@@ -15,6 +17,7 @@ from radar_core.models import Securities, Synonyms
 _SECURITIES_TABLE = Identifier(Securities.__tablename__)
 _SYNONYMS_TABLE = Identifier(Synonyms.__tablename__)
 
+# SQL statements
 _GET_SECURITY_BY_SYMBOL_SQL = SQL(
     "SELECT id, symbol, description, is_bear, store_locally FROM ") + _SECURITIES_TABLE + SQL(
     " WHERE symbol = %s")
@@ -37,57 +40,70 @@ class SecurityCrud(BaseCrud):
 
     def get_by_symbol(self,
                       symbol: str,
-                      provider_id: int | None = None) -> Securities | None:
+                      provider_id: int | None = None,
+                      conn: Connection | None = None) -> Securities | None:
+
         """
         Get security based on its symbol, optionally with a synonym ticker.
 
         :param symbol: Security symbol.
         :param provider_id: If it is present, then the synonym for that external provider will be appended.
+        :param conn: Optional active autocommit read connection to reuse.
 
         :return: Security instance or None.
         """
-        with get_psycopg_connection() as conn_:
+        with read_connection_scope(conn) as conn_:
             with conn_.cursor() as cur_:
                 cur_.execute(_GET_SECURITY_BY_SYMBOL_SQL, (symbol,))
-                row_ = cur_.fetchone()
-                if not row_:
+                security_row_ = cur_.fetchone()
+                if not security_row_:
                     return None
 
                 security_ = Securities(
-                    id=row_[0],
-                    symbol=row_[1],
-                    description=row_[2],
-                    is_bear=row_[3],
-                    store_locally=row_[4]
+                    id=security_row_[0],
+                    symbol=security_row_[1],
+                    description=security_row_[2],
+                    is_bear=security_row_[3],
+                    store_locally=security_row_[4]
                 )
 
                 if provider_id:
-                    synonym_ = self.get_synonym(security_.id, provider_id)
+                    synonym_ = self.get_synonym(security_.id, provider_id, conn=conn_)
                     if synonym_:
                         security_.synonyms.append(synonym_)
 
                 return security_
 
     @staticmethod
-    def get_synonym(security_id: int, provider_id: int) -> Synonyms | None:
+    def get_synonym(security_id: int,
+                    provider_id: int,
+                    conn: Connection | None = None) -> Synonyms | None:
         """
-        Get the ticker synonym for given security in a given financial prices provider
+        Get the ticker synonym for a given security and financial prices provider.
 
-        :param security_id: Security id
-        :param provider_id: Provider id
+        :param security_id: Security id.
+        :param provider_id: Provider id.
+        :param conn: Optional active autocommit read connection to reuse.
 
-        :return: Synonyms instance or None
+        :return: A Synonyms instance or None if not found.
         """
-        with get_psycopg_connection() as conn_:
+        with read_connection_scope(conn) as conn_:
             with conn_.cursor() as cur_:
                 cur_.execute(_GET_SYNONYM_SQL, (security_id, provider_id))
                 row_ = cur_.fetchone()
                 if row_:
-                    return Synonyms(id=row_[0], provider_id=row_[1], security_id=row_[2], ticker=row_[3])
+                    return Synonyms(
+                        id=row_[0],
+                        provider_id=row_[1],
+                        security_id=row_[2],
+                        ticker=row_[3]
+                    )
                 return None
 
     @staticmethod
-    def get_tickers_by_symbols(symbols: list[str], provider_id: int) -> dict[str, str]:
+    def get_tickers_by_symbols(symbols: list[str],
+                               provider_id: int,
+                               conn: Connection | None = None) -> dict[str, str]:
         """
         Retrieves provider tickers for multiple security symbols in one query.
         Securities without a synonym for the requested provider use their
@@ -95,13 +111,14 @@ class SecurityCrud(BaseCrud):
 
         :param symbols: Security symbols to retrieve.
         :param provider_id: Provider identifier.
+        :param conn: Optional active autocommit read connection to reuse.
 
         :return: Mapping from each existing symbol to its provider ticker.
         """
         if not symbols:
             return {}
 
-        with get_psycopg_connection() as conn_:
+        with read_connection_scope(conn) as conn_:
             with conn_.cursor() as cur_:
                 cur_.execute(_GET_TICKERS_BY_SYMBOLS_SQL, (provider_id, symbols))
                 rows_ = cur_.fetchall()
@@ -121,16 +138,18 @@ class SecurityCrud(BaseCrud):
         }
 
     @staticmethod
-    def add_security(security: Securities) -> None:
+    def add_security(security: Securities,
+                     conn: Connection | None = None) -> None:
         """
         Persist a new Security instance to the database using psycopg3.
 
-        :param security: Securities model instance to persist.
+        :param security: A Securities model instance to persist.
+        :param conn: Optional active Connection for transaction reuse.
         """
         is_bear_ = security.is_bear if security.is_bear is not None else False
         store_locally_ = security.store_locally if security.store_locally is not None else False
 
-        with get_psycopg_connection() as conn_:
+        with connection_scope(conn) as conn_:
             with conn_.cursor() as cur_:
                 cur_.execute(_ADD_SECURITY_SQL, (security.symbol, security.description, is_bear_, store_locally_))
                 row_ = cur_.fetchone()

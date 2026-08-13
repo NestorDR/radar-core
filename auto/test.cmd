@@ -4,7 +4,7 @@
 @echo off
 
 :: 1. Run pytest with --cache-clear and route temporary fixture files to system TEMP
-uv run --active pytest --cache-clear --basetemp="%TEMP%\pytest_runner"
+uv run --active pytest %1 --cache-clear --basetemp="%TEMP%\pytest_runner"
 set TEST_EXIT_CODE=%ERRORLEVEL%
 
 :: 2. Post-test cleanup of project root artifacts

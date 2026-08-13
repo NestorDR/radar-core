@@ -15,18 +15,18 @@ def test_security_crud_get_by_symbol_existing():
     THEN it maps and returns the corresponding Securities record.
     """
     crud_ = SecurityCrud()
-    mock_row_ = (1, 'SPX', 'S&P 500 Index', False, True)
+    mock_row_ = (1, "SPX", "S&P 500 Index", False, True)
 
-    with patch('radar_core.infrastructure.crud.security_crud.get_psycopg_connection') as mock_conn_func_:
+    with patch("radar_core.infrastructure.crud.security_crud.read_connection_scope") as mock_conn_func_:
         mock_cur_ = MagicMock()
         mock_cur_.fetchone.return_value = mock_row_
         mock_conn_func_.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = mock_cur_
 
-        security_ = crud_.get_by_symbol('SPX')
+        security_ = crud_.get_by_symbol("SPX")
         assert security_ is not None
         assert security_.id == 1
-        assert security_.symbol == 'SPX'
-        assert security_.description == 'S&P 500 Index'
+        assert security_.symbol == "SPX"
+        assert security_.description == "S&P 500 Index"
 
 
 def test_security_crud_get_by_symbol_nonexistent():
@@ -37,12 +37,12 @@ def test_security_crud_get_by_symbol_nonexistent():
     """
     crud_ = SecurityCrud()
 
-    with patch('radar_core.infrastructure.crud.security_crud.get_psycopg_connection') as mock_conn_func_:
+    with patch("radar_core.infrastructure.crud.security_crud.read_connection_scope") as mock_conn_func_:
         mock_cur_ = MagicMock()
         mock_cur_.fetchone.return_value = None
         mock_conn_func_.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = mock_cur_
 
-        security_ = crud_.get_by_symbol('UNKNOWN_SYMBOL')
+        security_ = crud_.get_by_symbol("UNKNOWN_SYMBOL")
         assert security_ is None
 
 
@@ -53,9 +53,9 @@ def test_security_crud_add_security():
     THEN the instance id attribute is populated correctly.
     """
     crud_ = SecurityCrud()
-    security_to_add_ = Securities(symbol='TEST-STOCK', description='Test Stock Description')
+    security_to_add_ = Securities(symbol="TEST-STOCK", description="Test Stock Description")
 
-    with patch('radar_core.infrastructure.crud.security_crud.get_psycopg_connection') as mock_conn_func_:
+    with patch("radar_core.infrastructure.crud.security_crud.connection_scope") as mock_conn_func_:
         mock_cur_ = MagicMock()
         mock_cur_.fetchone.return_value = (42,)
         mock_conn_func_.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = mock_cur_
@@ -71,10 +71,10 @@ def test_security_crud_get_tickers_by_symbols_preserves_order():
     THEN the returned dictionary keys match the input list order.
     """
     crud_ = SecurityCrud()
-    symbols_ = ['MSFT', 'AAPL', 'GOOGL']
-    mock_rows_ = [('GOOGL', 'GOOGL'), ('AAPL', 'AAPL'), ('MSFT', 'MSFT')]
+    symbols_ = ["MSFT", "AAPL", "GOOGL"]
+    mock_rows_ = [("GOOGL", "GOOGL"), ("AAPL", "AAPL"), ("MSFT", "MSFT")]
 
-    with patch('radar_core.infrastructure.crud.security_crud.get_psycopg_connection') as mock_conn_func_:
+    with patch("radar_core.infrastructure.crud.security_crud.read_connection_scope") as mock_conn_func_:
         mock_cur_ = MagicMock()
         mock_cur_.fetchall.return_value = mock_rows_
         mock_conn_func_.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value = mock_cur_

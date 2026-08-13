@@ -24,7 +24,7 @@ import time
 # --- Third Party Libraries ---
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
-# psycopg: PostgreSQL database adapter for Python
+# psycopg: PostgreSQL database adapter
 from psycopg import OperationalError
 
 
@@ -496,7 +496,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['UNG', 'GUSH', 'DRIP']
+    symbols_ = ['NUGT','LABU']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)
