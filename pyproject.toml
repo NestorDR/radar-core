@@ -85,7 +85,7 @@ python-platform = "all"
 possibly-missing-attribute = "ignore"
 
 [tool.pytest.ini_options]
+addopts = "-m 'not integration'"
 markers = [
-    "integration: mark test as integration test",
+    "integration: mark integration tests",
 ]
-

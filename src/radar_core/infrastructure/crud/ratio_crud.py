@@ -67,21 +67,23 @@ class RatioCrud(BaseCrud):
         """
         Delete rows where the symbol is not in the provided list.
 
+        An empty symbol list is treated as a no-op. Deleting all ratios
+        requires an explicit operation.
+
         :param symbols: List of symbols to keep in the database.
         :param conn: Optional active Connection for transaction reuse.
 
         :return: The number of deleted rows.
         """
         if not symbols:
-            query_ = _DELETE_ALL_RATIOS_SQL
-            params_ = ()
-        else:
-            query_ = _DELETE_UNLISTED_SYMBOLS_SQL
-            params_ = (symbols,)
+            return 0
+
+        if any(symbol_ is None for symbol_ in symbols):
+            raise ValueError('Symbols cannot contain None.')
 
         with connection_scope(conn) as conn_:
             with conn_.cursor() as cur_:
-                cur_.execute(query_, params_)
+                cur_.execute(_DELETE_UNLISTED_SYMBOLS_SQL, (symbols,))
                 return cur_.rowcount
 
     @staticmethod
@@ -135,11 +137,13 @@ class RatioCrud(BaseCrud):
                     conn: Connection | None = None) -> int:
         """
         Perform a batch PostgreSQL upsert (INSERT ... ON CONFLICT DO UPDATE) for strategy ratios using psycopg3.
+        The caller must provide ratios with unique conflict keys.
+        The strategy-generation logic guarantees that duplicate conflict keys are not produced within the same batch.
 
         :param ratios_list: List of Ratios objects to insert or update.
         :param conn: Optional active Connection for transaction reuse.
 
-        :return: The number of rows affected by the batch operation.
+        :return: The cumulative number of rows affected by the batch `upsert`.
         """
         if not ratios_list:
             return 0

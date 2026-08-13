@@ -60,25 +60,40 @@ def _create_sample_ratio(symbol: str = 'BTC-USD',
     )
 
 
-def test_remove_unlisted_symbols_empty_deletes_all_rows(mock_connection_scope):
+def test_remove_unlisted_symbols_empty_is_noop(mock_connection_scope):
     """
     GIVEN an empty symbol list
     WHEN remove_unlisted_symbols is called
-    THEN it executes the delete-all statement with no parameters.
+    THEN it returns zero without opening a database connection.
     """
     _, cursor_, scope_ = mock_connection_scope
-    cursor_.rowcount = 7
+    cursor_.rowcount = 0
 
     with patch(
             'radar_core.infrastructure.crud.ratio_crud.connection_scope',
             return_value=scope_
-    ):
+    ) as connection_scope_:
         result_ = RatioCrud.remove_unlisted_symbols([])
 
-    assert result_ == 7
-    cursor_.execute.assert_called_once()
-    assert cursor_.execute.call_args.args[1] == ()
-    scope_.__exit__.assert_called_once_with(None, None, None)
+    assert result_ == 0
+    connection_scope_.assert_not_called()
+    cursor_.execute.assert_not_called()
+    scope_.__exit__.assert_not_called()
+
+
+def test_remove_unlisted_symbols_rejects_none_symbol():
+    """
+    GIVEN a symbol list containing None
+    WHEN remove_unlisted_symbols is called
+    THEN it raises ValueError without opening a database connection.
+    """
+    with patch(
+            'radar_core.infrastructure.crud.ratio_crud.connection_scope'
+    ) as connection_scope_:
+        with pytest.raises(ValueError, match='Symbols cannot contain None'):
+            RatioCrud.remove_unlisted_symbols(['SPY', None])  # type: ignore[list-item]
+
+    connection_scope_.assert_not_called()
 
 
 def test_remove_unlisted_symbols_reuses_supplied_connection(mock_connection_scope):
