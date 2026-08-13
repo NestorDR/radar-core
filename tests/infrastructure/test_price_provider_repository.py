@@ -1,4 +1,4 @@
-# tests/test_price_provider_repository.py
+# tests/infrastructure/test_price_provider_repository.py
 
 # --- Python modules ---
 from unittest.mock import MagicMock, patch

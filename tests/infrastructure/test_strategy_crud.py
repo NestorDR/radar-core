@@ -1,4 +1,4 @@
-# tests/test_strategy_crud.py
+# tests/infrastructure/test_strategy_crud.py
 
 # --- Python modules ---
 from unittest.mock import MagicMock, patch

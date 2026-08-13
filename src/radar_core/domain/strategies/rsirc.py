@@ -290,9 +290,8 @@ class RsiRollerCoaster(RsiStrategyABC):
             else:
                 analysis_context_.best_short = best_ratios_  # Best Short strategies
 
-        # Perform atomic batch upsert for all positive ratios identified
-        if positive_ratios_:
-            self.ratio_crud.upsert_many(positive_ratios_)
+        # Perform atomic batch upsert for all positive ratios identified and remove remaining flagged rows atomically.
+        self.persist_ratios(positive_ratios_, analysis_context_)
 
         # Release memory
         del contexts_

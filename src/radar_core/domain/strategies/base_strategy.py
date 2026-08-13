@@ -25,8 +25,9 @@ from radar_core.domain.technical import ATR
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import COMMISSION_PERCENT, DAILY, TIMEFRAMES
 from radar_core.helpers.log_helper import verbose
-# infrastructure: allows access to the own DB and/or integration with external prices providers
-from radar_core.infrastructure.crud import RatioCrud, StrategyCrud
+# infrastructure: provides access to persisted data.
+from radar_core.infrastructure.ratio_repository import RatioRepository
+from radar_core.infrastructure.crud import StrategyCrud
 # models: result of Object-Relational Mapping
 from radar_core.models import Ratios
 
@@ -105,7 +106,7 @@ class StrategyABC(ABC):
         self.unit_label = strategy.unit_label
         self.pool = strategy.pool
         self.verbosity_level = verbosity_level
-        self.ratio_crud: RatioCrud | None = None
+        self.ratio_repository = RatioRepository()
 
     # region Support to identification
 
@@ -171,10 +172,8 @@ class StrategyABC(ABC):
             prices_df.select(pl.col('BarNumber').last()).to_series().item(),
             self.future_bar_number(prices_df))
 
-        # Instantiate prices access
-        self.ratio_crud = RatioCrud()
         # Flag as `is_in_process` the ratios for a specific symbol, strategy_id, and timeframe
-        self.ratio_crud.flag_in_process(symbol, self.strategy_id, timeframe)
+        self.ratio_repository.flag_in_process(symbol, self.strategy_id, timeframe)
 
         # Capture the original column names to ensure only these are returned
         original_column_names_ = prices_df.columns
@@ -204,10 +203,6 @@ class StrategyABC(ABC):
         :param verbosity_level: An integer specifying the level of verbosity for logging.
         """
 
-        # Delete Ratios where is_in_process is True.
-        self.ratio_crud.delete_flagged_in_process(analysis_context.symbol, self.strategy_id, analysis_context.timeframe)
-        self.ratio_crud = None
-
         # Validate on best strategies Long and Short if they remain as initial "bad seeds"
         # Check for -infinite in net_profit to determine if a valid strategy was ever found.
         if analysis_context.best_long.net_profit == -float('inf'):
@@ -226,6 +221,24 @@ class StrategyABC(ABC):
             print('', end='\r')
         verbose(message_, INFO, verbosity_level)
         logger_.info(message_)
+
+    def persist_ratios(self,
+                       ratios_list: list[Ratios],
+                       analysis_context: AnalysisContext) -> int:
+        """
+        Persist positive ratios and remove remaining flagged rows atomically.
+
+        :param ratios_list: Positive ratios identified during analysis.
+        :param analysis_context: Context of the current analysis.
+
+        :return: The number of rows affected by the upsert.
+        """
+        return self.ratio_repository.persist_and_cleanup(
+            ratios_list,
+            analysis_context.symbol,
+            self.strategy_id,
+            analysis_context.timeframe
+        )
 
     # endregion Support to identification
 
