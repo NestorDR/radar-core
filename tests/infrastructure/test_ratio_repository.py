@@ -52,13 +52,12 @@ def test_remove_unlisted_symbols_passes_empty_symbols_to_crud():
     crud_.remove_unlisted_symbols.assert_called_once_with([])
 
 
-def test_flag_in_process_uses_one_write_connection(mock_connection_scope):
+def test_flag_in_process_uses_one_write_connection():
     """
     GIVEN a ratio repository and an operation-scoped connection
     WHEN flag_in_process is called
     THEN the CRUD operation receives the scoped connection and returns its row count.
     """
-    repository_connection_, _, connection_scope_ = mock_connection_scope
     crud_ = MagicMock()
     crud_.flag_in_process.return_value = 3
 
@@ -66,25 +65,18 @@ def test_flag_in_process_uses_one_write_connection(mock_connection_scope):
         patch(
             'radar_core.infrastructure.ratio_repository.RatioCrud',
             return_value=crud_
-        ),
-        patch(
-            'radar_core.infrastructure.ratio_repository.get_psycopg_connection',
-            return_value=connection_scope_
-        ) as connection_factory_,
+        )
     ):
         repository_ = RatioRepository()
 
         result_ = repository_.flag_in_process('SPY', 1, 2)
 
     assert result_ == 3
-    connection_factory_.assert_called_once_with()
     crud_.flag_in_process.assert_called_once_with(
         'SPY',
         1,
         2,
-        conn=repository_connection_
     )
-    connection_scope_.__exit__.assert_called_once_with(None, None, None)
 
 
 def test_persist_and_cleanup_deletes_flags_when_no_positive_ratios_exist(mock_connection_scope):

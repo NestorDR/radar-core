@@ -27,7 +27,7 @@ class RatioRepository:
         :return: The number of deleted rows.
         """
         return self.__ratio_crud.remove_unlisted_symbols(symbols)
-    
+
     def flag_in_process(self,
                         symbol: str,
                         strategy_id: int,
@@ -44,13 +44,7 @@ class RatioRepository:
 
         :return: The number of rows updated.
         """
-        with get_psycopg_connection() as conn_:
-            return self.__ratio_crud.flag_in_process(
-                symbol,
-                strategy_id,
-                timeframe,
-                conn=conn_
-            )
+        return self.__ratio_crud.flag_in_process(symbol, strategy_id, timeframe)
 
     def persist_and_cleanup(self,
                             positive_ratios: list[Ratios],
