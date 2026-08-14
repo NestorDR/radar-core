@@ -4,7 +4,7 @@
 from unittest.mock import call, patch
 
 # --- App modules ---
-from radar_core.infrastructure.crud.security_crud import SecurityCrud
+from radar_core.infrastructure.crud import SecurityCrud
 from radar_core.models import Securities
 
 

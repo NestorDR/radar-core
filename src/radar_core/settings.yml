@@ -5,7 +5,7 @@ symbols:
 shortables:
   - 'SPY'
   - 'QQQ'
-evaluable_strategies:  # Use attribute name in `class Strategies`, module `types.py`
+evaluable_strategies:  # Use attribute name in `class Strategies`, module `evaluable_strategies.py`
   - sma       # Profitable SMA
   - rsi_sma   # Profitable RSI(14) SMA
   - rsi_rc    # Profitable RSI(14) RC

@@ -1,7 +1,4 @@
-# src/radar_core/domain/types.py
-"""
-Defines shared data structures and domain types for the application.
-"""
+# src/radar_core/domain/evaluable_strategies.py
 
 # --- Python modules ---
 # dataclasses: provides decorator and functions for auto-generating special methods in classes that primarily store data,
@@ -15,7 +12,7 @@ from radar_core.domain.strategies import MovingAverage, RsiRollerCoaster, RsiTwo
 
 # frozen=True converts the class to an immutable dataclass (its fields cannot be modified after instantiation)
 @dataclass(frozen=True)
-class Strategies:
+class EvaluableStrategies:
     """Small DI container for strategy instances supported by the analyzer."""
     sma: MovingAverage | None = None
     rsi_sma: MovingAverage | None = None

@@ -9,7 +9,6 @@ from radar_core.models.ratios import (
     RATIOS_UNIQUE_CONSTRAINT as RATIOS_UNIQUE_CONSTRAINT,
     Ratios as Ratios,
 )
-
 from radar_core.models.securities import Securities as Securities
 from radar_core.models.strategies import Strategies as Strategies
 from radar_core.models.synonyms import Synonyms as Synonyms

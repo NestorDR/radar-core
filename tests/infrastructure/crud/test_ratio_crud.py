@@ -11,7 +11,7 @@ import pytest
 
 # --- App modules ---
 # infrastructure: allows access to the own DB and/or integration with external prices providers
-from radar_core.infrastructure.crud.ratio_crud import RatioCrud
+from radar_core.infrastructure.crud import RatioCrud
 # models: result of Object-Relational Mapping
 from radar_core.models import Ratios
 

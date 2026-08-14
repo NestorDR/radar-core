@@ -29,8 +29,8 @@ from psycopg import OperationalError
 
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
-from radar_core.domain.strategies import MovingAverage, RsiRollerCoaster, RsiTwoBands, RsiStrategyABC
-from radar_core.domain.types import Strategies
+from radar_core.domain.strategies import (EvaluableStrategies, RsiStrategyABC,
+                                          MovingAverage, RsiRollerCoaster, RsiTwoBands)
 # technical: provides calculations of TA indicators
 from radar_core.domain.technical import RSI
 # helpers: constants and functions that provide miscellaneous functionality
@@ -38,8 +38,7 @@ from radar_core.helpers.constants import DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRI
 from radar_core.helpers.datetime_helper import to_weekly_timeframe
 from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own DB and/or integration with external prices providers
-from radar_core.infrastructure.price_provider import PriceProvider
-from radar_core.infrastructure.ratio_repository import RatioRepository
+from radar_core.infrastructure import PriceProvider, RatioRepository
 # settings: has the configuration for the radar_core
 from radar_core.settings import Settings
 
@@ -113,7 +112,7 @@ def analyze(timeframe: int,
             symbol: str,
             only_long_positions: bool,
             prices_df: pl.DataFrame,
-            strategies: Strategies,
+            strategies: EvaluableStrategies,
             verbosity_level: int = DEBUG) -> None:
     """
     Analyze the prices dataframe for the specified timeframe.
@@ -173,7 +172,7 @@ def analyze(timeframe: int,
 
 def process_symbol(symbol: str,
                    prices_df: pl.DataFrame,
-                   strategies: Strategies,
+                   strategies: EvaluableStrategies,
                    shortable_symbols: list[str],
                    verbosity_level: int) -> str:
     """
@@ -304,7 +303,7 @@ def analyzer(settings: Settings,
                                         if
                                         strategy_key_ in settings.get_evaluable_strategies()}
             # Instantiate strategies container only with active strategies
-            strategies_ = Strategies(**active_strategies_)
+            strategies_ = EvaluableStrategies(**active_strategies_)
 
             # If no strategy is active, skip processing
             if not any(vars(strategies_).values()):

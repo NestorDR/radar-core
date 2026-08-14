@@ -4,7 +4,7 @@
 from unittest.mock import patch
 
 # --- App modules ---
-from radar_core.infrastructure.crud.strategy_crud import StrategyCrud
+from radar_core.infrastructure.crud import StrategyCrud
 
 
 def test_strategy_crud_get_by_acronym_existing(mock_connection_scope):
