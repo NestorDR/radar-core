@@ -114,12 +114,13 @@ flowchart TD
 
     subgraph Persistence ["Persistence Boundary"]
         NumbaMA & Numba2B & NumbaRC --> RatiosOutput["Ratios Data Objects"]
-        RatiosOutput --> RatioCrud["RatioCrud (psycopg3)"]
-        RatioCrud -->|Parameterized Upsert| DB
+        RatiosOutput --> RatioRepo["RatioRepository"]
+        RatioRepo -->|Transactional Upsert & Cleanup| RatioCrud["RatioCrud (psycopg3)"]
+        RatioCrud -->|Parameterized Queries| DB
     end
 ```
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/ATR indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars.
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/ATR indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
 
 
 
@@ -264,7 +265,10 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - Runs formatting and linting tasks using `ruff`.
 
 - **`auto\test.cmd`**: Testing is implemented using `pytest`. Unit tests are located under the `tests/` directory.
-  - The test suite includes fast, in-memory unit tests using `pytest` and `unittest.mock` covering batch deduplication, symbol translation and auto-creation, price provider download guards, model instantiation, error handling, and CRUD methods without external database dependencies.
+  - The test suite includes fast, in-memory unit tests using `pytest` and `unittest.mock` covering symbol translation and auto-creation, price provider download guards, model instantiation, error handling, and CRUD methods without external database dependencies.
+
+- **`auto\cleanup.cmd`**: Cache and temporary file cleanup.
+  - Clears Python bytecode caches (`__pycache__`) and cleans Ruff cache using `uvx ruff clean`.
 
 ## Project Status
 In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base, CI/CD pipelines) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
