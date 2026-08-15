@@ -162,24 +162,31 @@ class PriceProvider:
                 logger_.warning('Download returned an empty DataFrame for all tickers.')
                 return {}
 
-            # Step 3: Process results, mapping tickers back to original symbols
+            message_ = 'Download from Yahoo Finance completed.'
+            verbose(message_, INFO, self.verbosity_level)
+            logger_.info(message_)
+
+            # Step 3: Process results, mapping tickers back to original symbols and converting Pandas to Polars
             for symbol, ticker in symbol_to_ticker_map_.items():
                 # For single ticker downloads, yfinance might not use multi-level columns unless group_by is used.
                 # The current code handles both multi-level and single-level column structures.
                 if ticker not in multi_symbol_df_.columns:
-                    logger_.warning(f'No data downloaded for symbol: {symbol} (ticker: {ticker})')
+                    logger_.warning(f'No data downloaded for symbol: {symbol} (ticker: {ticker}).')
                     continue
 
                 symbol_df_ = multi_symbol_df_[ticker].dropna(how='all')
 
                 if not symbol_df_.empty:
+                    # Convert Pandas DataFrame into a Polars DataFrame.
                     results_[symbol] = self._process_dataframe(symbol, symbol_df_)
 
         except Exception as e_:
             logger_.error(f'An exception occurred during download: {e_}', exc_info=True)
 
-        logger_.log(self.verbosity_level,
-                    f'Successfully processed data for {len(results_)} out of {len(symbols)} symbols.')
+        message_ = f'Successfully downloaded and converted data for {len(results_)} of {len(symbols)} symbols.'
+        verbose(message_, INFO, self.verbosity_level)
+        logger_.info(message_)
+
         return results_
 
 

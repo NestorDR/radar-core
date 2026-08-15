@@ -216,7 +216,7 @@ class StrategyABC(ABC):
         message_ = (init_dt.strftime(f'{self.strategy_acronym:11} on {analysis_context.symbol}:'
                                      f' start %Y-%m-%d %H:%M:%S ...')
                     + datetime.now().strftime(' end %Y-%m-%d %H:%M:%S')
-                    + f'  {(datetime.now() - init_dt).total_seconds() / 60:6.1f} min')
+                    + f'  {(datetime.now() - init_dt).total_seconds():6.1f} seconds')
         if verbosity_level == INFO:
             print('', end='\r')
         verbose(message_, INFO, verbosity_level)

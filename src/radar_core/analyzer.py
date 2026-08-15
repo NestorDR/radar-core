@@ -223,7 +223,7 @@ def process_symbol(symbol: str,
                     analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies, verbosity_level)
 
             symbol_elapsed_ = time.monotonic() - symbol_started_at_
-            message_ = f'[{symbol_}]: Analysis completed in {(symbol_elapsed_ / 60):.1f} min'
+            message_ = f'[{symbol_}]: Analysis completed in {symbol_elapsed_:.1f} seconds'
             verbose(message_ + '\n', INFO, verbosity_level)
             logger_.info(message_)
 
