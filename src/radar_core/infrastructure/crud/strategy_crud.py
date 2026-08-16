@@ -1,9 +1,13 @@
 # src/radar_core/infrastructure/crud/strategy_crud.py
 
+# --- Python modules ---
+# typing: provides runtime support for type hints
+from typing import Final
+
 # --- Third Party Libraries ---
 # psycopg: PostgreSQL database adapter
 from psycopg import Connection
-from psycopg.sql import Identifier, SQL
+from psycopg.sql import Composed, Identifier, SQL
 
 # --- App modules ---
 # database: provides access to database connections
@@ -17,8 +21,8 @@ from radar_core.models import Strategies
 _STRATEGIES_TABLE = Identifier(Strategies.__tablename__)
 
 # SQL statements
-_GET_STRATEGY_BY_ACRONYM_SQL = SQL("SELECT id, name, acronym, pool, unit_label FROM ") + _STRATEGIES_TABLE + SQL(
-    " WHERE acronym = %s")
+_GET_STRATEGY_BY_ACRONYM_SQL: Final[Composed] = SQL(
+    "SELECT id, name, acronym, pool, unit_label FROM ") + _STRATEGIES_TABLE + SQL(" WHERE acronym = %s")
 
 
 class StrategyCrud(BaseCrud):

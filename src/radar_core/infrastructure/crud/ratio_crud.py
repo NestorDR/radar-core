@@ -4,11 +4,13 @@
 # operator: exports a set of efficient functions corresponding to intrinsic operators of Python
 #  (e.g., attrgetter for fast attribute access)
 from operator import attrgetter
+# typing: provides runtime support for type hints
+from typing import Final
 
 # --- Third Party Libraries ---
 # psycopg: PostgreSQL database adapter
 from psycopg import Connection
-from psycopg.sql import Identifier, SQL
+from psycopg.sql import Composed, Identifier, SQL
 
 # --- App modules ---
 # database: provides access to database connections
@@ -43,17 +45,17 @@ _payload_attr_getters = tuple(
 )
 
 # SQL statements
-_FLAG_IN_PROCESS_SQL = SQL("UPDATE ") + _RATIOS_TABLE + SQL(
+_FLAG_IN_PROCESS_SQL: Final[Composed] = SQL("UPDATE ") + _RATIOS_TABLE + SQL(
     " SET is_in_process = TRUE WHERE symbol = %s AND strategy_id = %s AND timeframe = %s")
 
 # Explicitly reset flag field is_in_process to False on update
-_UPSERT_RATIOS_SQL = SQL("INSERT INTO ") + _RATIOS_TABLE + SQL(
+_UPSERT_RATIOS_SQL: Final[Composed]  = SQL("INSERT INTO ") + _RATIOS_TABLE + SQL(
     " ({cols}) VALUES ({values}) ON CONFLICT ({on_conflict}) DO UPDATE SET {update}, is_in_process = FALSE"
 ).format(cols=_cols_sql, values=_values_sql, on_conflict=_on_conflict_sql, update=_update_sql)
 
-_DELETE_ALL_RATIOS_SQL = SQL("DELETE FROM ") + _RATIOS_TABLE
-_DELETE_UNLISTED_SYMBOLS_SQL = _DELETE_ALL_RATIOS_SQL + SQL(" WHERE symbol != ALL(%s)")
-_DELETE_FLAGGED_IN_PROCESS_SQL = _DELETE_ALL_RATIOS_SQL + SQL(
+_DELETE_ALL_RATIOS_SQL: Final[Composed]  = SQL("DELETE FROM ") + _RATIOS_TABLE
+_DELETE_UNLISTED_SYMBOLS_SQL: Final[Composed]  = _DELETE_ALL_RATIOS_SQL + SQL(" WHERE symbol != ALL(%s)")
+_DELETE_FLAGGED_IN_PROCESS_SQL: Final[Composed]  = _DELETE_ALL_RATIOS_SQL + SQL(
     " WHERE symbol = %s AND strategy_id = %s  AND timeframe = %s AND is_in_process = TRUE")
 
 

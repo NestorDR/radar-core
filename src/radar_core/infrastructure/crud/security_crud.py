@@ -1,9 +1,13 @@
 # src/radar_core/infrastructure/crud/security_crud.py
 
+# --- Python modules ---
+# typing: provides runtime support for type hints
+from typing import Final
+
 # --- Third Party Libraries ---
 # psycopg: PostgreSQL database adapter
 from psycopg import Connection
-from psycopg.sql import Identifier, SQL
+from psycopg.sql import Composed, Identifier, SQL
 
 # --- App modules ---
 # database: provides access to database connections
@@ -18,19 +22,19 @@ _SECURITIES_TABLE = Identifier(Securities.__tablename__)
 _SYNONYMS_TABLE = Identifier(Synonyms.__tablename__)
 
 # SQL statements
-_GET_SECURITY_BY_SYMBOL_SQL = SQL(
+_GET_SECURITY_BY_SYMBOL_SQL : Final[Composed] = SQL(
     "SELECT id, symbol, description, is_bear, store_locally FROM ") + _SECURITIES_TABLE + SQL(
     " WHERE symbol = %s")
 
-_GET_SYNONYM_SQL = SQL("SELECT id, provider_id, security_id, ticker FROM ") + _SYNONYMS_TABLE + SQL(
+_GET_SYNONYM_SQL : Final[Composed] = SQL("SELECT id, provider_id, security_id, ticker FROM ") + _SYNONYMS_TABLE + SQL(
     " WHERE security_id = %s AND provider_id = %s")
 
-_GET_TICKERS_BY_SYMBOLS_SQL = SQL(
+_GET_TICKERS_BY_SYMBOLS_SQL : Final[Composed] = SQL(
     "SELECT security.symbol, COALESCE(synonym.ticker, security.symbol) AS ticker FROM ") + _SECURITIES_TABLE + SQL(
     " AS security LEFT JOIN ") + _SYNONYMS_TABLE + SQL(
     " AS synonym ON synonym.security_id = security.id AND synonym.provider_id = %s WHERE security.symbol = ANY (%s)")
 
-_ADD_SECURITY_SQL = SQL("INSERT INTO ") + _SECURITIES_TABLE + SQL(
+_ADD_SECURITY_SQL : Final[Composed] = SQL("INSERT INTO ") + _SECURITIES_TABLE + SQL(
     " (symbol, description, is_bear, store_locally) VALUES (%s, %s, %s, %s) RETURNING id")
 
 
