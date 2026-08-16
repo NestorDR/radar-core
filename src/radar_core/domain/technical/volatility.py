@@ -20,6 +20,8 @@ def ATR(prices_df: pl.DataFrame,  # noqa: N802
     :param period: An integer representing the time period over which the indicator will be calculated.
 
     :return: A dataframe with the column 'ATR' added to the input dataframe.
+
+    :raises ValueError: If an OHLC column is missing.
     """
     # Validate required columns exist
     required_cols_ = ['High', 'Low', 'Close']
@@ -46,20 +48,24 @@ def MogalefBands(prices_df: pl.DataFrame,  # noqa: N802
                  period_dev: int = 7,
                  multiplier: float = 2.0) -> pl.DataFrame:
     """
-    Calculates Mogalef Bands (Central, Upper, and Lower volatility corridor bands)
+    Calculates a simplified Mogalef-style Bands (Central, Upper, and Lower volatility corridor bands)
      and adds them as new columns to a Polars DataFrame.
 
     Typical Weighted Price (CP): (Open + High + Low + 2 * Close) / 5
-    Central Line: Linear regression of CP over period_reg
+    Central Line: TA-Lib linear regression of CP over period_reg
     Upper Band: Central + (multiplier * Standard Deviation of CP over period_dev)
     Lower Band: Central - (multiplier * Standard Deviation of CP over period_dev)
 
     :param prices_df: Historical prices. It must include at least ['Open', 'High', 'Low', 'Close'].
-    :param period_reg: Lookback period for linear regression calculation of the central line.
-    :param period_dev: Lookback period for standard deviation calculation of the bands.
-    :param multiplier: Volatility multiplier applied to standard deviation for upper and lower bands.
+    :param period_reg: Number of observations used to calculate the central linear-regression line.
+     Must be greater than or equal to 1.
+    :param period_dev: Number of observations used to calculate the standard deviation used by both bands.
+     Must be greater than or equal to 1.
+    :param multiplier: Non-negative standard-deviation multiplier applied to the upper and lower bands.
 
-    :return: A dataframe with columns 'MogalefCentral', 'MogalefUpper', and 'MogalefLower' added.
+    :return: The input DataFrame with 'MogalefCentral', 'MogalefUpper', and 'MogalefLower' columns added or replaced.
+
+    :raises ValueError: If an OHLC column is missing, either lookback period is less than 1, or multiplier is negative.
     """
     # Validate required columns exist
     required_cols_ = ['Open', 'High', 'Low', 'Close']
