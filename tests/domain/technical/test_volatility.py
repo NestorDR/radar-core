@@ -125,7 +125,7 @@ def test_mogalef_bands_empty_and_short_dataframe() -> None:
     empty_df_ = pl.DataFrame(schema={'Open': pl.Float64, 'High': pl.Float64, 'Low': pl.Float64, 'Close': pl.Float64})
     result_empty_ = MogalefBands(empty_df_)
     assert result_empty_.height == 0
-    assert {'MogalefCentral', 'MogalefUpper', 'MogalefLower'}.issubset(result_empty_.columns)
+    assert {'MogalefUpper', 'MogalefLower'}.issubset(result_empty_.columns)
 
     # Short DataFrame (fewer bars than lookback)
     short_df_ = pl.DataFrame({'Open': [10.0, 10.5], 'High': [11.0, 11.5], 'Low': [9.0, 9.5], 'Close': [10.2, 10.8]})

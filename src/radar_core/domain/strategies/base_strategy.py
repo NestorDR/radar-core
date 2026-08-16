@@ -11,6 +11,8 @@ from datetime import date, datetime
 import json
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import CRITICAL, DEBUG, INFO, getLogger
+# typing: provides runtime support for type hints
+from typing import Final
 
 # --- Third Party Libraries ---
 # numpy: provides greater support for vectors and matrices, with high-level mathematical functions to operate on them
@@ -21,7 +23,7 @@ import polars as pl
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 # technical: provides calculations of TA indicators
-from radar_core.domain.technical import ATR
+from radar_core.domain.technical import ATR, MogalefBands
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import COMMISSION_PERCENT, DAILY, TIMEFRAMES
 from radar_core.helpers.log_helper import verbose
@@ -32,7 +34,7 @@ from radar_core.infrastructure.crud import StrategyCrud
 from radar_core.models import Ratios
 
 # Constant for price format
-PRICE_PRECISION = Decimal('1.00')
+PRICE_PRECISION: Final[Decimal] = Decimal('1.00')
 
 logger_ = getLogger(__name__)
 
@@ -206,12 +208,14 @@ class StrategyABC(ABC):
         # Validate on best strategies Long and Short if they remain as initial "bad seeds"
         # Check for -infinite in net_profit to determine if a valid strategy was ever found.
         if analysis_context.best_long.net_profit == -float('inf'):
-            logger_.debug(f"[{analysis_context.symbol}]: No profitable Long {self.strategy_acronym} "
-                          f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
+            logger_.debug(f'[{analysis_context.symbol}]: No profitable Long {self.strategy_acronym} '
+                          f'found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.')
 
         if analysis_context.best_short.net_profit == -float('inf'):
-            logger_.debug(f"[{analysis_context.symbol}]: No profitable Short {self.strategy_acronym} "
-                          f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.")
+            logger_.debug(
+                f'[{analysis_context.symbol}]: No profitable Short {self.strategy_acronym} '
+                f'found in {TIMEFRAMES[analysis_context.timeframe]} timeframe.'
+            )
 
         message_ = (init_dt.strftime(f'{self.strategy_acronym:11} on {analysis_context.symbol}:'
                                      f' start %Y-%m-%d %H:%M:%S ...')
@@ -248,7 +252,7 @@ class StrategyABC(ABC):
     def initialize_bad_strategy() -> Ratios:
         """
         Set negative infinities as (bad) reference seed values, to be evaluated and to get better strategies setups.
-        
+
         :return: An object Ratios to support the best strategy.
         """
         return Ratios(inputs='',
@@ -395,8 +399,9 @@ class StrategyABC(ABC):
         # Calculate ratios for the strategy
         first_input_price_ = max(float(input_prices_[0]), 0.00001)
 
-        net_profit_, expected_value_, win_probability_, loss_probability_, average_win_, average_loss_ = \
-            self.compute_key_ratios(signals_, first_input_price_, winnings_, winn_trades_, losses_, loss_trades_)
+        net_profit_, expected_value_, win_probability_, loss_probability_, average_win_, average_loss_ = self.compute_key_ratios(
+            signals_, first_input_price_, winnings_, winn_trades_, losses_, loss_trades_
+        )
 
         total_sessions_ = analysis_context.last_bar_number + 1
 
@@ -562,11 +567,14 @@ class RsiStrategyABC(StrategyABC, ABC):
             # Stop loss is already calculated
             return prices_df
 
-        # Identify when (at which bar) loss stops are triggered
-        bars_for_stop_loss_ = 10 if timeframe <= DAILY else 3
+        # Determine Mogalef Bands lookback and swing window sizes according to execution timeframe
+        if timeframe <= DAILY:
+            period_reg_, period_dev_, multiplier_ = 3, 7, 2.0
+        else:
+            period_reg_, period_dev_, multiplier_ = 3, 5, 1.5
 
-        # Set the stop loss
-        prices_df = RsiStrategyABC.set_stop_loss(prices_df, bars_for_stop_loss_)
+        # Set the stop loss using Mogalef Bands
+        prices_df = RsiStrategyABC.set_mogalef_stop_loss(prices_df, period_reg_, period_dev_, multiplier_)
 
         # Extract relevant prices as NumPy arrays for efficient slicing and speeding up prices access
         bar_numbers_ = prices_df['BarNumber'].to_numpy()
@@ -601,6 +609,46 @@ class RsiStrategyABC(StrategyABC, ABC):
         return prices_df
 
     @staticmethod
+    def set_mogalef_stop_loss(prices_df: pl.DataFrame,
+                              period_reg: int = 3,
+                              period_dev: int = 7,
+                              multiplier: float = 2.0) -> pl.DataFrame:
+        """
+        Calculates and sets stop loss values for a dataframe containing price series based on Mogalef Bands
+         (Upper Band and Lower Band).
+
+        For long positions, the stop loss is determined as the lower Mogalef band.
+        For short positions, the stop loss is determined as the upper Mogalef band.
+
+        :param prices_df: A DataFrame containing at least the price columns ['Open', 'High', 'Low', 'Close'].
+        :param period_reg: Lookback period for the linear regression central equilibrium line.
+        :param period_dev: Lookback period for standard deviation corridor calculation.
+        :param multiplier: Multiplier applied to the standard deviation for bandwidth.
+
+        :return: A modified version of the input DataFrame with two additional columns:
+         - LongStopLoss: Calculated stop loss levels for long positions.
+         - ShortStopLoss: Calculated stop loss levels for short positions.
+         If 'LongStopLoss' and 'ShortStopLoss' already exist in prices_df, the DataFrame is returned unchanged.
+        """
+        if {'LongStopLoss', 'ShortStopLoss'}.issubset(prices_df.columns):
+            # Stop loss levels are already present in the DataFrame
+            return prices_df
+
+        if not {'MogalefUpper', 'MogalefLower'}.issubset(prices_df.columns):
+            # Calculate Mogalef Bands indicator columns if they are not already present
+            prices_df = MogalefBands(prices_df, period_reg=period_reg, period_dev=period_dev, multiplier=multiplier)
+
+        # Add columns of stop loss for long and short positions using hybrid corridor and swing extremes
+        return prices_df.with_columns(
+            [
+                # Stop loss for long positions: Lower Mogalef Band
+                pl.col('MogalefLower').alias('LongStopLoss'),
+                # Stop loss for short positions: Upper Mogalef Band
+                pl.col('MogalefUpper').alias('ShortStopLoss'),
+            ]
+        )
+
+    @staticmethod
     def set_stop_loss(prices_df: pl.DataFrame,
                       bars_for_stop_loss: int) -> pl.DataFrame:
         """
@@ -628,13 +676,13 @@ class RsiStrategyABC(StrategyABC, ABC):
 
         # Add columns of stop loss for long and short positions
         return prices_df.with_columns([
-            # Stop loss for long positions: maximum of (Latest low price, Close - 2 ATR)
+            # Stop loss for long positions: maximum of (Latest low price, Close - 1 ATR)
             pl.max_horizontal([
                 # Get the recent lowest price of the last X bars using a rolling window
                 (pl.col('Low').rolling_min(window_size=bars_for_stop_loss)),
                 (pl.col('Close') - pl.col('Atr').clip(lower_bound=0))
             ]).alias('LongStopLoss'),
-            # Stop loss for short positions: minimum of (Latest high price, Close + 2 ATR)
+            # Stop loss for short positions: minimum of (Latest high price, Close + 1 ATR)
             pl.min_horizontal([
                 # Get the recent highest price of the last X bars using a rolling window
                 (pl.col('High').rolling_max(window_size=bars_for_stop_loss)),

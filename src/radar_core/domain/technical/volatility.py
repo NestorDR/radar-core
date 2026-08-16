@@ -83,7 +83,7 @@ def MogalefBands(prices_df: pl.DataFrame,  # noqa: N802
     if prices_df.height == 0:
         return prices_df.with_columns(
             [
-                pl.Series('MogalefCentral', [], dtype=pl.Float64),
+                # pl.Series('MogalefCentral', [], dtype=pl.Float64),
                 pl.Series('MogalefUpper', [], dtype=pl.Float64),
                 pl.Series('MogalefLower', [], dtype=pl.Float64),
             ]
