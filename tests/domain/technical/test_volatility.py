@@ -37,12 +37,11 @@ def test_mogalef_bands_standard_calculation() -> None:
     """
     GIVEN a Polars DataFrame with valid OHLC columns.
     WHEN MogalefBands is executed with default parameters.
-    THEN MogalefCentral, MogalefUpper, and MogalefLower columns are added with correct relationship.
+    THEN MogalefUpper and MogalefLower columns are added with the correct relationship.
     """
     df_ = _sample_ohlc_df(30)
     result_df_ = MogalefBands(df_)
 
-    assert 'MogalefCentral' in result_df_.columns
     assert 'MogalefUpper' in result_df_.columns
     assert 'MogalefLower' in result_df_.columns
     assert result_df_.height == 30
@@ -57,14 +56,12 @@ def test_mogalef_bands_standard_calculation() -> None:
 
     # Verify values at last index
     last_idx_ = 29
-    assert np.isclose(result_df_['MogalefCentral'][last_idx_], expected_central_[last_idx_])
     assert np.isclose(result_df_['MogalefUpper'][last_idx_], expected_upper_[last_idx_])
     assert np.isclose(result_df_['MogalefLower'][last_idx_], expected_lower_[last_idx_])
 
     # Upper band must be >= Central >= Lower band where not null
     valid_rows_ = result_df_.filter(pl.col('MogalefUpper').is_not_null())
-    assert (valid_rows_['MogalefUpper'] >= valid_rows_['MogalefCentral']).all()
-    assert (valid_rows_['MogalefCentral'] >= valid_rows_['MogalefLower']).all()
+    assert (valid_rows_['MogalefUpper'] >= valid_rows_['MogalefLower']).all()
 
 
 def test_mogalef_bands_custom_parameters() -> None:
@@ -83,7 +80,6 @@ def test_mogalef_bands_custom_parameters() -> None:
     expected_upper_ = expected_central_ + 3.0 * expected_std_
 
     last_idx_ = 39
-    assert np.isclose(result_df_['MogalefCentral'][last_idx_], expected_central_[last_idx_])
     assert np.isclose(result_df_['MogalefUpper'][last_idx_], expected_upper_[last_idx_])
 
 
@@ -131,7 +127,6 @@ def test_mogalef_bands_empty_and_short_dataframe() -> None:
     short_df_ = pl.DataFrame({'Open': [10.0, 10.5], 'High': [11.0, 11.5], 'Low': [9.0, 9.5], 'Close': [10.2, 10.8]})
     result_short_ = MogalefBands(short_df_, period_reg=3, period_dev=7)
     assert result_short_.height == 2
-    assert result_short_['MogalefCentral'].is_null().all()
     assert result_short_['MogalefUpper'].is_null().all()
     assert result_short_['MogalefLower'].is_null().all()
 

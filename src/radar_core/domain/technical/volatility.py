@@ -6,7 +6,7 @@ import numpy as np
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 # TA-Lib: Python wrapper for TA-LIB based on Cython, for TA indicator calculations
-#  Visit: https://github.com/ta-lib/ta-lib-python/   https://ta-lib.org/functions/
+#  Visit: https://github.com/ta-lib/ta-lib-python/ and https://ta-lib.org/functions/
 import talib
 
 
@@ -83,7 +83,7 @@ def MogalefBands(prices_df: pl.DataFrame,  # noqa: N802
     if prices_df.height == 0:
         return prices_df.with_columns(
             [
-                # pl.Series('MogalefCentral', [], dtype=pl.Float64),
+                # pl.Series('MogalefCentral', [], dtype=pl.Float64),  # Do not remove
                 pl.Series('MogalefUpper', [], dtype=pl.Float64),
                 pl.Series('MogalefLower', [], dtype=pl.Float64),
             ]
@@ -110,7 +110,7 @@ def MogalefBands(prices_df: pl.DataFrame,  # noqa: N802
     # Add columns with null-filled NaNs
     return prices_df.with_columns(
         [
-            pl.Series('MogalefCentral', central_line_).fill_nan(value=None),
+            # pl.Series('MogalefCentral', central_line_).fill_nan(value=None),  # Do not remove
             pl.Series('MogalefUpper', upper_band_).fill_nan(value=None),
             pl.Series('MogalefLower', lower_band_).fill_nan(value=None),
         ]

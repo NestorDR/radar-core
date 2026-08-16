@@ -4,7 +4,7 @@
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
 # TA-Lib: Python wrapper for TA-LIB based on Cython, for TA indicator calculations
-#  Visit: https://github.com/ta-lib/ta-lib-python/   https://ta-lib.org/functions/
+#  Visit: https://github.com/ta-lib/ta-lib-python/ and https://ta-lib.org/functions/
 import talib
 
 
