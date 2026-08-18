@@ -567,14 +567,16 @@ class RsiStrategyABC(StrategyABC, ABC):
             # Stop loss is already calculated
             return prices_df
 
+        # Identify when (at which bar) loss stops are triggered
         # Determine Mogalef Bands lookback and swing window sizes according to execution timeframe
-        if timeframe <= DAILY:
-            period_reg_, period_dev_, multiplier_ = 3, 7, 2.0
-        else:
-            period_reg_, period_dev_, multiplier_ = 3, 5, 1.5
-
+        period_reg_, period_dev_, multiplier_ = (3, 7, 2.0) if timeframe <= DAILY else (3, 5, 1.5)
         # Set the stop loss using Mogalef Bands
         prices_df = RsiStrategyABC.set_mogalef_stop_loss(prices_df, period_reg_, period_dev_, multiplier_)
+        # DEPRECATED
+        # Determine rolling window sizes according to execution timeframe
+        # bars_for_stop_loss_ = 10 if timeframe <= DAILY else 3
+        # Set the stop loss using ATR and rolling window
+        # prices_df = RsiStrategyABC.set_stop_loss(prices_df, bars_for_stop_loss_)
 
         # Extract relevant prices as NumPy arrays for efficient slicing and speeding up prices access
         bar_numbers_ = prices_df['BarNumber'].to_numpy()
