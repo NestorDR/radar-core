@@ -654,7 +654,7 @@ class RsiStrategyABC(StrategyABC, ABC):
     def set_stop_loss(prices_df: pl.DataFrame,
                       bars_for_stop_loss: int) -> pl.DataFrame:
         """
-        Calculates and sets stop loss values for a dataframe containing price prices.
+        [DEPRECATED] Calculates and sets stop loss values for a dataframe containing price prices.
         This method uses the Average True Range (ATR) and rolling window calculations to determine stop loss levels
          for both long and short trading positions.
         Specifically, it computes the rolling minimum of the low prices and the rolling maximum of the high prices over

@@ -3,11 +3,15 @@
 
 @echo off
 
-:: 1. Run pytest with --cache-clear and route temporary fixture files to system TEMP
+:: 1. Set the virtual environment for this test run.
+:: setlocal preserves the original VIRTUAL_ENV; endlocal restores it before exit.
+set "VIRTUAL_ENV=C:\Development\VirtualEnvs\radar-3.13.14-uv-env"
+
+:: 2. Run pytest with --cache-clear and route temporary fixture files to system TEMP
 uv run --active pytest %1 --cache-clear --basetemp="%TEMP%\pytest_runner"
 set TEST_EXIT_CODE=%ERRORLEVEL%
 
-:: 2. Post-test cleanup of project root artifacts
+:: 3. Post-test cleanup of project root artifacts
 echo Cleaning up temporary test artifacts...
 
 :: Remove .pytest_cache if created locally
@@ -21,5 +25,5 @@ if exist .coverage del /f /q .coverage
 if exist htmlcov rmdir /s /q htmlcov
 if exist .coverage.* del /f /q .coverage.*
 
-:: 3. Exit with the original pytest exit code so CI/CD pipelines detect test failures
-exit /b %TEST_EXIT_CODE%
+:: 4. Restore the original VIRTUAL_ENV and exit with the original pytest exit code.
+endlocal & exit /b %TEST_EXIT_CODE%
