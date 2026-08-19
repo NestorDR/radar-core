@@ -20,7 +20,7 @@ from radar_core.domain.strategies.base_strategy import RsiStrategyABC
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import COMMISSION_PERCENT, RSI_RC, LONG, SHORT, STEP_LENGTH_RSI_LEVELS, TIMEFRAMES
 
-# Column constants for work matrices: inputs and outputs
+# Column constants for work matrices
 INPUT: Final[int] = 0
 OVER: Final[int] = 1
 OUTPUT: Final[int] = 2
@@ -31,13 +31,15 @@ OUTPUT: Final[int] = 2
 # and returns NumPy arrays, without accessing or modifying the class state.
 # Keeping it at the module level reinforces this separation.
 @njit(cache=True)
-def _find_trades_rc(rsi_values: np.ndarray,
-                    stop_loss_bar_numbers: np.ndarray,
-                    in_: int,
-                    over_: int,
-                    out_: int,
-                    is_long_position: bool,
-                    future_bar_number: int) -> tuple[np.ndarray, np.ndarray]:
+def _find_trades_rc(
+        rsi_values: np.ndarray,
+        stop_loss_bar_numbers: np.ndarray,
+        in_: int,
+        over_: int,
+        out_: int,
+        is_long_position: bool,
+        future_bar_number: int,
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Fast JIT-compiled kernel to identify trades based on RSI Rollercoaster logic.
     Logic: Input Signal -> (Check Stop Loss) -> Over[bought|sold] Signal -> Output Signal.
@@ -158,16 +160,18 @@ def _find_trades_rc(rsi_values: np.ndarray,
 
 
 @njit(cache=True)
-def _grid_search_rc_fused(rsi_values: np.ndarray,
-                          stop_loss_bar_numbers: np.ndarray,
-                          close_prices: np.ndarray,
-                          from_in: int,
-                          to_in: int,
-                          from_over: int,
-                          to_over: int,
-                          step: int,
-                          is_long_position: bool,
-                          future_bar_number: int) -> np.ndarray:
+def _grid_search_rc_fused(
+        rsi_values: np.ndarray,
+        stop_loss_bar_numbers: np.ndarray,
+        close_prices: np.ndarray,
+        from_in: int,
+        to_in: int,
+        from_over: int,
+        to_over: int,
+        step: int,
+        is_long_position: bool,
+        future_bar_number: int,
+) -> np.ndarray:
     """
     Fast JIT-compiled fused grid search kernel for RSI Rollercoaster.
     Scans the parameter grid (in_, over_, out_), simulates trades, evaluates PnL (Profit and Loss) in CPU registers,
@@ -198,11 +202,13 @@ def _grid_search_rc_fused(rsi_values: np.ndarray,
     candidate_count_ = 0
 
     for in_ in range(from_in, to_in, step):
-        # Skip if RSI never reaches the input level necessary for a cross
+        # Skip if RSI never reaches the input level necessary for a cross (Input)
+        # Long needs RSI > in (strict), so skip if max <= in
+        # Short needs RSI < in (strict), so skip if min >= in
         if (is_long_position and max_rsi_ <= in_) or (not is_long_position and min_rsi_ >= in_):
             continue
 
-        # Set seed values
+        # Initialize worst ratios
         best_net_profit_ = -np.inf
         best_expected_value_ = -np.inf
         best_over_ = -1
@@ -336,9 +342,9 @@ def _grid_search_rc_fused(rsi_values: np.ndarray,
                     expected_value_ = win_probability_ * average_win_ + loss_probability_ * average_loss_
 
                     if net_profit_ > 0.0 and expected_value_ > 0.0:
-                        new_is_better_ = (net_profit_ > best_net_profit_
-                                          or (net_profit_ == best_net_profit_
-                                              and expected_value_ > best_expected_value_))
+                        new_is_better_ = net_profit_ > best_net_profit_ or (
+                                net_profit_ == best_net_profit_ and expected_value_ > best_expected_value_
+                        )
                         if new_is_better_:
                             best_net_profit_ = net_profit_
                             best_expected_value_ = expected_value_
@@ -356,9 +362,11 @@ def _grid_search_rc_fused(rsi_values: np.ndarray,
 
 
 @njit(cache=True)
-def _get_out_range(is_long_position: bool,
-                   in_: int,
-                   over_: int) -> tuple[int, int]:
+def _get_out_range(
+        is_long_position: bool,
+        in_: int,
+        over_: int
+) -> tuple[int, int]:
     """
     Identify the range of levels for iteration over the output level of the RSI based on input
      and overbought/oversold levels.
@@ -373,12 +381,12 @@ def _get_out_range(is_long_position: bool,
     if is_long_position:
         # It will be used in a loop ─► for range(from_out_, to_out_, -step):
         from_out_ = 84 if over_ > 84 else over_
-        to_out_ = (18 if in_ < 18 else in_)
+        to_out_ = 18 if in_ < 18 else in_
 
     else:
         # It will be used in a loop ─► range(from_out_, to_out_, step):
         from_out_ = 16 if over_ < 16 else over_
-        to_out_ = (82 if in_ > 82 else in_)
+        to_out_ = 82 if in_ > 82 else in_
 
     return from_out_, to_out_
 
@@ -389,22 +397,23 @@ class RsiRollerCoaster(RsiStrategyABC):
     Visit https://www.tecnicasdetrading.com/2011/09/tecnica-de-trading-rsi-rollercoaster.html
     """
 
-    def __init__(self,
-                 verbosity_level: int = DEBUG):
+    def __init__(self, verbosity_level: int = DEBUG):
         """
         :param verbosity_level: Minimum importance level of messages reporting the progress of the process for all
          methods of the class.
         """
         super().__init__(RSI_RC, verbosity_level)
 
-    def identify_old(self,
-                     symbol: str,
-                     timeframe: int,
-                     only_long_positions,
-                     prices_df: pl.DataFrame,
-                     close_prices: np.ndarray,
-                     percent_changes: np.ndarray,
-                     verbosity_level: int = DEBUG) -> None:
+    def identify_old(
+            self,
+            symbol: str,
+            timeframe: int,
+            only_long_positions,
+            prices_df: pl.DataFrame,
+            close_prices: np.ndarray,
+            percent_changes: np.ndarray,
+            verbosity_level: int = DEBUG,
+    ) -> None:
         """
         [DEPRECATED] Legacy baseline method to identify combinations of levels for RSI Rollercoaster.
         Use identify() instead for an accelerated JIT fused screening implementation.
@@ -427,8 +436,9 @@ class RsiRollerCoaster(RsiStrategyABC):
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
         # Logs initialization and prepares the necessary variables for the process
-        init_dt_, analysis_context_, original_column_names_, verbosity_level = \
-            self.initialize_identification(symbol, timeframe, prices_df, verbosity_level)
+        init_dt_, analysis_context_, original_column_names_, verbosity_level = self.initialize_identification(
+            symbol, timeframe, prices_df, verbosity_level
+        )
 
         # Identify and calculate where to stop losses for both long and short positions.
         prices_df = self.identify_where_to_stop_loss(timeframe, prices_df, close_prices)
@@ -450,8 +460,9 @@ class RsiRollerCoaster(RsiStrategyABC):
         #  Position type: LONG.  Levels: '1st input', 'last input', '1st overbought', 'last overbought' & 'step to increase'
         #  Position type: SHORT. Levels: '1st input', 'last input', '1st oversold', 'last oversold' & 'step to decrease'
         # contexts_ = [ (LONG, 20, 41, 50, 81, 1), (SHORT, 75, 64, 50, 19, -1) ]
-        contexts_ = [(LONG, 16, 61, 40, 81, STEP_LENGTH_RSI_LEVELS)] + \
-                    ([] if only_long_positions else [(SHORT, 84, 58, 60, 19, -STEP_LENGTH_RSI_LEVELS)])
+        contexts_ = [(LONG, 16, 61, 40, 81, STEP_LENGTH_RSI_LEVELS)] + (
+            [] if only_long_positions else [(SHORT, 84, 58, 60, 19, -STEP_LENGTH_RSI_LEVELS)]
+        )
 
         # Collect positive ratios across position types / levels for batch upsert
         positive_ratios_ = []
@@ -470,7 +481,8 @@ class RsiRollerCoaster(RsiStrategyABC):
                     print('', end='\r')
                     print(
                         f'Evaluating profitability {TIMEFRAMES[timeframe]} of RSI({self.period}) Rollercoaster input level {in_} for {symbol}...',
-                        end='')
+                        end=''
+                    )
 
                 # Skip if RSI never reaches the input level necessary for a cross
                 # Long needs rsi > in (strict), so skip if max <= in
@@ -494,9 +506,9 @@ class RsiRollerCoaster(RsiStrategyABC):
                     for out_ in range(from_out_, to_out_, -step_):
                         # Evaluate the lifecycle for the RSI Rollercoaster strategy
                         # (input, over[bought|sold] and output) with the current combination
-                        input_bar_numbers_, output_bar_numbers_ = _find_trades_rc(rsi_values_, stop_loss_bar_numbers_,
-                                                                                  in_, over_, out_,
-                                                                                  is_long_position_, future_bar_number_)
+                        input_bar_numbers_, output_bar_numbers_ = _find_trades_rc(
+                            rsi_values_, stop_loss_bar_numbers_, in_, over_, out_, is_long_position_, future_bar_number_
+                        )
                         # If no trades identified, skip
                         if len(input_bar_numbers_) == 0:
                             continue
@@ -505,9 +517,10 @@ class RsiRollerCoaster(RsiStrategyABC):
                         inputs_ = {'period': self.period, 'in': in_, 'over': over_, 'out': out_}
 
                         # Evaluate trades identified, calculate trading performance ratios and aggregates
-                        ratios_ = self.perfile_performance(analysis_context_, inputs_,
-                                                           input_bar_numbers_, output_bar_numbers_,
-                                                           close_prices, percent_changes, prices_df)
+                        ratios_ = self.perfile_performance(
+                            analysis_context_, inputs_, input_bar_numbers_, output_bar_numbers_, close_prices,
+                            percent_changes, prices_df
+                        )
                         if not ratios_:
                             continue
 
@@ -544,14 +557,16 @@ class RsiRollerCoaster(RsiStrategyABC):
         # Finalize the process to identify profitable strategies and logs finalization
         self.finalize_identification(init_dt_, analysis_context_, verbosity_level)
 
-    def identify(self,
-                 symbol: str,
-                 timeframe: int,
-                 only_long_positions: bool,
-                 prices_df: pl.DataFrame,
-                 close_prices: np.ndarray,
-                 percent_changes: np.ndarray,
-                 verbosity_level: int = DEBUG) -> None:
+    def identify(
+            self,
+            symbol: str,
+            timeframe: int,
+            only_long_positions: bool,
+            prices_df: pl.DataFrame,
+            close_prices: np.ndarray,
+            percent_changes: np.ndarray,
+            verbosity_level: int = DEBUG,
+    ) -> None:
         """
         Identifies the best combinations of levels input, overbought/oversold, and output for the RSI Rollercoaster
         strategy using the fused Numba JIT grid search kernel, both for Long and Short positions, and evaluates
@@ -572,8 +587,9 @@ class RsiRollerCoaster(RsiStrategyABC):
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
         # Logs initialization and prepares the necessary variables for the process
-        init_dt_, analysis_context_, original_column_names_, verbosity_level = \
-            self.initialize_identification(symbol, timeframe, prices_df, verbosity_level)
+        init_dt_, analysis_context_, original_column_names_, verbosity_level = self.initialize_identification(
+            symbol, timeframe, prices_df, verbosity_level
+        )
 
         # Identify and calculate where to stop losses for both long and short positions.
         prices_df = self.identify_where_to_stop_loss(timeframe, prices_df, close_prices)
@@ -591,8 +607,9 @@ class RsiRollerCoaster(RsiStrategyABC):
         #  Position type: LONG.  Levels: '1st input', 'last input', '1st overbought', 'last overbought' & 'step to increase'
         #  Position type: SHORT. Levels: '1st input', 'last input', '1st oversold', 'last oversold' & 'step to decrease'
         # contexts_ = [ (LONG, 20, 41, 50, 81, 1), (SHORT, 75, 64, 50, 19, -1) ]
-        contexts_ = [(LONG, 16, 61, 40, 81, STEP_LENGTH_RSI_LEVELS)] + \
-                    ([] if only_long_positions else [(SHORT, 84, 58, 60, 19, -STEP_LENGTH_RSI_LEVELS)])
+        contexts_ = [(LONG, 16, 61, 40, 81, STEP_LENGTH_RSI_LEVELS)] + (
+            [] if only_long_positions else [(SHORT, 84, 58, 60, 19, -STEP_LENGTH_RSI_LEVELS)]
+        )
 
         # Collect positive ratios across position types / levels for batch upsert
         positive_ratios_ = []
@@ -608,16 +625,14 @@ class RsiRollerCoaster(RsiStrategyABC):
             if verbosity_level == DEBUG:
                 print('', end='\r')
                 print(
-                    f'Evaluating profitability {TIMEFRAMES[timeframe]} of RSI({self.period}) '
-                    f'Rollercoaster (fused) for {symbol}...',
+                    f'Evaluating profitability {TIMEFRAMES[timeframe]} of RSI({self.period}) Rollercoaster (fused) for {symbol}...',
                     end=''
                 )
 
             # Fast in-register JIT grid screening across all parameter combinations
             best_candidates_ = _grid_search_rc_fused(
                 rsi_values_, stop_loss_bar_numbers_, close_prices,
-                from_in_, to_in_, from_over_, to_over_, step_,
-                is_long_position_, future_bar_number_
+                from_in_, to_in_, from_over_, to_over_, step_, is_long_position_, future_bar_number_,
             )
 
             # Materialize complete Ratios objects only for surviving best candidates/combinations
@@ -641,8 +656,8 @@ class RsiRollerCoaster(RsiStrategyABC):
 
                 # Evaluate trades identified, calculate trading performance ratios and aggregates
                 ratios_ = self.perfile_performance(
-                    analysis_context_, inputs_, input_bar_numbers_, output_bar_numbers_,
-                    close_prices, percent_changes, prices_df
+                    analysis_context_, inputs_, input_bar_numbers_, output_bar_numbers_, close_prices, percent_changes,
+                    prices_df
                 )
                 if not ratios_:
                     continue
