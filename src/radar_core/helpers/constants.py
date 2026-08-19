@@ -23,9 +23,6 @@ LONG = 1
 # Average commission per trade in 2017 = 0.07% of average trade amount $8,700 = $6.09
 COMMISSION_PERCENT = 0.0007
 
-# Minimum acceptable or tolerable for trading evaluation
-WIN_PROBABILITY_THRESHOLD = 0.40
-
 # Step length in RSI levels
 STEP_LENGTH_RSI_LEVELS = 1
 
