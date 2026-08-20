@@ -15,7 +15,7 @@ The fully operational results can be visited for public use:
     - **NumPy & Numba**: Strategy logic is decoupled into JIT-compiled kernels for near-native execution speed.
 - **Concurrent Analysis**: Multi-symbol processing using Python's `ProcessPoolExecutor`.
 - **Yahoo Finance Integration**: Automated download of historical daily and weekly prices.
-- **Technical Analysis & Strategies**: Built-in support for Moving Averages (SMA) and RSI-based variants (RSI SMA, Two Bands, Rollercoaster).
+- **Technical Analysis & Strategies**: Built-in support for Moving Averages (SMA), RSI-based variants (RSI SMA, Two Bands, Rollercoaster), and Mogalef Bands.
 - **Performance Metrics**: Detailed profiling including net profit, success rate, mathematical expectation, and risk-adjusted ratios.
 - **Database Synchronization**: Automated management of trading ratios and symbol cleanup via `psycopg3`.
 - Configurable settings (symbols, shortable assets, verbosity, concurrency)
@@ -93,7 +93,7 @@ flowchart TD
 
     subgraph Storage ["2. In-Memory Storage & Processing Layer"]
         YFinance -->|Convert to Polars| PolarsData["Polars DataFrames (Daily & Weekly)"]
-        PolarsData --> TechnicalIndicators["Shared TA Indicators (RSI, ATR)"]
+        PolarsData --> TechnicalIndicators["Shared TA Indicators (RSI, Mogalef Bands)"]
     end
 
     subgraph Concurrency ["Parallel Worker Dispatch"]
@@ -108,8 +108,8 @@ flowchart TD
         StrategyOrch --> RSIRC["RsiRollerCoaster"]
 
         MA -->|NumPy Arrays| NumbaMA["@njit _find_trades_sma (Numba Kernel)"]
-        RSI2B -->|NumPy Arrays| Numba2B["@njit _find_trades_2b (Numba Kernel)"]
-        RSIRC -->|NumPy Arrays| NumbaRC["@njit _find_trades_rc (Numba Kernel)"]
+        RSI2B -->|NumPy Arrays| Numba2B["@njit _grid_search_2b_fused / _find_trades_2b (Numba Kernels)"]
+        RSIRC -->|NumPy Arrays| NumbaRC["@njit _grid_search_rc_fused / _find_trades_rc (Numba Kernels)"]
     end
 
     subgraph Persistence ["Persistence Boundary"]
@@ -120,7 +120,7 @@ flowchart TD
     end
 ```
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/ATR indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/Mogalef indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
 
 
 
