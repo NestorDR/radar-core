@@ -66,13 +66,13 @@ class Settings:
             if env_path_:
                 # Load the environment variables from the file
                 dotenvy_py.from_filename(env_path_)
-                message_ = f"Found and loaded environment vars file {env_path_}"
+                message_ = f'Found and loaded environment vars file {env_path_}'
             else:
                 # Carry on without loading and sets the verbosity level based on the real environment or default.
-                message_ = f"No environment variables file found ({env_path_}), Continuing without it."
+                message_ = f'No environment variables file found ({env_path_}), Continuing without it.'
                 message_verbosity_level_ = WARNING
         else:
-            message_ = f"RADAR_ENV is in mode `{os.getenv('RADAR_ENV')}`."
+            message_ = f'RADAR_ENV is in mode `{os.getenv('RADAR_ENV')}`.'
 
         # Set logging/verbosity level based on the env vars from the real environment or `.env` file read
         verbosity_level_ = self._get_log_level()
@@ -92,7 +92,7 @@ class Settings:
         env_log_level_ = os.getenv('RADAR_LOG_LEVEL')
         try:
             log_level_ = int(env_log_level_) if env_log_level_ else INFO
-            # Calculate level by flooring to the nearest 10. If outside range 10-59, return default
+            # Calculate THE level by flooring to the nearest 10. If outside range 10-59, return default
             return (log_level_ // 10) * 10 if 10 <= log_level_ <= 59 else INFO
 
         except ValueError:
@@ -121,36 +121,36 @@ class Settings:
         :return: A dictionary with the logging configuration.
         """
         enable_file_logging_ = self._parse_bool_env('RADAR_ENABLE_FILE_LOGGING', False)
-        handlers_ = ["console"]
+        handlers_ = ['console']
 
         logger_config = {
-            "level": self.verbosity_level,
-            "handlers": [],
-            "propagate": True,
+            'level': self.verbosity_level,
+            'handlers': [],
+            'propagate': True,
         }
         loggers = ['radar-core', 'numba', 'numpy', 'peewee', 'polars', 'psycopg', 'SQLAlchemy', 'yfinance']
 
         config_: dict = {
-            "version": 1,
-            "disable_existing_loggers": False,
-            "formatters": {
-                "default": {
-                    "format": "%(asctime)s; %(name)-45s; %(levelname)-8s; line %(lineno)3d; %(message)s",
-                    "datefmt": "%Y-%m-%d %H:%M:%S",
+            'version': 1,
+            'disable_existing_loggers': False,
+            'formatters': {
+                'default': {
+                    'format': '%(asctime)s; %(name)-45s; %(levelname)-8s; line %(lineno)3d; %(message)s',
+                    'datefmt': '%Y-%m-%d %H:%M:%S',
                 }
             },
-            "handlers": {
-                "console": {
-                    "class": "logging.StreamHandler",
-                    "formatter": "default",
-                    "level": DEFAULT_CONSOLE_LOG_LEVEL if enable_file_logging_ else self.verbosity_level,
+            'handlers': {
+                'console': {
+                    'class': 'logging.StreamHandler',
+                    'formatter': 'default',
+                    'level': DEFAULT_CONSOLE_LOG_LEVEL if enable_file_logging_ else self.verbosity_level,
                 }
             },
-            "root": {
-                "level": DEBUG,
-                "handlers": handlers_,
+            'root': {
+                'level': DEBUG,
+                'handlers': handlers_,
             },
-            "loggers": {x: logger_config.copy() for x in loggers}
+            'loggers': {x: logger_config.copy() for x in loggers}
         }
 
         config_['loggers']['numba']['level'] = 'WARNING'
@@ -173,22 +173,22 @@ class Settings:
 
             if not log_filename:
                 # Get the main file of the running stack
-                main_module_ = sys.modules["__main__"]
-                main_file = getattr(main_module_, "__file__", None)
+                main_module_ = sys.modules['__main__']
+                main_file_ = getattr(main_module_, '__file__', None)
                 # stem: final component of the path without extension
-                log_filename = Path(str(main_file)).stem if main_file else "app"
+                log_filename = Path(str(main_file_)).stem if main_file_ else 'app'
 
             log_file_path_ = logs_folder_ / f'{log_filename}.log'
 
-            config_["handlers"]["file"] = {
-                "class": "logging.handlers.RotatingFileHandler",
-                "formatter": "default",
-                "filename": str(log_file_path_),
-                "maxBytes": 1024 * 1024,
-                "backupCount": 12,
-                "level": self.verbosity_level,
+            config_['handlers']['file'] = {
+                'class': 'logging.handlers.RotatingFileHandler',
+                'formatter': 'default',
+                'filename': str(log_file_path_),
+                'maxBytes': 1024 * 1024,
+                'backupCount': 12,
+                'level': self.verbosity_level,
             }
-            handlers_.append("file")
+            handlers_.append('file')
 
         return config_
 
@@ -208,7 +208,7 @@ class Settings:
             return max(int(env_max_workers_), 1)
 
         except ValueError:
-            message_ = f"Invalid value for RADAR_MAX_WORKERS: '{env_max_workers_}'. Must be an integer. Defaulting to all available cores."
+            message_ = f'Invalid value for RADAR_MAX_WORKERS: `{env_max_workers_}`. Must be an integer. Defaulting to all available cores.'
             verbose(message_, WARNING, self.verbosity_level)
             logger_.warning(message_)
             return 1
