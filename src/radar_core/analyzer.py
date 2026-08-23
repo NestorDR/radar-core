@@ -68,7 +68,7 @@ def init_worker(log_queue,
     :param log_level: Minimum logging level configured for the worker process.
     """
     # 1. Ignore Ctrl+C in child processes so the parent process handles it cleanly
-    signal.signal(signal.SIGINT, signal.SIG_IGN)  # if Signal Interrupt (SIGINT) then Signal Ignored (SIG_IGN)
+    signal.signal(signal.SIGINT, signal.SIG_IGN)  # if Signal Interrupt (SIGINT), then Signal Ignored (SIG_IGN)
 
     # 2. Reset and configure QueueHandler logging
     root_logger_ = getLogger()
@@ -128,7 +128,7 @@ def analyze(timeframe: int,
     # Show pricing frame information with prices to process
     if verbosity_level <= INFO:
         print(
-            f'\n[{symbol}]: {TIMEFRAMES[timeframe]} time frame analysis started at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
+            f'\n[{symbol}]: {TIMEFRAMES[timeframe]} time frame analysis started at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...')
         if verbosity_level == DEBUG:
             print(prices_df.head(1))
         print(prices_df.tail(1))
@@ -193,7 +193,7 @@ def process_symbol(symbol: str,
     only_long_positions_ = symbol_ not in shortable_symbols
 
     # Log inside the child process (always goes to file/console depending on config, before buffering starts)
-    message_ = f'[{symbol}]: Analysis started at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...'
+    message_ = datetime.now().strftime(f'[{symbol}]: Analysis started at %Y-%m-%d %H:%M:%S...')
     verbose(message_, INFO, verbosity_level)
     logger_.info(message_)
 
@@ -272,7 +272,7 @@ def analyzer(settings: Settings,
 
     try:
         # Initialize logging settings
-        message_ = f'Analysis started at {init_dt_.strftime("%Y-%m-%d %H:%M:%S")}.'
+        message_ = init_dt_.strftime('Analysis started at %Y-%m-%d %H:%M:%S.')
         verbose(message_, INFO, verbosity_level_)
         logger_.info(message_)
 
@@ -444,7 +444,7 @@ def analyzer(settings: Settings,
 
         message_ = (init_dt_.strftime('Analysis executed from %Y-%m-%d %H:%M:%S ')
                     + datetime.now().strftime('to %Y-%m-%d %H:%M:%S')
-                    + f' - Elapsed time {(datetime.now() - init_dt_).total_seconds() / 60:.1f} min')
+                    + f' - Elapsed time {(datetime.now() - init_dt_).total_seconds() / 60:.2f} min')
         verbose(message_, INFO, verbosity_level_)
         logger_.info(message_)
 
@@ -493,7 +493,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['NUGT', 'LABU']
+    symbols_ = ['BTC-USD']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(settings_, symbols_)

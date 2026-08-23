@@ -79,17 +79,31 @@ The system follows a three-tier performance model:
 
 ```mermaid
 flowchart TD
-    subgraph Ingestion ["1. Adaptation & Ingestion Layer"]
-        CLI["CLI & Settings"] --> Analyzer["Analyzer Orchestrator"]
-        Analyzer --> PriceProvider["PriceProvider (Yahoo Finance & Symbol Mapping)"]
-        PriceProvider --> PolarsData["Polars DataFrames (Daily & Weekly)"]
+    subgraph CLI ["CLI & Configuration Entry"]
+        Main["__main__.py / CLI"] --> Settings["Settings (settings.yml & Env Vars)"]
+        Settings --> Analyzer["analyzer.py (Orchestrator)"]
     end
 
-    subgraph Execution ["2. Parallel Execution & JIT Acceleration Layer"]
-        Analyzer -->|"ProcessPoolExecutor"| Workers["Worker Processes (spawn context)"]
-        PolarsData --> Workers
-        Workers --> Indicators["Shared Indicators (RSI, Mogalef Bands)"]
-        Indicators --> StrategyOrch["Strategy Orchestration (StrategyABC)"]
+    subgraph DataIngestion ["1. Adaptation & Ingestion Layer"]
+        Analyzer --> PriceProvider["PriceProvider"]
+        PriceProvider --> SymbolMapping["Symbol & Ticker Translation"]
+        SymbolMapping -->|psycopg3| DB[("PostgreSQL Database")]
+        PriceProvider -->|yfinance / Pandas| YFinance["Yahoo Finance API"]
+    end
+
+    subgraph Storage ["2. In-Memory Storage & Processing Layer"]
+        YFinance -->|Convert to Polars| PolarsData["Polars DataFrames (Daily & Weekly)"]
+        PolarsData --> TechnicalIndicators["Shared TA Indicators (RSI, Mogalef Bands)"]
+        TechnicalIndicators -->|NumPy Arrays| NumbaSL["@njit _find_stop_loss_bars (Numba Kernel)"]
+    end
+
+    subgraph Concurrency ["Parallel Worker Dispatch"]
+        Analyzer -->|ProcessPoolExecutor| ParallelWorkers["Worker Processes (spawn context)"]
+        TechnicalIndicators & NumbaSL --> ParallelWorkers
+    end
+
+    subgraph Execution ["3. Execution & Calculation Layer"]
+        ParallelWorkers --> StrategyOrch["Strategy Orchestration (StrategyABC)"]
         StrategyOrch --> MA["MovingAverage"]
         StrategyOrch --> RSI2B["RsiTwoBands"]
         StrategyOrch --> RSIRC["RsiRollerCoaster"]
@@ -99,14 +113,15 @@ flowchart TD
         RSIRC -->|NumPy Arrays| NumbaRC["@njit _grid_search_rc_fused / _find_trades_rc (Numba Kernels)"]
     end
 
-    subgraph Persistence ["3. Transactional Persistence Layer"]
-        NumbaMA & Numba2B & NumbaRC --> Ratios["Ratios Performance Objects"]
-        Ratios --> RatioRepo["RatioRepository (Transactional Upsert & Cleanup)"]
-        RatioRepo -->|psycopg3| DB[("PostgreSQL Database")]
+    subgraph Persistence ["Persistence Boundary"]
+        NumbaMA & Numba2B & NumbaRC --> RatiosOutput["Ratios Data Objects"]
+        RatiosOutput --> RatioRepo["RatioRepository"]
+        RatioRepo -->|Transactional Upsert & Cleanup| RatioCrud["RatioCrud (psycopg3)"]
+        RatioCrud -->|Parameterized Queries| DB
     end
 ```
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/Mogalef indicators when required, and evaluates only the strategies listed in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/Mogalef indicators (with JIT-accelerated stop-loss bar scanning) and evaluates only the strategies enabled in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
 
 
 
@@ -251,7 +266,7 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - Runs formatting and linting tasks using `ruff`.
 
 - **`auto\test.cmd`**: Testing is implemented using `pytest`. Unit tests are located under the `tests/` directory.
-  - The test suite includes fast, in-memory unit tests using `pytest` and `unittest.mock` covering domain strategies (MA single pass, RSI Two Bands fused grid search, RSI Rollercoaster fused grid search, Mogalef stop-loss JIT scanning), technical indicators (Mogalef Bands, RSI, ATR), symbol translation and auto-creation, price provider download guards, model instantiation, error handling, and CRUD methods without external database dependencies.
+  - The test suite includes fast, in-memory unit tests using `pytest` and `unittest.mock` covering symbol translation and auto-creation, price provider download guards, model instantiation, error handling, and CRUD methods without external database dependencies.
 
 - **`auto\cleanup.cmd`**: Cache and temporary file cleanup.
   - Clears Python bytecode caches (`__pycache__`) and cleans Ruff cache using `uvx ruff clean`.

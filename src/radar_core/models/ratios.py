@@ -28,6 +28,7 @@ class Ratios(BaseModel):
     to_date: datetime.date | None = None
     initial_price: Decimal | float = 0.0
     final_price: Decimal | float = 0.0
+    current_indicators: str | None = None
     net_change: float = 0.0
     signals: int = 0
     winnings: float = 0.0
