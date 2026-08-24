@@ -5,9 +5,9 @@ Radar Core is a Python application that downloads financial asset prices from Ya
 The project follows High Performance Practices, using concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously. Its cloud deployment is being supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
 The fully operational results can be visited for public use: 
-- [Ratios for Stocks](https://radar.ndromero.com/public/dashboard/147ee420-badb-451c-a2d5-c30e78688ed0#fullscreen&theme=night) 
-- [Ratios for Crypto](https://radar.ndromero.com/public/dashboard/0af531b3-df15-4aa4-a665-69704e95451e#fullscreen&theme=night)
-- [All Ratios](https://radar.ndromero.com/public/dashboard/6e547cac-cbc3-4354-97c3-6745d8540d83#fullscreen&theme=night)
+- [Ratios for Stocks](https://radar.ndromero.com/public/dashboard/147ee420-badb-451c-a2d5-c30e78688ed0?profit_vs_change=&security=&strategy=&tab=6-day---open-----%7C#theme=night) 
+- [Ratios for Crypto](https://radar.ndromero.com/public/dashboard/0af531b3-df15-4aa4-a665-69704e95451e?profit_vs_change=&security=&strategy=&tab=10-day-open-----%7C#theme=night)
+- [All Ratios](https://radar.ndromero.com/public/dashboard/6e547cac-cbc3-4354-97c3-6745d8540d83?gain_prob=0.51&profit_vs_change=-0.20&security=&signals=2&strategy=&time_frame=#theme=night)
 
 ## Features
 - **Hybrid Data Architecture**:
@@ -80,8 +80,8 @@ The system follows a three-tier performance model:
 ```mermaid
 flowchart TD
     subgraph CLI ["CLI & Configuration Entry"]
-        Main["__main__.py / CLI"] --> Settings["Settings (settings.yml & Env Vars)"]
-        Settings --> Analyzer["analyzer.py (Orchestrator)"]
+        Main["__main__.py / CLI"] --> Settings["Settings (settings.yml & Environment Variables)"]
+        Settings --> Analyzer["Analyzer (Orchestrator)"]
     end
 
     subgraph DataIngestion ["1. Adaptation & Ingestion Layer"]
@@ -93,28 +93,26 @@ flowchart TD
 
     subgraph Storage ["2. In-Memory Storage & Processing Layer"]
         YFinance -->|Convert to Polars| PolarsData["Polars DataFrames (Daily & Weekly)"]
-        PolarsData --> TechnicalIndicators["Shared TA Indicators (RSI, Mogalef Bands)"]
-        TechnicalIndicators -->|NumPy Arrays| NumbaSL["@njit _find_stop_loss_bars (Numba Kernel)"]
+        PolarsData --> TechnicalIndicators["Shared Technical Indicators (RSI, Mogalef Bands)"]
+        TechnicalIndicators --> StopLoss["Stop-Loss Identification (powered by @njit / Numba)"]
     end
 
     subgraph Concurrency ["Parallel Worker Dispatch"]
         Analyzer -->|ProcessPoolExecutor| ParallelWorkers["Worker Processes (spawn context)"]
-        TechnicalIndicators & NumbaSL --> ParallelWorkers
+        StopLoss --> ParallelWorkers
     end
 
     subgraph Execution ["3. Execution & Calculation Layer"]
         ParallelWorkers --> StrategyOrch["Strategy Orchestration (StrategyABC)"]
-        StrategyOrch --> MA["MovingAverage"]
-        StrategyOrch --> RSI2B["RsiTwoBands"]
-        StrategyOrch --> RSIRC["RsiRollerCoaster"]
-
-        MA -->|NumPy Arrays| NumbaMA["@njit _find_trades_sma (Numba Kernel)"]
-        RSI2B -->|NumPy Arrays| Numba2B["@njit _grid_search_2b_fused / _find_trades_2b (Numba Kernels)"]
-        RSIRC -->|NumPy Arrays| NumbaRC["@njit _grid_search_rc_fused / _find_trades_rc (Numba Kernels)"]
+        StrategyOrch --> MA["MovingAverage (trade identification powered by @njit / Numba)"]
+        StrategyOrch --> RSI2B["RsiTwoBands (trade identification powered by @njit / Numba)"]
+        StrategyOrch --> RSIRC["RsiRollerCoaster (trade identification powered by @njit / Numba)"]
     end
 
     subgraph Persistence ["Persistence Boundary"]
-        NumbaMA & Numba2B & NumbaRC --> RatiosOutput["Ratios Data Objects"]
+        MA --> RatiosOutput["Ratios Data Objects"]
+        RSI2B --> RatiosOutput
+        RSIRC --> RatiosOutput
         RatiosOutput --> RatioRepo["RatioRepository"]
         RatioRepo -->|Transactional Upsert & Cleanup| RatioCrud["RatioCrud (psycopg3)"]
         RatioCrud -->|Parameterized Queries| DB
@@ -135,7 +133,7 @@ from radar_core.domain.strategies import MovingAverage
 from radar_core.helpers.constants import DAILY, SMA
 
 # Define a list of symbols to analyze
-symbols_ = ["BTC-USD"]
+symbols_ = ["SPY"]
 
 # Download prices data for all symbols to be analyzed
 prices_data_ = PriceProvider(long_term=False).get_prices(symbols_)
@@ -260,7 +258,7 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - It handles environment file injection and project naming.
 
 - **`auto\update.cmd`**: Updates the development environment.
-  - Updates `uv`, activates the virtual environment, upgrades `uv.lock`, syncs dependencies, and reinstalls TA-Lib from the prebuilt wheel.
+  - Updates `uv`, activates the virtual environment, upgrades `uv.lock`, syncs dependencies, and re-installs TA-Lib from the prebuilt wheel.
 
 - **`auto\lint.cmd`**: Automatic checks and corrections.
   - Runs formatting and linting tasks using `ruff`.
