@@ -105,7 +105,7 @@ flowchart TD
     end
 
     subgraph Execution ["3. Execution & Calculation Layer"]
-        ParallelWorkers --> StrategyOrch["Strategy Orchestration (StrategyABC)"]
+        ParallelWorkers --> StrategyOrch["Per-symbol Strategy Orchestration (inside worker)"]
         StopLoss --> StrategyOrch
         StrategyOrch --> MA["MovingAverage (SMA/RSI SMA, JIT-compiled kernels)"]
         StrategyOrch --> RSI2B["RsiTwoBands (JIT-compiled kernels)"]
