@@ -83,7 +83,7 @@ FROM python:3.13-slim-bookworm AS final
 
 # Metadata of the Docker image
 LABEL maintainer="ndr1970@gmail.com"
-LABEL version="0.2.0"
+LABEL version="0.5.0"
 
 # Environment variables for better Python behavior in containers
 ENV PYTHONUNBUFFERED=1

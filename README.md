@@ -1,8 +1,8 @@
 # Radar Core — Financial Strategy Analyzer
 
-Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, manages them using **Polars** as an efficient in-memory database, and executes high-speed strategy evaluation using **vectorized NumPy operations** and **Numba JIT compilation**.
+Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, processes them using **Polars** DataFrames, and executes high-speed strategy evaluation using **NumPy arrays** and **Numba JIT-compiled kernels**.
 
-The project follows High Performance Practices, using concurrent processing and hardware-accelerated math to analyze multiple symbols and timeframes simultaneously. Its cloud deployment is being supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
+The project follows High Performance Practices, using concurrent symbol processing and CPU-optimized JIT kernels. Daily and weekly analyses for each symbol are evaluated sequentially within its worker. Its external runtime infrastructure is supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
 The fully operational results can be visited for public use: 
 - [Ratios for Stocks](https://radar.ndromero.com/public/dashboard/147ee420-badb-451c-a2d5-c30e78688ed0?profit_vs_change=&security=&strategy=&tab=6-day---open-----%7C#theme=night) 
@@ -14,11 +14,11 @@ The fully operational results can be visited for public use:
     - **Polars**: High-performance DataFrame management for data ingestion and storage.
     - **NumPy & Numba**: Strategy logic is decoupled into JIT-compiled kernels for near-native execution speed.
 - **Concurrent Analysis**: Multi-symbol processing using Python's `ProcessPoolExecutor`.
-- **Yahoo Finance Integration**: Automated download of historical daily and weekly prices.
+- **Yahoo Finance Integration**: Automated download of historical daily prices and local weekly aggregation.
 - **Technical Analysis & Strategies**: Built-in support for Moving Averages (SMA), RSI-based variants (RSI SMA, Two Bands, Rollercoaster), and Mogalef Bands.
-- **Performance Metrics**: Detailed profiling including net profit, success rate, mathematical expectation, and risk-adjusted ratios.
-- **Database Synchronization**: Automated management of trading ratios and symbol cleanup via `psycopg3`.
-- Configurable settings (symbols, shortable assets, verbosity, concurrency)
+- **Performance Metrics**: Detailed profiling including net profit, success rate, mathematical expectation, trade averages, and exposure.
+- **Database Synchronization**: Transactional management of trading ratios and optional cleanup of unlisted symbols via `psycopg3`.
+- **Configurable settings**: Symbols, shortable assets, verbosity, concurrency, and enabled strategies.
     
 ## Prerequisites
 - Python 3.13+
@@ -31,7 +31,7 @@ The fully operational results can be visited for public use:
 
 TA-Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA-Lib can be installed from PyPI (see environment markers in pyproject.toml).
 
-Note: The project is developed on a Windows 11 host. All listed tools (Python 3.13, PyCharm 2026.1+, PostgreSQL 17.x, and Docker Desktop v4.75+) are running locally on this host.
+Note: The project is developed on a Windows 11 host using Python 3.13, PyCharm 2026.1+, PostgreSQL 17.x, and Docker Desktop v4.70+.
 
 ## Installation
 You can install with either uv (recommended for this project) or pip.
@@ -65,17 +65,17 @@ The direct `analyzer.py` script uses its hard-coded smoke-test symbol list; use 
 
 By default, the analyzer will:
 - Initialize settings and database connections.
-- Download prices and synchronize the in-memory Polars store.
-- **Vectorize price data** and dispatch high-speed kernels for strategy identification.
-- Use the configured number of worker processes for parallel execution (the `Settings` default is one).
+- Download daily prices and prepare in-memory Polars DataFrames.
+- Convert price columns to NumPy arrays and dispatch JIT-compiled kernels for strategy identification.
+- Use the configured number of worker processes for symbol-level parallel execution (the `Settings` default is one); daily and weekly analysis run sequentially within each worker.
 - Evaluate strategies for daily and weekly timeframes.
-- Print atomic, buffered logs per symbol.
+- Print atomic, buffered logs per symbol above DEBUG verbosity; DEBUG output is streamed live.
 
 ## Architecture
 The system follows a three-tier performance model:
 1. **Adapter Layer**: Pandas/yfinance for external data compatibility.
 2. **Storage Layer**: **Polars** for lightning-fast in-memory data manipulation and grouping.
-3. **Execution Layer**: **NumPy + Numba** for the heavy mathematical lifting (vectorized backtesting).
+3. **Execution Layer**: **NumPy + Numba** for the heavy mathematical lifting (JIT-compiled backtesting kernels).
 
 ```mermaid
 flowchart TD
@@ -91,22 +91,25 @@ flowchart TD
         PriceProvider -->|yfinance / Pandas| YFinance["Yahoo Finance API"]
     end
 
-    subgraph Storage ["2. In-Memory Storage & Processing Layer"]
-        YFinance -->|Convert to Polars| PolarsData["Polars DataFrames (Daily & Weekly)"]
-        PolarsData --> TechnicalIndicators["Shared Technical Indicators (RSI, Mogalef Bands)"]
-        TechnicalIndicators --> StopLoss["Stop-Loss Identification (powered by @njit / Numba)"]
-    end
-
     subgraph Concurrency ["Parallel Worker Dispatch"]
         Analyzer -->|ProcessPoolExecutor| ParallelWorkers["Worker Processes (spawn context)"]
-        StopLoss --> ParallelWorkers
+    end
+
+    subgraph Storage ["2. In-Memory Storage & Processing Layer"]
+        YFinance -->|Convert to Polars| DailyPolarsData["Daily Polars DataFrames"]
+        DailyPolarsData -->|Submit per-symbol frame| ParallelWorkers
+        ParallelWorkers -->|Derive weekly locally with Polars| PolarsWeeklyData["Weekly Polars DataFrames"]
+        ParallelWorkers -->|Calculate when RSI strategies are enabled| TechnicalIndicators["Shared RSI/Mogalef Indicators"]
+        PolarsWeeklyData --> TechnicalIndicators
+        TechnicalIndicators --> StopLoss["Stop-Loss Identification (JIT-compiled kernels)"]
     end
 
     subgraph Execution ["3. Execution & Calculation Layer"]
         ParallelWorkers --> StrategyOrch["Strategy Orchestration (StrategyABC)"]
-        StrategyOrch --> MA["MovingAverage (trade identification powered by @njit / Numba)"]
-        StrategyOrch --> RSI2B["RsiTwoBands (trade identification powered by @njit / Numba)"]
-        StrategyOrch --> RSIRC["RsiRollerCoaster (trade identification powered by @njit / Numba)"]
+        StopLoss --> StrategyOrch
+        StrategyOrch --> MA["MovingAverage (SMA/RSI SMA, JIT-compiled kernels)"]
+        StrategyOrch --> RSI2B["RsiTwoBands (JIT-compiled kernels)"]
+        StrategyOrch --> RSIRC["RsiRollerCoaster (JIT-compiled kernels)"]
     end
 
     subgraph Persistence ["Persistence Boundary"]
@@ -119,12 +122,12 @@ flowchart TD
     end
 ```
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, calculates shared RSI/Mogalef indicators (with JIT-accelerated stop-loss bar scanning) and evaluates only the strategies enabled in `src/radar_core/settings.yml`. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, and evaluates only the strategies enabled in `src/radar_core/settings.yml`. When RSI strategies are enabled, shared RSI and, when required, Mogalef stop-loss indicators are calculated once per timeframe, including JIT-accelerated stop-loss bar scanning. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
 
 
 
 ## Minimal Example
-Below is a minimal snippet that shows how you might pull prices and run a simple analysis, similar to what the analyzer does internally.
+Below is a minimal snippet that shows how you might pull prices and run a simple analysis, similar to what the analyzer does internally. It requires the project dependencies, database connection settings, and an initialized Radar database with the strategy records.
 
 ```python
 import polars as pl
@@ -133,21 +136,21 @@ from radar_core.domain.strategies import MovingAverage
 from radar_core.helpers.constants import DAILY, SMA
 
 # Define a list of symbols to analyze
-symbols_ = ["SPY"]
+symbols_ = ['SPY']
 
 # Download prices data for all symbols to be analyzed
 prices_data_ = PriceProvider(long_term=False).get_prices(symbols_)
 
 # Configure analyzer
-ma = MovingAverage(SMA, value_column_name="Close", ma_column_name="Sma")
+ma = MovingAverage(SMA, value_column_name='Close', ma_column_name='Sma')
 only_long_positions_ = False
 
 # Iterate over symbols
 for symbol_, prices_df_ in prices_data_.items():
     # The analyzer orchestrates identify() and logging; here we just demonstrate the objects.
-    prices_df_ = prices_df_.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias("BarNumber"))
-    close_prices_ = prices_df_["Close"].to_numpy()
-    percent_changes_ = prices_df_["PercentChange"].to_numpy()
+    prices_df_ = prices_df_.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber'))
+    close_prices_ = prices_df_['Close'].to_numpy()
+    percent_changes_ = prices_df_['PercentChange'].to_numpy()
     ma.identify(symbol_, DAILY, only_long_positions_, prices_df_, close_prices_, percent_changes_)
 
     # See src/radar_core/analyzer.py for a full run.
@@ -162,10 +165,9 @@ Analyzer.py started at 2025-12-22 09:58:52.
 Cleaned 0 rows from the database for deprecated symbols.
 Starting parallel analysis for 1 symbols using X workers...
 
-[BTC-USD]: Launching parallel worker process at 2025-12-22 09:58:55...
+[BTC-USD]: Analysis started at 2025-12-22 09:58:55...
 [BTC-USD]: Daily time frame analysis started at 2025-12-22 09:58:55
 shape: (1, 7)
-[BTC-USD]: Daily time frame analysis started...
 ┌─────────────────────┬───────┬───────┬───────┬──────┬──────────┐
 │ Date                ┆ Open  ┆ High  ┆ Low   ┆ Close┆ Volume   │
 ├─────────────────────┼───────┼───────┼───────┼──────┼──────────┤
@@ -178,7 +180,7 @@ SMA         on BTC-USD: start 2025-12-22 09:58:55 ... end 2025-12-22 09:58:58  0
 Analysis executed from 2025-12-22 09:58:52 to 2025-12-22 09:58:59 - Elapsed time 0.1 min
 ```
 
-Note: Actual output will vary based on a symbol list, dates, and verbosity. Output blocks per symbol are printed atomically to prevent interleaving.
+Note: Actual output will vary based on a symbol list, dates, and verbosity. Output blocks per symbol are buffered atomically above DEBUG verbosity; DEBUG output is streamed live.
 
 ## Configuration
 Project settings are managed by the `Settings` class. You can configure the application via the `src/radar_core/settings.yml` file for the financial strategies and using **Environment Variables** for infrastructure-oriented settings (logging, concurrency, database connection, etc.). The application reads both sources at startup and applies the configurations accordingly. The `evaluable_strategies` list accepts `sma`, `rsi_sma`, `rsi_rc`, and `rsi_2b`.
@@ -187,7 +189,7 @@ Project settings are managed by the `Settings` class. You can configure the appl
 
 | Variable                    | Description                                                                                  | Default                       |
 |:----------------------------|:---------------------------------------------------------------------------------------------|:------------------------------|
-| `RADAR_ENV`                 | `dev` loads `.env` from the current directory or up to two parent directories; other values use process environment | `dev`                         |
+| `RADAR_ENV`                 | `dev` loads `.env` from the `radar_core` package directory or up to two parent directories; other values use process environment | `dev`                         |
 | `RADAR_CLEAN_UNLISTED`      | Delete stored ratios for symbols not listed in `settings.yml`                                | `false`                       |
 | `RADAR_LOG_LEVEL`           | Logging verbosity (10=DEBUG, 20=INFO, etc.)                                                  | `20` (INFO)                   |
 | `RADAR_ENABLE_FILE_LOGGING` | Write logs to a rotating file                                                                | `false`                       |
@@ -196,14 +198,15 @@ Project settings are managed by the `Settings` class. You can configure the appl
 | `RADAR_SETTING_FILE`        | Custom settings YAML path, relative to `src/radar_core` when not absolute                    | `settings.yml`                |
 | `POSTGRES_*`                | PostgreSQL host, port, database, user, and password settings                                  |                               |
 | `POSTGRES_SSL_MODE`         | PostgreSQL connection SSL mode                                                               | `prefer`                      |
-| `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options appended to the connection string                      | unset                         |
+| `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options passed to the connection                          | unset                         |
 
 ## Docker
-Containerization is available for a fully reproducible environment. The image is multi-stage and builds the TA-Lib C library inside the container, so you don’t need any TA-Lib setup on your host.
+Containerization is available for the application environment. The image is multi-stage and builds the TA-Lib C library inside the container, so you don’t need any TA-Lib setup on your host.
 
 Prerequisites:
 - Docker Engine 24+ (included in all modern Docker Desktop versions)
-- Docker Compose v2 (optional, recommended for local DB + app)
+- Docker Compose v2 for the provided Core and Metabase services
+- An accessible PostgreSQL instance; this repository does not define a PostgreSQL service
 
 Build the image:
 ```textmate
@@ -227,28 +230,29 @@ docker run --rm `
 ```
 
 Using Docker Compose:
-The project includes a couple of `compose` files in the `docker/` directory . They rely on `.env` files located in the `envs/` directory.
+The project includes two Compose files in the `docker/` directory. They rely on environment files located in the `envs/` directory. PostgreSQL is hosted externally or managed by the Radar Infra project.
 
 1. **Hybrid Core (`docker/docker-compose.core.yml`)**: Runs the analyzer. It is configured to connect to either a PostgreSQL instance on the host (Windows) or a containerized PostgreSQL in an external Docker network.
    - **Host Database**: Set `POSTGRES_HOST=host.docker.internal` in `envs/.env.core`.
-   - **Container Database**: Set `POSTGRES_HOST=radar-postgres` in `envs/.env.core`. Note: The external network `radar-network` must be created first (usually managed by the database compose file in the sibling project `radar-infra`).
+   - **Container Database**: Set `POSTGRES_HOST=radar-postgres` in `envs/.env.core`.
+   - The external network `radar-network` must exist in either database mode because it is declared by the Core Compose file (usually managed by the database Compose file in the sibling project `radar-infra`).
    ```textmate
    docker compose -f docker/docker-compose.core.yml up -d --build
    ```
    The equivalent project helper is `auto\dc.cmd core` and requires `envs\.env.core`.
 
-2. **Isolated Metabase (`docker/docker-compose.mb.yml`)**: Runs a standalone Metabase instance strictly restricted to connect only to the host machine's database. It is deliberately disconnected from the shared Docker network.
+2. **Isolated Metabase (`docker/docker-compose.mb.yml`)**: Runs a standalone Metabase instance configured to reach PostgreSQL through `host.docker.internal`. It is deliberately disconnected from the shared Radar Docker network.
    ```textmate
    docker compose -f docker/docker-compose.mb.yml up -d
    ```
    The equivalent project helper is `auto\dc.cmd mb` and requires `envs\.env.mb`.
-3. **End-to-End Environments (`radar_infra/docker-compose.*.yml`)**: Define different development or deployment scenarios (dev, e2e, prod) that include both the database and Metabase. These are managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) repository.
+3. **End-to-End Environments**: Different development or deployment scenarios (dev, e2e, prod) that include the database and Metabase are managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) repository.
 
 Notes:
 - The Core Compose file builds the image. The Metabase Compose uses the official pre-built image.
-- To avoid port collisions when running both host and containerized PostgreSQL instances, the containerized DB exposes a different port to the host (e.g., `5433:5432`, configurable via `POSTGRES_EXTERNAL_PORT`).
+- To avoid port collisions when running both host and containerized PostgreSQL instances, the database Compose configuration in Radar Infra can expose a different host port (e.g., `5433:5432`).
 - To override configuration without rebuilding, you can bind-mount a custom `settings.yml`:
-  - `docker run --rm -e RADAR_SETTING_FILE=/home/default/app/settings.yml -v %cd%\src\radar_core\settings.yml:/home/default/app/settings.yml:ro radar-core:dev-0.5.0`
+  - PowerShell: `docker run --rm -e RADAR_SETTING_FILE=/home/default/app/settings.yml -v "${PWD.Path}\src\radar_core\settings.yml:/home/default/app/settings.yml:ro" radar-core:dev-0.5.0`
 
 ## Automation Scripts
 The `auto/` directory contains Windows Command scripts to simplify common tasks:
@@ -258,10 +262,10 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - It handles environment file injection and project naming.
 
 - **`auto\update.cmd`**: Updates the development environment.
-  - Updates `uv`, activates the virtual environment, upgrades `uv.lock`, syncs dependencies, and re-installs TA-Lib from the prebuilt wheel.
+  - Updates `uv`, upgrades `uv.lock`, syncs dependencies, and re-installs TA-Lib from the prebuilt wheel.
 
-- **`auto\lint.cmd`**: Automatic checks and corrections.
-  - Runs formatting and linting tasks using `ruff`.
+- **`auto\lint.cmd`**: Automatic lint checks and corrections.
+  - Runs Ruff lint checks and autofixes; Ruff formatting is currently disabled in the script.
 
 - **`auto\test.cmd`**: Testing is implemented using `pytest`. Unit tests are located under the `tests/` directory.
   - The test suite includes fast, in-memory unit tests using `pytest` and `unittest.mock` covering symbol translation and auto-creation, price provider download guards, model instantiation, error handling, and CRUD methods without external database dependencies.
@@ -270,7 +274,7 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - Clears Python bytecode caches (`__pycache__`) and cleans Ruff cache using `uvx ruff clean`.
 
 ## Project Status
-In active development and continuous improvement. Part of the infrastructure (DB schemas, shared Docker base, CI/CD pipelines) is managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
+In active development and continuous improvement. External runtime infrastructure and end-to-end environments are managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) project. This repository contains the application, database schema files, Docker services, and CI/CD workflow.
 
 ## License
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). See the [LICENSE](LICENSE) file for the full license text.
