@@ -2,6 +2,7 @@
 
 # --- Python modules ---
 from datetime import date, timedelta
+import json
 from unittest.mock import patch
 
 # --- Third Party Libraries ---
@@ -10,10 +11,13 @@ import polars as pl
 import pytest
 
 # --- App modules ---
-from radar_core.domain.strategies.base_strategy import RsiStrategyABC, _find_stop_loss_bars
-from radar_core.helpers.constants import DAILY, WEEKLY
+from radar_core.domain.strategies import MovingAverage
+from radar_core.domain.strategies.base_strategy import AnalysisContext, RsiStrategyABC, _find_stop_loss_bars
+from radar_core.helpers.constants import DAILY, SMA, WEEKLY
 from radar_core.infrastructure import PriceProvider
+from radar_core.infrastructure.crud import StrategyCrud
 from radar_core.infrastructure.security_repository import SecurityRepository
+from radar_core.models import Strategies
 
 
 def _sample_price_df(rows: int = 30) -> pl.DataFrame:
@@ -212,3 +216,119 @@ def test_identify_where_to_stop_loss_parity_on_real_market_data(real_spy_prices:
 
     np.testing.assert_array_equal(result_df_['BarNumberForLongStop'].to_numpy(), long_legacy_)
     np.testing.assert_array_equal(result_df_['BarNumberForShortStop'].to_numpy(), short_legacy_)
+
+
+def test_rsi_strategy_abc_get_current_indicators() -> None:
+    """
+    GIVEN a Polars DataFrame with Rsi, MogalefUpper, and MogalefLower columns.
+    WHEN RsiStrategyABC.get_current_indicators is called.
+    THEN it returns a dictionary with 'rsi', 'up', and 'low' rounded to 1 decimal place.
+    """
+    df_ = pl.DataFrame({
+        'Rsi': [45.123, 50.456, 55.449],
+        'MogalefUpper': [120.555, 125.649, 128.531],
+        'MogalefLower': [110.123, 115.449, 118.219],
+    })
+    indicators_ = RsiStrategyABC.get_current_indicators(df_)
+
+    assert indicators_ == {'rsi': 55.4, 'up': 128.5, 'low': 118.2}
+
+
+def test_perfile_performance_with_current_indicators() -> None:
+    """
+    GIVEN an AnalysisContext, price data, and a current_indicators dictionary.
+    WHEN StrategyABC.perfile_performance is executed.
+    THEN the returned Ratios object has current_indicators populated with the serialized JSON string.
+    """
+    mock_strategy_ = Strategies(id=1, acronym='SMA', name='Moving Average')
+    with patch.object(StrategyCrud, 'get_by_acronym', return_value=mock_strategy_):
+        strategy_ = MovingAverage(SMA, 'Close', 'Sma')
+
+    analysis_context_ = AnalysisContext(
+        symbol='TEST',
+        timeframe=DAILY,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 30),
+        initial_price=100.0,
+        final_price=110.0,
+        last_bar_number=29,
+        future_bar_number=30,
+    )
+
+    close_prices_ = np.array([100.0, 105.0, 110.0, 115.0], dtype=np.float64)
+    percent_changes_ = np.array([0.0, 0.05, 0.0476, 0.0455], dtype=np.float64)
+    prices_df_ = pl.DataFrame({
+        'Date': [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3), date(2025, 1, 4)],
+        'Close': close_prices_,
+        'PercentChange': percent_changes_,
+        'BarNumber': [0, 1, 2, 3],
+    })
+
+    inputs_ = {'period': 20}
+    current_indicators_ = {'sma': 112.5}
+    input_bars_ = np.array([0], dtype=np.int32)
+    output_bars_ = np.array([3], dtype=np.int32)
+
+    ratios_ = strategy_.perfile_performance(
+        analysis_context_,
+        inputs_,
+        input_bars_,
+        output_bars_,
+        close_prices_,
+        percent_changes_,
+        prices_df_,
+        current_indicators_,
+    )
+
+    assert ratios_ is not None
+    assert ratios_.current_indicators == '{"sma": 112.5}'
+    assert json.loads(ratios_.current_indicators) == {'sma': 112.5}
+
+
+def test_perfile_performance_without_current_indicators_fallback() -> None:
+    """
+    GIVEN an AnalysisContext and trade arrays without current_indicators specified.
+    WHEN StrategyABC.perfile_performance is executed.
+    THEN the returned Ratios object has current_indicators set to None.
+    """
+    mock_strategy_ = Strategies(id=1, acronym='SMA', name='Moving Average')
+    with patch.object(StrategyCrud, 'get_by_acronym', return_value=mock_strategy_):
+        strategy_ = MovingAverage(SMA, 'Close', 'Sma')
+
+    analysis_context_ = AnalysisContext(
+        symbol='TEST',
+        timeframe=DAILY,
+        from_date=date(2025, 1, 1),
+        to_date=date(2025, 1, 30),
+        initial_price=100.0,
+        final_price=110.0,
+        last_bar_number=29,
+        future_bar_number=30,
+    )
+
+    close_prices_ = np.array([100.0, 105.0, 110.0, 115.0], dtype=np.float64)
+    percent_changes_ = np.array([0.0, 0.05, 0.0476, 0.0455], dtype=np.float64)
+    prices_df_ = pl.DataFrame({
+        'Date': [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3), date(2025, 1, 4)],
+        'Close': close_prices_,
+        'PercentChange': percent_changes_,
+        'BarNumber': [0, 1, 2, 3],
+    })
+
+    inputs_ = {'period': 20}
+    input_bars_ = np.array([0], dtype=np.int32)
+    output_bars_ = np.array([3], dtype=np.int32)
+
+    ratios_ = strategy_.perfile_performance(
+        analysis_context_,
+        inputs_,
+        input_bars_,
+        output_bars_,
+        close_prices_,
+        percent_changes_,
+        prices_df_,
+    )
+
+    assert ratios_ is not None
+    assert ratios_.current_indicators is None
+

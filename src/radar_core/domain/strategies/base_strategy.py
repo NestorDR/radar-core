@@ -283,6 +283,7 @@ class StrategyABC(ABC):
         close_prices: np.ndarray,
         percent_changes: np.ndarray,
         prices_df: pl.DataFrame,
+        current_indicators: dict | None = None,
     ) -> Ratios | None:
         """
         Calculates and organizes aggregates and ratios to profile the strategy’s trade performance,
@@ -300,6 +301,7 @@ class StrategyABC(ABC):
         :param close_prices: Array of Close prices extracted from the prices dataframe.
         :param percent_changes: Array of PercentChange values extracted from the prices dataframe.
         :param prices_df: The dataframe with prices, indexed by bar numbers and containing the required column Date.
+        :param current_indicators: Dictionary containing technical indicator values at the latest price bar.
 
         :return: A Ratios object (with ratios and aggregates) if winnings exceed losses, otherwise None.
           The Ratios object contains the following attributes:
@@ -433,6 +435,7 @@ class StrategyABC(ABC):
             strategy_id=self.strategy_id,
             timeframe=analysis_context.timeframe,
             inputs=json.dumps(inputs),
+            current_indicators=json.dumps(current_indicators) if current_indicators else None,
             is_long_position=analysis_context.is_long_position,
             is_in_process=False,
             # Set prices
@@ -705,3 +708,17 @@ class RsiStrategyABC(StrategyABC, ABC):
         )
 
     # endregion Stop Loss
+
+    @staticmethod
+    def get_current_indicators(prices_df: pl.DataFrame) -> dict:
+        """
+        Extracts current technical indicators (RSI and Mogalef Upper/Lower bands) at the latest price bar.
+
+        :param prices_df: DataFrame containing at least 'Rsi', 'MogalefUpper', and 'MogalefLower' columns.
+        :return: A dictionary containing current indicators rounded to one decimal place.
+        """
+        return {
+            'rsi': round(float(prices_df['Rsi'][-1]), 1),
+            'up': round(float(prices_df['MogalefUpper'][-1]), 1),
+            'low': round(float(prices_df['MogalefLower'][-1]), 1),
+        }

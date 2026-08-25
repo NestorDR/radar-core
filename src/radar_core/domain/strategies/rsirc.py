@@ -462,6 +462,8 @@ class RsiRollerCoaster(RsiStrategyABC):
         # Pre-calculate min/max RSI to skip impossible conditions in loops; nanmin/nanmax ignore initial NaN values (first 14 periods)
         min_rsi_ = np.nanmin(rsi_values_)
         max_rsi_ = np.nanmax(rsi_values_)
+        # Extract current technical indicators for the latest available price bar
+        current_indicators_ = self.get_current_indicators(prices_df)
 
         # Stop loss arrays (Bar Numbers / Indices)
         long_stops_ = prices_df['BarNumberForLongStop'].to_numpy().astype(np.int32)
@@ -531,8 +533,14 @@ class RsiRollerCoaster(RsiStrategyABC):
 
                         # Evaluate trades identified, calculate trading performance ratios and aggregates
                         ratios_ = self.perfile_performance(
-                            analysis_context_, inputs_, input_bar_numbers_, output_bar_numbers_, close_prices,
-                            percent_changes, prices_df
+                            analysis_context_,
+                            inputs_,
+                            input_bar_numbers_,
+                            output_bar_numbers_,
+                            close_prices,
+                            percent_changes,
+                            prices_df,
+                            current_indicators_,
                         )
                         if not ratios_:
                             continue
@@ -609,6 +617,8 @@ class RsiRollerCoaster(RsiStrategyABC):
 
         # Pre-calculate arrays for Numba. Convert Polars columns to Numpy-arrays once to avoid overhead due to loops.
         rsi_values_ = prices_df['Rsi'].to_numpy()
+        # Extract current technical indicators for the latest available price bar
+        current_indicators_ = self.get_current_indicators(prices_df)
 
         # Stop loss arrays (Bar Numbers / Indices)
         long_stops_ = prices_df['BarNumberForLongStop'].to_numpy().astype(np.int32)
@@ -669,8 +679,14 @@ class RsiRollerCoaster(RsiStrategyABC):
 
                 # Evaluate trades identified, calculate trading performance ratios and aggregates
                 ratios_ = self.perfile_performance(
-                    analysis_context_, inputs_, input_bar_numbers_, output_bar_numbers_, close_prices, percent_changes,
-                    prices_df
+                    analysis_context_,
+                    inputs_,
+                    input_bar_numbers_,
+                    output_bar_numbers_,
+                    close_prices,
+                    percent_changes,
+                    prices_df,
+                    current_indicators_,
                 )
                 if not ratios_:
                     continue

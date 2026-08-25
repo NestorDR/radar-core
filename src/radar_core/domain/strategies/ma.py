@@ -238,6 +238,10 @@ class MovingAverage(StrategyABC):
                 # Set strategy Inputs. Period that parameterizes the analyzed strategy.
                 inputs_ = {'period': period_}
 
+                # Extract current indicators for the evaluated moving average period at the latest bar
+                current_indicators_ = ({'rsi': round(float(values_[-1]), 1)} if 'RSI' in self.strategy_acronym else {})
+                current_indicators_['ma'] = round(float(np.mean(values_[-period_:])), 1)
+
                 # Evaluate trades identified, calculate trading performance ratios and aggregates
                 ratios_ = self.perfile_performance(
                     analysis_context_,
@@ -247,6 +251,7 @@ class MovingAverage(StrategyABC):
                     close_prices,
                     percent_changes,
                     prices_df,
+                    current_indicators_,
                 )
                 if not ratios_:
                     continue
