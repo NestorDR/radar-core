@@ -17,6 +17,16 @@ import polars as pl
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 from radar_core.domain.strategies.base_strategy import RsiStrategyABC
+from radar_core.domain.strategies._kernel_helpers import (
+    _calculate_trade_pnl,
+    _crosses_input,
+    _crosses_output,
+    _crosses_over_level,
+    _finalize_screening_metrics,
+    _is_better_candidate,
+    _is_profitable_candidate,
+    _mark_to_market_bar,
+)
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import COMMISSION_PERCENT, RSI_RC, LONG, SHORT, STEP_LENGTH_RSI_LEVELS, TIMEFRAMES
 
@@ -76,7 +86,7 @@ def _find_trades_rc(
         rsi_ = rsi_values[bar_number_]
         # Long.: RSI > in_ AND Previous <= in_
         # Short: RSI < in_ AND Previous >= in_
-        if not (rsi_ > in_ >= previous_rsi_ if is_long_position else rsi_ < in_ <= previous_rsi_):
+        if not _crosses_input(previous_rsi_, rsi_, in_, in_, is_long_position):
             continue
 
         # This assignment is purely semantic, indicating that once the input condition was met,
@@ -101,7 +111,7 @@ def _find_trades_rc(
             rsi_ = rsi_values[active_position_bar_number_]
             # Long.: RSI <= over_ AND Previous > over_
             # Short: RSI >= over_ AND Previous < over_
-            if rsi_ >= over_ > previous_rsi_ if is_long_position else rsi_ <= over_ < previous_rsi_:
+            if _crosses_over_level(previous_rsi_, rsi_, over_, is_long_position):
                 over_bar_number_ = active_position_bar_number_
                 break
 
@@ -136,7 +146,7 @@ def _find_trades_rc(
             rsi_ = rsi_values[active_position_bar_number_]
             # Long.: RSI <= out_ AND Previous > out_
             # Short: RSI >= out_ AND Previous < out_
-            if rsi_ <= out_ < previous_rsi_ if is_long_position else rsi_ >= out_ > previous_rsi_:
+            if _crosses_output(previous_rsi_, rsi_, out_, out_, is_long_position):
                 output_bar_number_ = active_position_bar_number_
                 break
 
@@ -245,7 +255,7 @@ def _grid_search_rc_fused(
                     rsi_ = rsi_values[bar_number_]
                     # Long.: RSI > in_ AND Previous <= in_
                     # Short: RSI < in_ AND Previous >= in_
-                    if not (rsi_ > in_ >= previous_rsi_ if is_long_position else rsi_ < in_ <= previous_rsi_):
+                    if not _crosses_input(previous_rsi_, rsi_, in_, in_, is_long_position):
                         continue
 
                     # This assignment is purely semantic, indicating that once the input condition was met,
@@ -270,7 +280,7 @@ def _grid_search_rc_fused(
                         rsi_ = rsi_values[active_position_bar_number_]
                         # Long.: RSI <= over_ AND Previous > over_
                         # Short: RSI >= over_ AND Previous < over_
-                        if rsi_ >= over_ > previous_rsi_ if is_long_position else rsi_ <= over_ < previous_rsi_:
+                        if _crosses_over_level(previous_rsi_, rsi_, over_, is_long_position):
                             over_bar_number_ = active_position_bar_number_
                             break
 
@@ -300,7 +310,7 @@ def _grid_search_rc_fused(
                             rsi_ = rsi_values[active_position_bar_number_]
                             # Long.: RSI <= out_ AND Previous > out_
                             # Short: RSI >= out_ AND Previous < out_
-                            if rsi_ <= out_ < previous_rsi_ if is_long_position else rsi_ >= out_ > previous_rsi_:
+                            if _crosses_output(previous_rsi_, rsi_, out_, out_, is_long_position):
                                 output_bar_number_ = active_position_bar_number_
                                 break
 
@@ -316,11 +326,10 @@ def _grid_search_rc_fused(
 
                     # Scalar Trade PnL (Profit and Loss)
                     input_price_ = close_prices[input_bar_number_]
-                    output_bar_ = output_bar_number_ if output_bar_number_ < total_bars_ else total_bars_ - 1
+                    output_bar_ = _mark_to_market_bar(output_bar_number_, total_bars_)
                     output_price_ = close_prices[output_bar_]
 
-                    pnl_ = (output_price_ - input_price_) * direction_ - COMMISSION_PERCENT * (
-                            input_price_ + output_price_)
+                    pnl_ = _calculate_trade_pnl(input_price_, output_price_, direction_, COMMISSION_PERCENT)
                     if pnl_ > 0.0:
                         winnings_ += pnl_
                         winn_trades_ += 1
@@ -334,16 +343,20 @@ def _grid_search_rc_fused(
 
                 # Calculate performance metrics for current (in_, over_, out_)
                 if signals_ > 0:
-                    net_profit_ = (winnings_ + losses_) / first_input_price_
-                    win_probability_ = winn_trades_ / signals_
-                    loss_probability_ = loss_trades_ / signals_
-                    average_win_ = winnings_ / winn_trades_ if winn_trades_ > 0 else 0.0
-                    average_loss_ = losses_ / loss_trades_ if loss_trades_ > 0 else 0.0
-                    expected_value_ = win_probability_ * average_win_ + loss_probability_ * average_loss_
+                    (
+                        net_profit_,
+                        win_probability_,
+                        loss_probability_,
+                        average_win_,
+                        average_loss_,
+                        expected_value_,
+                    ) = _finalize_screening_metrics(
+                        signals_, first_input_price_, winnings_, winn_trades_, losses_, loss_trades_
+                    )
 
-                    if net_profit_ > 0.0 and expected_value_ > 0.0:
-                        new_is_better_ = net_profit_ > best_net_profit_ or (
-                                net_profit_ == best_net_profit_ and expected_value_ > best_expected_value_
+                    if _is_profitable_candidate(net_profit_, expected_value_):
+                        new_is_better_ = _is_better_candidate(
+                            net_profit_, expected_value_, best_net_profit_, best_expected_value_
                         )
                         if new_is_better_:
                             best_net_profit_ = net_profit_

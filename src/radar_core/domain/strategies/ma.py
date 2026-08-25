@@ -15,6 +15,7 @@ import polars as pl
 # --- App modules ---
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 from radar_core.domain.strategies.base_strategy import StrategyABC
+from radar_core.domain.strategies._kernel_helpers import _crosses_input, _crosses_output
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.constants import LONG, SHORT, TIMEFRAMES
 
@@ -90,13 +91,14 @@ def _find_trades_sma(
         #       Close if (previous value >  previous SMA) and (current value < current SMA)
         # Short: Open if (previous value >= previous SMA) and (current value < current SMA)
         #       Close if (previous value <  previous SMA) and (current value > current SMA)
-        is_above_ = current_value_ > current_sma_
-        was_above_ = previous_value_ > previous_sma_
-
         # Cross Over: Value crosses SMA from below to above
-        cross_over_ = is_above_ and not was_above_
+        cross_over_ = _crosses_input(
+            previous_value_, current_value_, previous_sma_, current_sma_, True
+        )
         # Cross Under: Value crosses SMA from above to below
-        cross_under_ = not is_above_ and was_above_
+        cross_under_ = _crosses_output(
+            previous_value_, current_value_, previous_sma_, current_sma_, True
+        )
 
         if not in_position_:
             # Look for input

@@ -1,7 +1,6 @@
 # src/radar_core/__main__.py
 """Minimal CLI entrypoint for the package: python -m radar_core"""
 
-
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import INFO, getLogger
@@ -18,6 +17,7 @@ from radar_core.analyzer import analyzer
 from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
 
 
+# noinspection unused-parameter
 def handle_sigterm(signum: int, frame) -> None:
     """
     Handles OS-level SIGTERM signals sent by container runtimes or system managers.
