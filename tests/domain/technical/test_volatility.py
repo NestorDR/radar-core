@@ -10,6 +10,7 @@ import pytest
 import talib
 
 # --- App modules ---
+import radar_core.domain.technical.volatility as volatility_module
 from radar_core.domain.technical.volatility import ATR, MogalefBands
 
 
@@ -33,35 +34,59 @@ def _sample_ohlc_df(rows: int = 30) -> pl.DataFrame:
     )
 
 
-def test_mogalef_bands_standard_calculation() -> None:
+def test_mogalef_bands_default_output_contract_and_warmup() -> None:
     """
-    GIVEN a Polars DataFrame with valid OHLC columns.
+    GIVEN a constant weighted typical-price series with valid OHLC columns.
     WHEN MogalefBands is executed with default parameters.
-    THEN MogalefUpper and MogalefLower columns are added with the correct relationship.
+    THEN the two output bands contain null warm-up values followed by the constant corridor.
     """
-    df_ = _sample_ohlc_df(30)
-    result_df_ = MogalefBands(df_)
+    prices_df_ = pl.DataFrame({
+        'Open': [10.0] * 10,
+        'High': [12.0] * 10,
+        'Low': [8.0] * 10,
+        'Close': [10.0] * 10,
+    })
+    result_df_ = MogalefBands(prices_df_)
 
     assert 'MogalefUpper' in result_df_.columns
     assert 'MogalefLower' in result_df_.columns
-    assert result_df_.height == 30
+    assert result_df_.height == 10
+    assert 'MogalefCentral' not in result_df_.columns
 
-    # Calculate expected typical price and indicators directly
-    typical_price_ = (df_['Open'].to_numpy() + df_['High'].to_numpy() + df_['Low'].to_numpy() + 2.0 * df_[
-        'Close'].to_numpy()) / 5.0
-    expected_central_ = talib.LINEARREG(typical_price_, 3)
-    expected_std_ = talib.STDDEV(typical_price_, 7, nbdev=1.0)
-    expected_upper_ = expected_central_ + 2.0 * expected_std_
-    expected_lower_ = expected_central_ - 2.0 * expected_std_
+    expected_bands_ = [None] * 8 + [10.0, 10.0]
+    assert result_df_['MogalefUpper'].to_list() == expected_bands_
+    assert result_df_['MogalefLower'].to_list() == expected_bands_
 
-    # Verify values at last index
-    last_idx_ = 29
-    assert np.isclose(result_df_['MogalefUpper'][last_idx_], expected_upper_[last_idx_])
-    assert np.isclose(result_df_['MogalefLower'][last_idx_], expected_lower_[last_idx_])
 
-    # Upper band must be >= Central >= Lower band where not null
-    valid_rows_ = result_df_.filter(pl.col('MogalefUpper').is_not_null())
-    assert (valid_rows_['MogalefUpper'] >= valid_rows_['MogalefLower']).all()
+def test_legacy_mogalef_bands_function_is_removed() -> None:
+    """
+    GIVEN the technical volatility module.
+    WHEN the replacement implementation is imported.
+    THEN the removed legacy Mogalef function is not available.
+    """
+    assert not hasattr(volatility_module, 'old_MogalefBands')
+
+
+def test_mogalef_bands_stepped_levels_hold_and_reset() -> None:
+    """
+    GIVEN a price series whose regression enters, remains within, and exits a corridor.
+    WHEN MogalefBands is executed with short lookback periods.
+    THEN levels hold inside the corridor and reset after a breakout.
+    """
+    values_ = np.array([10.0, 10.0, 14.0, 15.0, 20.0])
+    prices_df_ = pl.DataFrame({
+        'Open': values_,
+        'High': values_,
+        'Low': values_,
+        'Close': values_,
+    })
+
+    result_df_ = MogalefBands(prices_df_, period_reg=2, period_dev=2, multiplier=1.0)
+
+    expected_upper_ = np.array([np.nan, np.nan, 16.0, 16.0, 22.5])
+    expected_lower_ = np.array([np.nan, np.nan, 12.0, 12.0, 17.5])
+    np.testing.assert_allclose(result_df_['MogalefUpper'].to_numpy(), expected_upper_, equal_nan=True)
+    np.testing.assert_allclose(result_df_['MogalefLower'].to_numpy(), expected_lower_, equal_nan=True)
 
 
 def test_mogalef_bands_custom_parameters() -> None:
@@ -70,17 +95,20 @@ def test_mogalef_bands_custom_parameters() -> None:
     WHEN MogalefBands is executed.
     THEN the calculated values reflect the custom configuration.
     """
-    df_ = _sample_ohlc_df(40)
-    result_df_ = MogalefBands(df_, period_reg=5, period_dev=10, multiplier=3.0)
+    values_ = np.array([10.0, 10.0, 14.0, 15.0, 20.0])
+    prices_df_ = pl.DataFrame({
+        'Open': values_,
+        'High': values_,
+        'Low': values_,
+        'Close': values_,
+    })
 
-    typical_price_ = (df_['Open'].to_numpy() + df_['High'].to_numpy() + df_['Low'].to_numpy() + 2.0 * df_[
-        'Close'].to_numpy()) / 5.0
-    expected_central_ = talib.LINEARREG(typical_price_, 5)
-    expected_std_ = talib.STDDEV(typical_price_, 10, nbdev=1.0)
-    expected_upper_ = expected_central_ + 3.0 * expected_std_
+    result_df_ = MogalefBands(prices_df_, period_reg=2, period_dev=2, multiplier=2.0)
 
-    last_idx_ = 39
-    assert np.isclose(result_df_['MogalefUpper'][last_idx_], expected_upper_[last_idx_])
+    expected_upper_ = np.array([np.nan, np.nan, 18.0, 18.0, 25.0])
+    expected_lower_ = np.array([np.nan, np.nan, 10.0, 10.0, 15.0])
+    np.testing.assert_allclose(result_df_['MogalefUpper'].to_numpy(), expected_upper_, equal_nan=True)
+    np.testing.assert_allclose(result_df_['MogalefLower'].to_numpy(), expected_lower_, equal_nan=True)
 
 
 def test_mogalef_bands_missing_columns() -> None:

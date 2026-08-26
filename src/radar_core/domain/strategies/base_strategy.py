@@ -51,15 +51,15 @@ class AnalysisContext:
     """
 
     def __init__(
-        self,
-        symbol: str,
-        timeframe: int,
-        from_date: date,
-        to_date: date,
-        initial_price: float,
-        final_price: float,
-        last_bar_number: int,
-        future_bar_number: int,
+            self,
+            symbol: str,
+            timeframe: int,
+            from_date: date,
+            to_date: date,
+            initial_price: float,
+            final_price: float,
+            last_bar_number: int,
+            future_bar_number: int,
     ):
         """
         :param symbol: Security symbol to analyze.
@@ -116,14 +116,14 @@ class StrategyABC(ABC):
 
     @abstractmethod
     def identify(
-        self,
-        symbol: str,
-        timeframe: int,
-        only_long_positions: bool,
-        prices_df: pl.DataFrame,
-        close_prices: np.ndarray,
-        percent_changes: np.ndarray,
-        verbosity_level: int = DEBUG,
+            self,
+            symbol: str,
+            timeframe: int,
+            only_long_positions: bool,
+            prices_df: pl.DataFrame,
+            close_prices: np.ndarray,
+            percent_changes: np.ndarray,
+            verbosity_level: int = DEBUG,
     ) -> None:
         """
         Iterates a number of periods or levels to calculate a tech indicator and evaluate its profitability.
@@ -140,7 +140,11 @@ class StrategyABC(ABC):
         pass
 
     def initialize_identification(
-        self, symbol: str, timeframe: int, prices_df: pl.DataFrame, verbosity_level: int
+            self,
+            symbol: str,
+            timeframe: int,
+            prices_df: pl.DataFrame,
+            verbosity_level: int
     ) -> tuple[datetime, AnalysisContext, list, int]:
         """
         Logs initialization and prepares the necessary variables for the process that will identify profitable strategies.
@@ -196,7 +200,12 @@ class StrategyABC(ABC):
         """
         return prices_df.height
 
-    def finalize_identification(self, init_dt: datetime, analysis_context: AnalysisContext, verbosity_level: int = DEBUG) -> None:
+    def finalize_identification(
+            self,
+            init_dt: datetime,
+            analysis_context: AnalysisContext,
+            verbosity_level: int = DEBUG
+    ) -> None:
         """
         Finalize the process that identified profitable strategies and logs finalization.
 
@@ -220,9 +229,10 @@ class StrategyABC(ABC):
             )
 
         message_ = (
-            init_dt.strftime(f"{self.strategy_acronym:11} on {analysis_context.symbol}: start %Y-%m-%d %H:%M:%S ...")
-            + datetime.now().strftime(" end %Y-%m-%d %H:%M:%S")
-            + f"  {(datetime.now() - init_dt).total_seconds():6.1f} seconds"
+                init_dt.strftime(
+                    f"{self.strategy_acronym:11} on {analysis_context.symbol}: start %Y-%m-%d %H:%M:%S ...")
+                + datetime.now().strftime(" end %Y-%m-%d %H:%M:%S")
+                + f"  {(datetime.now() - init_dt).total_seconds():6.1f} seconds"
         )
         if verbosity_level == INFO:
             print("", end="\r")
@@ -238,7 +248,8 @@ class StrategyABC(ABC):
 
         :return: The number of rows affected by the upsert.
         """
-        return self.ratio_repository.persist_and_cleanup(ratios_list, analysis_context.symbol, self.strategy_id, analysis_context.timeframe)
+        return self.ratio_repository.persist_and_cleanup(ratios_list, analysis_context.symbol, self.strategy_id,
+                                                         analysis_context.timeframe)
 
     # endregion Support to identification
 
@@ -251,7 +262,8 @@ class StrategyABC(ABC):
 
         :return: An object Ratios to support the best strategy.
         """
-        return Ratios(inputs="", net_profit=-float("inf"), expected_value=-float("inf"), winnings=-float("inf"), losses=0)
+        return Ratios(inputs="", net_profit=-float("inf"), expected_value=-float("inf"), winnings=-float("inf"),
+                      losses=0)
 
     @staticmethod
     def track_best_strategy(strategy_to_compare: Ratios, best_ratios: Ratios) -> Ratios:
@@ -266,7 +278,7 @@ class StrategyABC(ABC):
         """
 
         new_is_better_ = strategy_to_compare.net_profit > best_ratios.net_profit or (
-            strategy_to_compare.net_profit == best_ratios.net_profit and strategy_to_compare.expected_value > best_ratios.expected_value
+                strategy_to_compare.net_profit == best_ratios.net_profit and strategy_to_compare.expected_value > best_ratios.expected_value
         )
         return strategy_to_compare if new_is_better_ else best_ratios
 
@@ -275,15 +287,15 @@ class StrategyABC(ABC):
     # region Ratios
 
     def perfile_performance(
-        self,
-        analysis_context: AnalysisContext,
-        inputs: dict,
-        input_bar_numbers: np.ndarray,
-        output_bar_numbers: np.ndarray,
-        close_prices: np.ndarray,
-        percent_changes: np.ndarray,
-        prices_df: pl.DataFrame,
-        current_indicators: dict | None = None,
+            self,
+            analysis_context: AnalysisContext,
+            inputs: dict,
+            input_bar_numbers: np.ndarray,
+            output_bar_numbers: np.ndarray,
+            close_prices: np.ndarray,
+            percent_changes: np.ndarray,
+            prices_df: pl.DataFrame,
+            current_indicators: dict | None = None,
     ) -> Ratios | None:
         """
         Calculates and organizes aggregates and ratios to profile the strategy’s trade performance,
@@ -359,7 +371,8 @@ class StrategyABC(ABC):
 
         # Vectorized calculation of results.
         # Formula: (Output - Input) * Direction - Commission * (Input + Output)
-        results_ = (output_prices_ - input_prices_) * position_type_ - COMMISSION_PERCENT * (input_prices_ + output_prices_)
+        results_ = (output_prices_ - input_prices_) * position_type_ - COMMISSION_PERCENT * (
+                input_prices_ + output_prices_)
 
         # Calculate session durations using vectorized element-wise subtraction,
         #  leveraging SIMD (Single Instruction, Multiple Data)
@@ -476,7 +489,12 @@ class StrategyABC(ABC):
 
     @staticmethod
     def compute_key_ratios(
-        signals_: int, first_input_price_: float, winnings_: float, winn_trades_: int, losses_: float, loss_trades_: int
+            signals_: int,
+            first_input_price_: float,
+            winnings_: float,
+            winn_trades_: int,
+            losses_: float,
+            loss_trades_: int
     ) -> tuple[float, float, float, float, float, float]:
         """
         Calculates key ratios of a strategy to evaluate its trade performance.
@@ -518,10 +536,10 @@ class StrategyABC(ABC):
 # and returns NumPy arrays, without accessing or modifying class state.
 @njit(cache=True)
 def _find_stop_loss_bars(
-    close_prices: np.ndarray,
-    long_stop_loss: np.ndarray,
-    short_stop_loss: np.ndarray,
-    future_bar_number: int,
+        close_prices: np.ndarray,
+        long_stop_loss: np.ndarray,
+        short_stop_loss: np.ndarray,
+        future_bar_number: int,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Fast JIT-compiled scanner to identify the forward bar where stop-loss levels are breached.
@@ -586,7 +604,8 @@ class RsiStrategyABC(StrategyABC, ABC):
          - BarNumberForShortStop: Bar number where the stop loss for short positions is triggered.
         """
 
-        if {"LongStopLoss", "ShortStopLoss", "BarNumberForLongStop", "BarNumberForShortStop"}.issubset(prices_df.columns):
+        if {"LongStopLoss", "ShortStopLoss", "BarNumberForLongStop", "BarNumberForShortStop"}.issubset(
+                prices_df.columns):
             # Stop loss is already calculated
             return prices_df
 
@@ -611,11 +630,13 @@ class RsiStrategyABC(StrategyABC, ABC):
         future_bar_number_ = RsiStrategyABC.future_bar_number(prices_df)
 
         # Fast JIT-compiled stop-loss scanning with early breakout
-        bar_for_long_stop_, bar_for_short_stop_ = _find_stop_loss_bars(close_prices, long_stop_loss_, short_stop_loss_, future_bar_number_)
+        bar_for_long_stop_, bar_for_short_stop_ = _find_stop_loss_bars(close_prices, long_stop_loss_, short_stop_loss_,
+                                                                       future_bar_number_)
 
         # Add the new columns to the Polars DataFrame
         prices_df = prices_df.with_columns(
-            [pl.Series("BarNumberForLongStop", bar_for_long_stop_), pl.Series("BarNumberForShortStop", bar_for_short_stop_)]
+            [pl.Series("BarNumberForLongStop", bar_for_long_stop_),
+             pl.Series("BarNumberForShortStop", bar_for_short_stop_)]
         )
 
         # Release memory
@@ -624,7 +645,12 @@ class RsiStrategyABC(StrategyABC, ABC):
         return prices_df
 
     @staticmethod
-    def set_mogalef_stop_loss(prices_df: pl.DataFrame, period_reg: int = 3, period_dev: int = 7, multiplier: float = 2.0) -> pl.DataFrame:
+    def set_mogalef_stop_loss(
+            prices_df: pl.DataFrame,
+            period_reg: int = 3,
+            period_dev: int = 7,
+            multiplier: float = 2.
+    ) -> pl.DataFrame:
         """
         Calculates and sets stop loss values for a dataframe containing price series based on Mogalef Bands
          (Upper Band and Lower Band).
