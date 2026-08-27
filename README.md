@@ -34,23 +34,14 @@ TA-Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example s
 Note: The project is developed on a Windows 11 host using Python 3.13, PyCharm 2026.1+, PostgreSQL 17.x, and Docker Desktop v4.88+.
 
 ## Installation
-You can install with either uv (recommended for this project) or pip.
+The project uses [uv](https://docs.astral.sh/uv/) for dependency management:
 
-Option A — using uv:
-1. Install uv if you don’t have it yet: https://docs.astral.sh/uv/
-2. Create a virtual environment and install dependencies:
-   - uv venv
-   - uv sync
-   - For development dependencies (`ruff`, `ty`, and `pre-commit`), use `uv sync --group dev --active`.
-3. Windows + TA-Lib only (if needed):
-   - uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl --no-cache-dir
-
-Option B — using pip:
-1. Create and activate a virtual environment
-2. Install dependencies from pyproject (via pip):
-   - pip install -e .
-3. Windows + TA-Lib only (if needed):
-   - pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl --no-cache-dir
+1. Create a virtual environment and install dependencies:
+   - `uv venv`
+   - `uv sync`
+   - For development tools (`ruff`, `ty`, and `pre-commit`), run: `uv sync --group dev --active`
+2. **Windows + TA-Lib** (if needed):
+   - `uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl --no-cache-dir`
 
 ## Quick Start
 You can run the analyzer directly from the repository without installing the package system‑wide.
@@ -122,9 +113,9 @@ flowchart TD
     end
 ```
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, and evaluates only the strategies enabled in `src/radar_core/settings.yml`. When RSI strategies are enabled, shared RSI and, when required, Mogalef stop-loss indicators are calculated once per timeframe, including JIT-accelerated stop-loss bar scanning. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, and evaluates only the strategies enabled in `src/radar_core/settings.yml`. When RSI strategies are enabled, shared RSI and, when required, Mogalef stop-loss indicators are calculated once per timeframe, including JIT-accelerated stop-loss bar scanning. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution kernels leverage shared inlined Numba helpers (`src/radar_core/domain/strategies/_kernel_helpers.py`) for crossover detection, trade math, and candidate screening. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
 
-Mogalef bands are used directly as `LongStopLoss` and `ShortStopLoss` for the RSI Two Bands and Rollercoaster strategies. Those strategies retain `identify_old` for baseline comparison while `identify` runs the fused implementation. Their serialized current-indicator metadata preserves the dashboard keys `up` and `low`.
+Mogalef bands are used directly as `LongStopLoss` and `ShortStopLoss` for the RSI Two Bands and Rollercoaster strategies. Those strategies retain `identify_old` for baseline comparison while `identify` runs the fused implementation. Serialized current-indicator metadata (`Ratios.current_indicators`) preserves dashboard keys across all strategies, including `sma` (and `rsi` for RSI SMA) for Moving Average variants and `rsi`, `up`, and `low` for RSI band strategies.
 
 ## Minimal Example
 Below is a minimal snippet that shows how you might pull prices and run a simple analysis, similar to what the analyzer does internally. It requires the project dependencies, database connection settings, and an initialized Radar database with the strategy records.
@@ -136,7 +127,7 @@ from radar_core.domain.strategies import MovingAverage
 from radar_core.helpers.constants import DAILY, SMA
 
 # Define a list of symbols to analyze
-symbols_ = ['SPY']
+symbols_ = ['BTC-USD']
 
 # Download prices data for all symbols to be analyzed
 prices_data_ = PriceProvider(long_term=False).get_prices(symbols_)
@@ -201,21 +192,15 @@ Project settings are managed by the `Settings` class. You can configure the appl
 | `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options passed to the connection                          | unset                         |
 
 ## Docker
-Containerization is available for the application environment. The image is multi-stage and builds the TA-Lib C library inside the container, so you don’t need any TA-Lib setup on your host.
+Containerization is available for the application environment. The multi-stage image builds the TA-Lib C library inside the container, eliminating host setup requirements.
 
-Prerequisites:
-- Docker Engine 24+ (included in all modern Docker Desktop versions)
-- Docker Compose v2 for the provided Core and Metabase services
-- An accessible PostgreSQL instance; this repository does not define a PostgreSQL service
-
-Build the image:
-```textmate
+### Build and Run
+```bash
 docker build -t radar-core:dev-0.5.0 -f docker/Dockerfile .
 ```
 
-Run the analyzer directly with Docker (connecting to an existing PostgreSQL):
-- Example (Windows PowerShell):
-```textmate
+Run with Docker (connecting to PostgreSQL):
+```powershell
 docker run --rm `
     -e POSTGRES_HOST=host.docker.internal `
     -e POSTGRES_PORT=5432 `
@@ -229,30 +214,12 @@ docker run --rm `
     radar-core:dev-0.5.0
 ```
 
-Using Docker Compose:
-The project includes two Compose files in the `docker/` directory. They rely on environment files located in the `envs/` directory. PostgreSQL is hosted externally or managed by the Radar Infra project.
+### Docker Compose
+Two Compose targets are provided in `docker/`, configured via environment files in `envs/`:
+- **Core Analyzer**: `docker compose -f docker/docker-compose.core.yml up -d --build` (helper: `auto\dc.cmd core`).
+- **Metabase Dashboard**: `docker compose -f docker/docker-compose.mb.yml up -d` (helper: `auto\dc.cmd mb`).
 
-1. **Hybrid Core (`docker/docker-compose.core.yml`)**: Runs the analyzer. It is configured to connect to either a PostgreSQL instance on the host (Windows) or a containerized PostgreSQL in an external Docker network.
-   - **Host Database**: Set `POSTGRES_HOST=host.docker.internal` in `envs/.env.core`.
-   - **Container Database**: Set `POSTGRES_HOST=radar-postgres` in `envs/.env.core`.
-   - The external network `radar-network` must exist in either database mode because it is declared by the Core Compose file (usually managed by the database Compose file in the sibling project `radar-infra`).
-   ```textmate
-   docker compose -f docker/docker-compose.core.yml up -d --build
-   ```
-   The equivalent project helper is `auto\dc.cmd core` and requires `envs\.env.core`.
-
-2. **Isolated Metabase (`docker/docker-compose.mb.yml`)**: Runs a standalone Metabase instance configured to reach PostgreSQL through `host.docker.internal`. It is deliberately disconnected from the shared Radar Docker network.
-   ```textmate
-   docker compose -f docker/docker-compose.mb.yml up -d
-   ```
-   The equivalent project helper is `auto\dc.cmd mb` and requires `envs\.env.mb`.
-3. **End-to-End Environments**: Different development or deployment scenarios (dev, e2e, prod) that include the database and Metabase are managed in the [Radar Infra](https://github.com/NestorDR/radar-infra) repository.
-
-Notes:
-- The Core Compose file builds the image. The Metabase Compose uses the official pre-built image.
-- To avoid port collisions when running both host and containerized PostgreSQL instances, the database Compose configuration in Radar Infra can expose a different host port (e.g., `5433:5432`).
-- To override configuration without rebuilding, you can bind-mount a custom `settings.yml`:
-  - PowerShell: `docker run --rm -e RADAR_SETTING_FILE=/home/default/app/settings.yml -v "${PWD.Path}\src\radar_core\settings.yml:/home/default/app/settings.yml:ro" radar-core:dev-0.5.0`
+Comprehensive multi-environment deployments (dev, e2e, prod) and database infrastructure are managed in [Radar Infra](https://github.com/NestorDR/radar-infra).
 
 ## Automation Scripts
 The `auto/` directory contains Windows Command scripts to simplify common tasks:
