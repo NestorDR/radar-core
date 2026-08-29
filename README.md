@@ -1,6 +1,12 @@
 # Radar Core — Financial Strategy Analyzer
 
-Radar Core is a Python application that downloads financial asset prices from Yahoo Finance, processes them using **Polars** DataFrames, and executes high-speed strategy evaluation using **NumPy arrays** and **Numba JIT-compiled kernels**.
+Radar Core is a Python application that evaluates four complementary, pattern-based strategies ([SMA](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/moving-average-trading-strategies#price_crossovers), SMA applied to the RSI, [RSI Two Bands](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-strength-index-rsi#overbought_and_oversold_rsi_levels-1), and [RSI Rollercoaster](https://www.tecnicasdetrading.com/2011/09/tecnica-de-trading-rsi-rollercoaster.html)) on daily and weekly data to identify historical opportunities in price trends and momentum.
+
+The strategies progress from simple price or RSI moving-average crossovers to increasingly selective RSI movements between defined levels, with Rollercoaster requiring an intermediate extreme. Positions normally close on strategy-defined reversal or output crossings; RSI Two Bands and the initial phase of RSI Rollercoaster can also close on Mogalef-based price stop-losses. If neither condition occurs before the end of the analysis period, the position is valued at the final available bar. Only configurations with strictly positive net profit and expected value, after strategy-specific candidate screening, are persisted. These results remain subject to false signals, changing market conditions, and historical overfitting.
+
+For details, see the [Strategy Implementation Overview](docs/strategy-implementation-overview.md).
+
+The analyzer downloads financial asset prices from Yahoo Finance, converts the external Pandas data to **Polars** DataFrames, and dispatches per-symbol worker processes. Each worker derives the weekly data and executes high-speed strategy evaluation using **NumPy arrays** and **Numba JIT-compiled kernels**.
 
 The project follows High Performance Practices, using concurrent symbol processing and CPU-optimized JIT kernels. Daily and weekly analyses for each symbol are evaluated sequentially within its worker. Its external runtime infrastructure is supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
