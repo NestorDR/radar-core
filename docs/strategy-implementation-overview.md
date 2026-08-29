@@ -15,14 +15,11 @@ The strategies can be used to examine long positions and, when an asset is confi
 
 ```text
 Historical market data
-          |
-          v
+          ↓
 Identify a repeatable pattern
-          |
-          v
+          ↓
 Open when the pattern appears
-          |
-          v
+          ↓
 Close when the pattern ends or risk protection is reached
 ```
 
@@ -40,10 +37,10 @@ The most important difference between the strategies is the kind of market movem
 The strategies become progressively more selective:
 
 ```text
-SMA       -> one price-versus-average movement
-RSI SMA   -> one momentum-versus-average movement
-RSI 2B    -> RSI input movement followed by an RSI output movement
-RSI RC    -> RSI input movement, intermediate extreme, then output movement
+SMA       → one price-versus-average movement
+RSI SMA   → one momentum-versus-average movement
+RSI 2B    → RSI input movement followed by an RSI output movement
+RSI RC    → RSI input movement, intermediate extreme, then output movement
 ```
 
 ## 3. Simple Moving Average Strategy
@@ -55,9 +52,8 @@ A moving average represents the average price over a selected number of recent p
 The SMA strategy watches for price to cross that reference:
 
 ```text
-Price below its average --> Price crosses above its average
-                                        |
-                                        v
+Price below its average → Price crosses above its average
+                                        ↓
                               Possible long opportunity
 ```
 
@@ -120,9 +116,8 @@ RSI does not directly measure the price level. It measures the strength and dire
 This strategy compares RSI with its own moving average instead of comparing price with a moving average.
 
 ```text
-RSI below its average --> RSI crosses above its average
-                                      |
-                                      v
+RSI below its average → RSI crosses above its average
+                                      ↓
                            Possible long opportunity
 ```
 
@@ -178,7 +173,7 @@ The Two Bands strategy uses two RSI levels instead of comparing RSI with an aver
 The strategy looks for a recovery from one area of the RSI scale and expects that recovery to travel far enough to reach another area.
 
 ```text
-RSI crosses input --> Position opens --> RSI crosses output --> Position closes
+RSI crosses input → Position opens → RSI crosses output → Position closes
 ```
 
 The input and output levels are selected as a pair. Different pairs represent different expectations about how far RSI should move during a successful trade.
@@ -200,12 +195,10 @@ This does not mean that RSI must reach the maximum possible value. It means that
 Example:
 
 ```text
-RSI moves below 30 --> crosses above 30 --> long position
-                                   |
-                                   v
+RSI moves below 30 → crosses above 30 → long position
+                                   ↓
                      rises toward 70, then falls below 70
-                                   |
-                                   v
+                                   ↓
                               Position closes
 ```
 
@@ -224,12 +217,10 @@ The idea is:
 Example:
 
 ```text
-RSI moves above 70 --> crosses below 70 --> short position
-                                    |
-                                    v
+RSI moves above 70 → crosses below 70 → short position
+                                    ↓
                       falls toward 30, then rises above 30
-                                    |
-                                    v
+                                    ↓
                                Position closes
 ```
 
@@ -249,10 +240,10 @@ The stop-loss and RSI output are therefore two alternative ways for a Two Bands 
 
 ```text
 Accepted input
-      |
-      +--> RSI output reached --> normal close
-      |
-      +--> Price stop-loss reached first --> loss close
+      │
+      ├─► RSI output reached → normal close
+      │
+      └─► Price stop-loss reached first → loss close
 ```
 
 ### 5.6 Strengths and limitations
@@ -274,9 +265,8 @@ The Rollercoaster strategy is a staged version of the RSI swing idea. It uses th
 The intermediate level acts as a confirmation that the initial RSI recovery or decline developed far enough to enter the next stage of the strategy.
 
 ```text
-Input crossing --> Intermediate extreme --> Output crossing
-       |
-       v
+Input crossing → Intermediate extreme → Output crossing
+       ↓
    Open trade
 ```
 
@@ -299,12 +289,10 @@ The idea is:
 In plain language, the strategy attempts to participate in a complete upward RSI journey, from recovery through strong momentum, and exits when that strong momentum has meaningfully weakened.
 
 ```text
-Weak RSI --> recovery above input --> reaches overbought
-                                             |
-                                             v
+Weak RSI → recovery above input → reaches overbought
+                                             ↓
                                   falls below output
-                                             |
-                                             v
+                                             ↓
                                          Exit long
 ```
 
@@ -323,12 +311,10 @@ The idea is:
 7. The strategy closes the short position.
 
 ```text
-Strong RSI --> decline below input --> reaches oversold
-                                            |
-                                            v
+Strong RSI → decline below input → reaches oversold
+                                            ↓
                                   rises above output
-                                            |
-                                            v
+                                            ↓
                                        Exit short
 ```
 
@@ -339,13 +325,13 @@ The Rollercoaster strategy tries to avoid treating every input crossing as a com
 For a long position, the expected sequence is:
 
 ```text
-Weakness --> recovery --> strong upward momentum --> loss of that momentum
+Weakness → recovery → strong upward momentum → loss of that momentum
 ```
 
 For a short position, the expected sequence is:
 
 ```text
-Strength --> decline --> strong downward momentum --> loss of that momentum
+Strength → decline → strong downward momentum → loss of that momentum
 ```
 
 The output level is used after the intermediate extreme to identify when the final phase of the movement has ended.
@@ -440,10 +426,10 @@ The user-facing ideas above are implemented using three layers:
 The main implementation components are:
 
 ```text
-MovingAverage        -> SMA and RSI SMA
-RsiTwoBands          -> RSI Two Bands
-RsiRollerCoaster     -> RSI Rollercoaster
-RsiStrategyABC       -> shared RSI stop-loss preparation
+MovingAverage     →  SMA and RSI SMA
+RsiTwoBands       →  RSI Two Bands
+RsiRollerCoaster  →  RSI Rollercoaster
+RsiStrategyABC    →  shared RSI stop-loss preparation
 ```
 
 RSI(14) is calculated once per timeframe and shared by the RSI strategies. Mogalef Bands are also calculated once per timeframe when either RSI band strategy is enabled. The detailed filtering and lifecycle rules are then applied separately to each strategy's own signal process.
