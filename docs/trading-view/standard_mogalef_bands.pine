@@ -1,0 +1,47 @@
+
+
+src                 = (open + high + low + 2 * close) / 5
+
+//@version=5
+indicator("Standard MOGALEF Bands", overlay = true, shorttitle="Mogalef", timeframe="", timeframe_gaps=true)
+
+// --- Color Constants ---
+COLOR_UPPER = #2DD204
+COLOR_LOWER = #D2042D
+COLOR_MID   = color.white
+
+// --- Inputs ---
+linregPeriod     = input.int(3, "Linear Regression Period", minval = 1, group = "Basic Settings")
+stdevPeriod      = input.int(7, "Deviation Period", minval = 1, group = "Basic Settings")
+upperMultiplier  = input.float(2.0, "Upper Band Multiplier", minval = 0.1, step = 0.1, group = "Basic Settings")
+lowerMultiplier  = input.float(2.0, "Lower Band Multiplier", minval = 0.1, step = 0.1, group = "Basic Settings")
+
+showFill         = input.bool(true, "Fill Corridor?", group = "UI Options")
+
+// --- Calculations ---
+// 1. Calculate Weighted Typical Price (Eric Lefort's classic formula): (O + H + L + 2*C) / 5
+typicalPrice = (open + high + low + 2 * close) / 5
+
+// 2. Calculate Linear Regression and Standard Deviation of the Regression line
+linearRegression = ta.linreg(typicalPrice, linregPeriod, 0)
+regressionStdev  = ta.stdev(linearRegression, stdevPeriod)
+
+// 3. Persistent state variables holding the active horizontal corridor levels
+var float activeUpperBand = na
+var float activeLowerBand = na
+var float activeMidLine   = na
+
+// 4. Mogalef Stepping Logic:
+// Initialize on first valid bar or update when regression breaks outside the active corridor
+if na(activeUpperBand) or (linearRegression > activeUpperBand or linearRegression < activeLowerBand)
+    activeUpperBand := linearRegression + (upperMultiplier * regressionStdev)
+    activeLowerBand := linearRegression - (lowerMultiplier * regressionStdev)
+    activeMidLine   := linearRegression
+
+// --- Visuals & Plots ---
+upperPlot = plot(activeUpperBand, "Upper Band", color = COLOR_UPPER, linewidth = 1)
+lowerPlot = plot(activeLowerBand, "Lower Band", color = COLOR_LOWER, linewidth = 1)
+midPlot   = plot(activeMidLine,   "Mid Equilibrium", color = COLOR_MID,   linewidth = 1)
+
+fill(upperPlot, midPlot, color = showFill ? color.new(COLOR_UPPER, 95) : na, title = "Upper Corridor Fill")
+fill(lowerPlot, midPlot, color = showFill ? color.new(COLOR_LOWER, 95) : na, title = "Lower Corridor Fill")
