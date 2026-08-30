@@ -1,10 +1,24 @@
 # settings.yml
 symbols:
-  - 'SPY'
+  - 'BTC-USD'
+  - 'GOLD'
+  - 'IWM'
   - 'QQQ'
+  - 'SOXX'
+  - 'SPY'
+  - 'XBI'
+  - 'XLE'
+  - 'XLF'
 shortables:
-  - 'SPY'
+  - 'BTC-USD'
+  - 'GOLD'
+  - 'IWM'
   - 'QQQ'
+  - 'SOXX'
+  - 'SPY'
+  - 'XBI'
+  - 'XLE'
+  - 'XLF'
 evaluable_strategies:  # Use attribute name in `class Strategies`, module `evaluable_strategies.py`
   - sma       # Profitable SMA
   - rsi_sma   # Profitable RSI(14) SMA
