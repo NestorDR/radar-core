@@ -40,7 +40,7 @@ from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure import PriceProvider, RatioRepository
 # settings: has the configuration for the radar_core
-from radar_core.settings import Settings
+from radar_core.settings import get_settings
 
 logger_ = getLogger(__name__)
 
@@ -243,8 +243,7 @@ def process_symbol(symbol: str,
     return ''
 
 
-def analyzer(settings: Settings,
-             symbols: list[str] | None = None) -> int:
+def analyzer(symbols: list[str] | None = None) -> int:
     """
     Orchestrates the parallel analysis of financial symbols using various technical strategies.
     The analysis includes retrieving daily and weekly historical price data, validating the data,
@@ -256,7 +255,6 @@ def analyzer(settings: Settings,
         - Polars is the ‘efficient in-memory database’.
         - NumPy/Numba is the ‘high-speed calculator’.
 
-    :param settings: Application settings object.
     :param symbols: A list of symbols (e.g., stock tickers) to analyze. Defaults to None,
      in which case the function retrieves symbols from the application settings.
 
@@ -268,7 +266,8 @@ def analyzer(settings: Settings,
 
     # Set information about the start of the process
     init_dt_ = datetime.now()  # Identify the date and time when the process is started
-    verbosity_level_ = settings.verbosity_level
+    settings_ = get_settings()
+    verbosity_level_ = settings_.verbosity_level
 
     try:
         # Initialize logging settings
@@ -278,12 +277,12 @@ def analyzer(settings: Settings,
 
         # Get configured symbols to analyze
         if symbols is None:
-            symbols = settings.get_symbols()
-        shortable_symbols_ = settings.get_shortables()
+            symbols = settings_.get_symbols()
+        shortable_symbols_ = settings_.get_shortables()
 
-        if settings.clean_unlisted and symbols:
+        if settings_.clean_unlisted and symbols:
             # Clean from the DB the ratios for symbols not listed in `settings.yml`
-            clean(settings.get_undeletable(), verbosity_level_)
+            clean(settings_.get_undeletable(), verbosity_level_)
 
         if symbols:
             # Map configuration keys directly to strategy factory functions.
@@ -301,7 +300,7 @@ def analyzer(settings: Settings,
             # The strategy key in the map is the attribute name
             active_strategies_: dict = {strategy_key_: factory_() for strategy_key_, factory_ in strategy_map_.items()
                                         if
-                                        strategy_key_ in settings.get_evaluable_strategies()}
+                                        strategy_key_ in settings_.get_evaluable_strategies()}
             # Instantiate strategies container only with active strategies
             strategies_ = EvaluableStrategies(**active_strategies_)
 
@@ -316,7 +315,7 @@ def analyzer(settings: Settings,
             prices_data_ = PriceProvider(long_term=False).get_prices(symbols)
 
             # Determine the number of workers using the new property. os.cpu_count() will automatically use the available cores.
-            num_workers_ = settings.max_workers
+            num_workers_ = settings_.max_workers
             if num_workers_ <= 0:
                 num_workers_ = (os.cpu_count() or 2)
 
@@ -483,7 +482,7 @@ if __name__ == '__main__':
     from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
 
     # Initialize app settings
-    settings_ = Settings()
+    settings_ = get_settings()
     # Logger initialization
     logging.config.dictConfig(settings_.log_config)
     rotate_log_at_startup()
@@ -496,7 +495,7 @@ if __name__ == '__main__':
     symbols_ = ['BTC-USD']
 
     #  Analyze strategies over historical prices
-    exit_code = analyzer(settings_, symbols_)
+    exit_code = analyzer(symbols_)
 
     # Logger finalization
     end_logging(logger_)

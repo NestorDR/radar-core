@@ -10,7 +10,7 @@ import signal
 
 # --- App modules ---
 # settings: has the configuration for the radar_core
-from radar_core.settings import Settings
+from radar_core.settings import get_settings
 # analyzer: defines the application's main logic.
 from radar_core.analyzer import analyzer
 # helpers: constants and functions that provide miscellaneous functionality
@@ -18,7 +18,8 @@ from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log
 
 
 # noinspection unused-parameter
-def handle_sigterm(signum: int, frame) -> None:
+def handle_sigterm(signum: int,
+                   frame) -> None:
     """
     Handles OS-level SIGTERM signals sent by container runtimes or system managers.
 
@@ -32,19 +33,19 @@ def handle_sigterm(signum: int, frame) -> None:
 
     :raises KeyboardInterrupt: Always raised to trigger the main application cleanup path.
     """
-    raise KeyboardInterrupt("Received SIGTERM from OS/Docker")
+    raise KeyboardInterrupt('Received SIGTERM from OS/Docker')
 
 
 # Use of __name__ & __main__
 # When the Python interpreter reads a code file, it completely executes the code in it.
 # For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be equal to '__main__'.
 # However, if it is called by importing it from another module: import my_module, the __name__ attribute will be 'my_module'.
-if __name__ == "__main__":
-    log_filename_ = "main.analyzer"
+if __name__ == '__main__':
+    log_filename_ = 'main.analyzer'
     # Initialize app settings
-    settings = Settings(log_filename_)
+    settings_ = get_settings(log_filename_)
     # Logger initialization
-    logging.config.dictConfig(settings.log_config)
+    logging.config.dictConfig(settings_.log_config)
     rotate_log_at_startup()
     # Get root logger and log start messages
     logger_ = getLogger(__name__)
@@ -55,9 +56,9 @@ if __name__ == "__main__":
 
     try:
         # Run the application
-        exit_code = analyzer(settings)
+        exit_code = analyzer()
     except KeyboardInterrupt:
-        logger_.warning("Execution interrupted by user or Docker (SIGINT/SIGTERM).")
+        logger_.warning('Execution interrupted by user or Docker (SIGINT/SIGTERM).')
         exit_code = 130  # Standard Unix exit code for SIGINT/SIGTERM termination
     finally:
         # Finish logging, remove logger handlers and release memory

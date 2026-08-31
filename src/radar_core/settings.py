@@ -10,6 +10,8 @@ from pathlib import Path
 # sys: provides access to some variables used or maintained by the interpreter and to functions that interact strongly
 #      with the interpreter.
 import sys
+# urllib.parse: provides URL parsing and unquoting facilities
+from urllib import parse
 
 # --- Third Party Libraries ---
 # dotenvy-py: loads environment variables from .env files (first occurrence wins)
@@ -25,22 +27,41 @@ logger_ = getLogger(__name__)
 
 
 class Settings:
-    """Application settings manager"""
-    _config: dict | None = None  # Class-level flag to ensure .env & YAML config are loaded only once
+    """Application settings manager (Lazy Singleton)."""
+
+    _instance: 'Settings | None' = None
+
+    def __new__(cls,
+                log_filename: str | None = None) -> 'Settings':
+        """
+        Guarantees that every instantiation returns the same initialized singleton instance.
+
+        :param log_filename: Optional log file name passed on first initialization.
+        :return: The process-local singleton Settings instance.
+        """
+        if cls._instance is None:
+            instance_ = super().__new__(cls)
+            instance_._initialize(log_filename)
+            cls._instance = instance_
+        return cls._instance
 
     def __init__(self,
-                 log_filename: str | None = None):
+                 log_filename: str | None = None) -> None:
         """
-        Initializes the settings object, ensuring configuration is loaded only once.
-        - Ensures environment variables from .env are loaded.
-        - Reads the main YAML configuration file.
+        Initialization is a no-op because singleton construction is performed in __new__.
 
-        :param log_filename: Name to the log file.
+        :param log_filename: Optional name for the log file.
         """
-        # Preserve the current working path
-        if Settings._config is not None:
-            return
+        pass
 
+    def _initialize(self,
+                    log_filename: str | None = None) -> None:
+        """
+        Initializes the configuration snapshot, loading environment variables,
+        PostgreSQL connection parameters, and YAML configuration.
+
+        :param log_filename: Name for the log file.
+        """
         self._module_folder = Path(__file__).resolve().parent
 
         # Load environment variables
@@ -49,8 +70,25 @@ class Settings:
         self.log_config = self._get_log_config(log_filename)
         self.max_workers = self._get_max_workers()
 
+        # Database connection parameters
+        self.db_conn_kwargs = self._get_db_conn_kwargs()
+
         # Load YAML settings file
-        Settings._config = self._read_yaml_file()
+        self._config = self._read_yaml_file() or {}
+        self.symbols: list[str] = self._config.get('symbols', [])
+        raw_shortables_ = self._config.get('shortables', [])
+        symbols_set_ = set(self.symbols)
+        self.shortables: list[str] = [s for s in raw_shortables_ if s in symbols_set_]
+        self.evaluable_strategies: list[str] = self._config.get('evaluable_strategies', [])
+        done_list_ = self._config.get('done', []) or []
+        self.undeletable_symbols: list[str] = done_list_ + self.symbols
+
+    @classmethod
+    def _reset(cls) -> None:
+        """
+        Resets the singleton instance for isolated test fixtures.
+        """
+        cls._instance = None
 
     # region Environment Variables
 
@@ -58,6 +96,8 @@ class Settings:
         """
         If the RADAR_ENV environment variable is 'dev', loads the .env file and configures the log/verbosity level.
         Otherwise, it sets the verbosity level based on the variable from the real environment or default.
+
+        :return: The resolved logging verbosity level integer.
         """
         message_verbosity_level_ = DEBUG
         if (os.getenv('RADAR_ENV') or 'dev') == 'dev':
@@ -99,14 +139,15 @@ class Settings:
             return INFO
 
     @staticmethod
-    def _parse_bool_env(env_var: str, default: bool = False) -> bool:
+    def _parse_bool_env(env_var: str,
+                        default: bool = False) -> bool:
         """
         Parse a boolean environment variable.
 
-        :param env_var: Name of the environment variable
-        :param default: Default value if not set
+        :param env_var: Name of the environment variable.
+        :param default: Default value if not set.
 
-        :return: Boolean value
+        :return: Boolean value.
         """
         return os.getenv(env_var, str(default)).lower() in ('true', '1', 't')
 
@@ -114,7 +155,7 @@ class Settings:
                         log_filename: str | None = None) -> dict:
         """
         Generates a declarative log configuration dictionary,
-         which will allow or not file logging based on the RADAR_ENABLE_FILE_LOGGING value.
+        which will allow or not file logging based on the RADAR_ENABLE_FILE_LOGGING value.
 
         :param log_filename: Name to the log file.
 
@@ -123,12 +164,12 @@ class Settings:
         enable_file_logging_ = self._parse_bool_env('RADAR_ENABLE_FILE_LOGGING', False)
         handlers_ = ['console']
 
-        logger_config = {
+        logger_config_ = {
             'level': self.verbosity_level,
             'handlers': [],
             'propagate': True,
         }
-        loggers = ['radar-core', 'numba', 'numpy', 'peewee', 'polars', 'psycopg', 'SQLAlchemy', 'yfinance']
+        loggers_ = ['radar-core', 'numba', 'numpy', 'peewee', 'polars', 'psycopg', 'yfinance']
 
         config_: dict = {
             'version': 1,
@@ -150,7 +191,7 @@ class Settings:
                 'level': DEBUG,
                 'handlers': handlers_,
             },
-            'loggers': {x: logger_config.copy() for x in loggers}
+            'loggers': {x_: logger_config_.copy() for x_ in loggers_}
         }
 
         config_['loggers']['numba']['level'] = 'WARNING'
@@ -158,7 +199,6 @@ class Settings:
         config_['loggers']['peewee']['level'] = 'WARNING'
         config_['loggers']['polars']['level'] = 'WARNING'
         config_['loggers']['psycopg']['level'] = 'WARNING'
-        config_['loggers']['SQLAlchemy']['level'] = 'WARNING'
         config_['loggers']['yfinance']['level'] = 'WARNING'
 
         if enable_file_logging_:
@@ -213,6 +253,28 @@ class Settings:
             logger_.warning(message_)
             return 1
 
+    @staticmethod
+    def _get_db_conn_kwargs() -> dict:
+        """
+        Builds the connection parameters dictionary for psycopg3 from environment variables.
+
+        :return: A dictionary of connection parameters for psycopg.connect.
+        """
+        kwargs_: dict = {
+            'host': os.getenv('POSTGRES_HOST', 'localhost'),
+            'port': int(os.getenv('POSTGRES_PORT', '5432')),
+            'dbname': os.getenv('POSTGRES_DB', 'radar'),
+            'user': os.getenv('POSTGRES_USER', 'postgres'),
+            'password': os.getenv('POSTGRES_PASSWORD', ''),
+            'sslmode': os.getenv('POSTGRES_SSL_MODE', 'prefer'),
+            'connect_timeout': 10
+        }
+        options_ = os.getenv('POSTGRES_OPTIONS', None)
+        if options_:
+            kwargs_['options'] = parse.unquote(options_)
+
+        return kwargs_
+
     # endregion Environment Variables
 
     # region YAML Settings File
@@ -222,6 +284,8 @@ class Settings:
         Reads and parses a YAML file, converting it into a Python object. Handles errors gracefully.
 
         :return: A dictionary representation of the parsed YAML file. If there is an error during parsing, None is returned.
+        
+        :raises FileNotFoundError: If the YAML settings file does not exist.
         """
         # Get the settings file path from the environment variable or use a default
         file_name_ = os.getenv('RADAR_SETTING_FILE', 'settings.yml')
@@ -235,46 +299,63 @@ class Settings:
         logger_.info(message_)
 
         try:
-            with open(file_path_, 'r') as file:
-                return yaml.safe_load(file)
+            with open(file_path_, 'r') as file_:
+                return yaml.safe_load(file_)
 
-        except yaml.YAMLError as e:
+        except yaml.YAMLError as e_:
             # Log error
             message_ = f'Error reading YAML file {file_path_}.'
             verbose(message_, ERROR, self.verbosity_level)
-            logger_.exception(message_, exc_info=e)
+            logger_.exception(message_, exc_info=e_)
             return None
 
-        except FileNotFoundError as e:
+        except FileNotFoundError as e_:
             # Log error
             message_ = f'Settings file not found at {file_path_}. Please check the SETTING_FILE environment variable or ensure settings.yml exists.'
             verbose(message_, ERROR, self.verbosity_level)
-            logger_.exception(message_, exc_info=e)
-            raise FileNotFoundError(message_) from e
+            logger_.exception(message_, exc_info=e_)
+            raise FileNotFoundError(message_) from e_
 
     def get_symbols(self) -> list[str]:
-        """Returns the list of symbols to analyze."""
-        return self._config.get('symbols', []) if self._config else []
+        """
+        Returns the list of symbols to analyze.
+
+        :return: A list of symbol strings.
+        """
+        return self.symbols
 
     def get_undeletable(self) -> list[str]:
-        """Returns the list of symbols that cannot be deleted from the database."""
-        done_list_ = [] if self._config is None else self._config.get('done', []) or []
-        return done_list_ + self.get_symbols()
+        """
+        Returns the list of symbols that cannot be deleted from the database.
+
+        :return: A list of undeletable symbol strings.
+        """
+        return self.undeletable_symbols
 
     def get_shortables(self) -> list[str]:
-        """Returns the list of symbols that can be shorted."""
-        # Get the symbol list and convert it to a set for more efficient search
-        symbols_set_ = set(self.get_symbols())
+        """
+        Returns the list of symbols that can be shorted.
 
-        # Get the 'raw' shortables list
-        raw_shortables_ = self._config.get('shortables', [])
-
-        # Filter shortables: only those that are also in the symbol set and return the result as a list
-        # Use list comprehension: [expression for item in iterable if condición]
-        return [shortable_ for shortable_ in raw_shortables_ if shortable_ in symbols_set_]
+        :return: A list of shortable symbol strings.
+        """
+        return self.shortables
 
     def get_evaluable_strategies(self) -> list[str]:
-        """Returns the list of strategy Acronyms that can be evaluated."""
-        return self._config.get('evaluable_strategies', []) if self._config else []
+        """
+        Returns the list of strategy Acronyms that can be evaluated.
+
+        :return: A list of evaluable strategy names.
+        """
+        return self.evaluable_strategies
 
     # endregion YAML Settings File
+
+
+def get_settings(log_filename: str | None = None) -> Settings:
+    """
+    Returns the singleton Settings instance for the current process.
+
+    :param log_filename: Optional log file name passed on first initialization.
+    :return: The shared Settings singleton object.
+    """
+    return Settings(log_filename=log_filename)

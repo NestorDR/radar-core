@@ -7,16 +7,17 @@ from unittest.mock import MagicMock
 import pytest
 
 # --- App modules ---
-from radar_core.settings import Settings
+from radar_core.settings import get_settings
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope='session', autouse=True)
 def initialize_environment():
     """
     Session fixture to initialize application settings and load environment variables
     from .env before running any pytest test suite.
     """
-    Settings()
+    get_settings()
+
 
 @pytest.fixture
 def mock_connection_scope() -> tuple[MagicMock, MagicMock, MagicMock]:

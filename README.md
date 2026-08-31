@@ -133,21 +133,21 @@ from radar_core.domain.strategies import MovingAverage
 from radar_core.helpers.constants import DAILY, SMA
 
 # Define a list of symbols to analyze
-symbols_ = ['BTC-USD']
+symbols_ = ["BTC-USD"]
 
 # Download prices data for all symbols to be analyzed
 prices_data_ = PriceProvider(long_term=False).get_prices(symbols_)
 
 # Configure analyzer
-ma = MovingAverage(SMA, value_column_name='Close', ma_column_name='Sma')
+ma = MovingAverage(SMA, value_column_name="Close", ma_column_name="Sma")
 only_long_positions_ = False
 
 # Iterate over symbols
 for symbol_, prices_df_ in prices_data_.items():
     # The analyzer orchestrates identify() and logging; here we just demonstrate the objects.
-    prices_df_ = prices_df_.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber'))
-    close_prices_ = prices_df_['Close'].to_numpy()
-    percent_changes_ = prices_df_['PercentChange'].to_numpy()
+    prices_df_ = prices_df_.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias("BarNumber"))
+    close_prices_ = prices_df_["Close"].to_numpy()
+    percent_changes_ = prices_df_["PercentChange"].to_numpy()
     ma.identify(symbol_, DAILY, only_long_positions_, prices_df_, close_prices_, percent_changes_)
 
     # See src/radar_core/analyzer.py for a full run.
@@ -180,7 +180,7 @@ Analysis executed from 2025-12-22 09:58:52 to 2025-12-22 09:58:59 - Elapsed time
 Note: Actual output will vary based on a symbol list, dates, and verbosity. Output blocks per symbol are buffered atomically above DEBUG verbosity; DEBUG output is streamed live.
 
 ## Configuration
-Project settings are managed by the `Settings` class. You can configure the application via the `src/radar_core/settings.yml` file for the financial strategies and using **Environment Variables** for infrastructure-oriented settings (logging, concurrency, database connection, etc.). The application reads both sources at startup and applies the configurations accordingly. The `evaluable_strategies` list accepts `sma`, `rsi_sma`, `rsi_rc`, and `rsi_2b`.
+Project settings are managed by the `Settings` class, implemented as a process-local lazy singleton accessed via `get_settings()` (or `Settings()`). You can configure the application via the `src/radar_core/settings.yml` file for financial strategies and using **Environment Variables** for infrastructure-oriented settings (logging, concurrency, database connection, etc.). The singleton reads and parses both sources once during initial construction, providing a centralized snapshot (`Settings.db_conn_kwargs`, log configuration, strategy filters, and symbol lists) across all modules. The `evaluable_strategies` list accepts `sma`, `rsi_sma`, `rsi_rc`, and `rsi_2b`.
 
 ### Key Environment Variables
 

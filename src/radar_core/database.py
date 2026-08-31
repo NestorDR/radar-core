@@ -5,41 +5,28 @@
 from contextlib import contextmanager, suppress
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import getLogger
-# os: provides operating system interfaces and functionality
-from os import getenv
 # typing: provides runtime support for type hints
 from typing import Generator, Iterator
-# urllib: collects several modules for working with URLs
-from urllib import parse
 
 # --- Third Party Libraries ---
 # psycopg: PostgreSQL database adapter
 import psycopg
 from psycopg import Connection
 
+# --- App modules ---
+# settings: provides application configuration and database connection parameters
+from radar_core.settings import get_settings
+
 logger_ = getLogger(__name__)
 
 
 def _get_psycopg_conn_kwargs() -> dict:
     """
-    Builds the connection parameters dictionary for psycopg3 from environment variables.
+    Retrieves the connection parameters dictionary from the Settings singleton.
 
     :return: A dictionary of connection parameters for psycopg.connect.
     """
-    kwargs_ = {
-        'host': getenv('POSTGRES_HOST', 'localhost'),
-        'port': int(getenv('POSTGRES_PORT', '5432')),
-        'dbname': getenv('POSTGRES_DB', 'radar'),
-        'user': getenv('POSTGRES_USER', 'postgres'),
-        'password': getenv('POSTGRES_PASSWORD', ''),
-        'sslmode': getenv('POSTGRES_SSL_MODE', 'prefer'),
-        'connect_timeout': 10
-    }
-    options_ = getenv('POSTGRES_OPTIONS', None)
-    if options_:
-        kwargs_['options'] = parse.unquote(options_)
-
-    return kwargs_
+    return get_settings().db_conn_kwargs.copy()
 
 
 @contextmanager

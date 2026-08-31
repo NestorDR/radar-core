@@ -197,11 +197,11 @@ if __name__ == '__main__':
     from datetime import datetime
     import logging.config
     # --- App modules ---
-    from radar_core.settings import Settings
+    from radar_core.settings import get_settings
     from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
 
     # Initialize app settings
-    settings_ = Settings()
+    settings_ = get_settings()
     # Logger initialization
     logging.config.dictConfig(settings_.log_config)
     rotate_log_at_startup()

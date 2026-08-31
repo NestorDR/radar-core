@@ -14,7 +14,7 @@ from radar_core.database import (
     get_psycopg_read_connection,
     read_connection_scope,
 )
-from radar_core.settings import Settings
+from radar_core.settings import Settings, get_settings
 
 
 def test_get_psycopg_conn_kwargs_default(monkeypatch):
@@ -23,16 +23,21 @@ def test_get_psycopg_conn_kwargs_default(monkeypatch):
     WHEN _get_psycopg_conn_kwargs is called
     THEN it formats a valid connection dictionary for psycopg3 without options key.
     """
-    monkeypatch.delenv('POSTGRES_OPTIONS', raising=False)
-    kwargs_ = _get_psycopg_conn_kwargs()
-    assert 'host' in kwargs_
-    assert 'port' in kwargs_
-    assert 'dbname' in kwargs_
-    assert 'user' in kwargs_
-    assert 'password' in kwargs_
-    assert 'sslmode' in kwargs_
-    assert kwargs_['connect_timeout'] == 10
-    assert 'options' not in kwargs_
+    Settings._reset()
+    try:
+        monkeypatch.setenv('RADAR_ENV', 'test')
+        monkeypatch.delenv('POSTGRES_OPTIONS', raising=False)
+        kwargs_ = _get_psycopg_conn_kwargs()
+        assert 'host' in kwargs_
+        assert 'port' in kwargs_
+        assert 'dbname' in kwargs_
+        assert 'user' in kwargs_
+        assert 'password' in kwargs_
+        assert 'sslmode' in kwargs_
+        assert kwargs_['connect_timeout'] == 10
+        assert 'options' not in kwargs_
+    finally:
+        Settings._reset()
 
 
 def test_get_psycopg_conn_kwargs_with_custom_options(monkeypatch):
@@ -41,23 +46,28 @@ def test_get_psycopg_conn_kwargs_with_custom_options(monkeypatch):
     WHEN _get_psycopg_conn_kwargs is called
     THEN it unquotes the options string and sets custom connection parameters.
     """
-    monkeypatch.setenv('POSTGRES_HOST', 'custom-db-host')
-    monkeypatch.setenv('POSTGRES_PORT', '5433')
-    monkeypatch.setenv('POSTGRES_DB', 'custom_db')
-    monkeypatch.setenv('POSTGRES_USER', 'custom_user')
-    monkeypatch.setenv('POSTGRES_PASSWORD', 'custom_secret')
-    monkeypatch.setenv('POSTGRES_SSL_MODE', 'require')
-    monkeypatch.setenv('POSTGRES_OPTIONS', '-c%20statement_timeout%3D5000')
+    Settings._reset()
+    try:
+        monkeypatch.setenv('RADAR_ENV', 'test')
+        monkeypatch.setenv('POSTGRES_HOST', 'custom-db-host')
+        monkeypatch.setenv('POSTGRES_PORT', '5433')
+        monkeypatch.setenv('POSTGRES_DB', 'custom_db')
+        monkeypatch.setenv('POSTGRES_USER', 'custom_user')
+        monkeypatch.setenv('POSTGRES_PASSWORD', 'custom_secret')
+        monkeypatch.setenv('POSTGRES_SSL_MODE', 'require')
+        monkeypatch.setenv('POSTGRES_OPTIONS', '-c%20statement_timeout%3D5000')
 
-    kwargs_ = _get_psycopg_conn_kwargs()
+        kwargs_ = _get_psycopg_conn_kwargs()
 
-    assert kwargs_['host'] == 'custom-db-host'
-    assert kwargs_['port'] == 5433
-    assert kwargs_['dbname'] == 'custom_db'
-    assert kwargs_['user'] == 'custom_user'
-    assert kwargs_['password'] == 'custom_secret'  # noqa: S105
-    assert kwargs_['sslmode'] == 'require'
-    assert kwargs_['options'] == '-c statement_timeout=5000'
+        assert kwargs_['host'] == 'custom-db-host'
+        assert kwargs_['port'] == 5433
+        assert kwargs_['dbname'] == 'custom_db'
+        assert kwargs_['user'] == 'custom_user'
+        assert kwargs_['password'] == 'custom_secret'  # noqa: S105
+        assert kwargs_['sslmode'] == 'require'
+        assert kwargs_['options'] == '-c statement_timeout=5000'
+    finally:
+        Settings._reset()
 
 
 def test_get_psycopg_connection_commit_on_success():
@@ -237,7 +247,7 @@ def test_get_psycopg_connection_live_query():
     WHEN get_psycopg_connection is used to execute a live query
     THEN it executes successfully and returns expected query result.
     """
-    Settings()
+    get_settings()
     with get_psycopg_connection() as conn_:
         with conn_.cursor() as cursor_:
             cursor_.execute('SELECT 1 AS num')
@@ -253,7 +263,7 @@ def test_get_psycopg_read_connection_live_query():
     WHEN get_psycopg_read_connection is used to execute a live query
     THEN it executes successfully and returns expected query result in autocommit mode.
     """
-    Settings()
+    get_settings()
     with get_psycopg_read_connection() as conn_:
         with conn_.cursor() as cursor_:
             cursor_.execute('SELECT 1 AS num')
