@@ -20,8 +20,8 @@ NO_POSITION = 0
 LONG = 1
 
 # Profitability calculation constants
-# Average commission per trade in 2017 = 0.07% of average trade amount $8,700 = $6.09
-# 2026-09-03 Increase discretionary trading commission to 0.14% of trade amount
+# Personal average commission per trade in 2017 = 0.07% of average trade amount $8,700 = $6.09
+# 2026-09-03 Increase the trading commission to a discretionary 0.14% of the trade amount (to simulate other fees)
 COMMISSION_PERCENT = 0.0014
 
 # Step length in RSI levels
