@@ -414,10 +414,10 @@ def test_eligible_execution_makes_current_day_request_and_refreshes_rows(tmp_pat
         assert 'SPY' in results_
         spy_df_ = results_['SPY']
 
-        # Verify yfinance was called for today with +/- 1 day buffer (start=2026-01-04, end=2026-01-06)
+        # Verify yfinance was called for today starting at current_date (start=2026-01-05, end=provider_.end_date)
         mock_download_.assert_called_once()
         args_, _ = mock_download_.call_args
-        assert args_[1] == date(2026, 1, 4)
+        assert args_[1] == date(2026, 1, 5)
         assert args_[2] == provider_.end_date
 
         # Verify row replacement and recalculation of PercentChange
@@ -528,8 +528,8 @@ def test_failed_refresh_falls_back_to_full_download(tmp_path):
 
         assert len(results_) == 1
         assert mock_download_.call_count == 2
-        # First call was today refresh with buffer
-        assert mock_download_.call_args_list[0].args[1] == date(2026, 1, 4)
+        # First call was today refresh attempt
+        assert mock_download_.call_args_list[0].args[1] == date(2026, 1, 5)
         # Second call was full download
         assert mock_download_.call_args_list[1].args[1] == provider_.start_date
 
@@ -595,7 +595,7 @@ def test_dev_cache_eligible_performs_current_day_refresh(tmp_path):
 
         mock_download_.assert_called_once()
         args_, _ = mock_download_.call_args
-        assert args_[1] == date(2026, 1, 8)
+        assert args_[1] == date(2026, 1, 9)
         assert args_[2] == provider_.end_date
 
 
@@ -814,8 +814,8 @@ def test_cache_consumption_failure_falls_back_to_download(tmp_path):
 
         assert len(results_) == 1
         assert mock_download_.call_count == 2
-        # First call was today refresh attempt with buffer
-        assert mock_download_.call_args_list[0].args[1] == date(2026, 1, 8)
+        # First call was today refresh attempt
+        assert mock_download_.call_args_list[0].args[1] == date(2026, 1, 9)
         # Second call was full download fallback
         assert mock_download_.call_args_list[1].args[1] == provider_.start_date
         assert results_['SPY']['Close'].to_list() == [150.0, 155.0, 160.0]
@@ -856,3 +856,18 @@ def test_dev_cache_invalid_timestamp_falls_back_to_download(tmp_path):
 
         assert len(results_) == 1
         mock_download_.assert_called_once()
+
+
+def test_price_provider_end_date_uses_cache_timezone():
+    """
+    GIVEN PriceProvider initialized with a specific timezone in cache settings
+    WHEN end_date is calculated
+    THEN it derives end_date from datetime.now in the configured timezone plus 1 day.
+    """
+    with patch('radar_core.infrastructure.price_provider.datetime') as mock_dt_:
+        fixed_dt_ = datetime(2026, 1, 5, 23, 30, tzinfo=timezone.utc)
+        mock_dt_.now.return_value = fixed_dt_
+
+        provider_ = PriceProvider()
+        assert provider_.end_date == date(2026, 1, 6)
+
