@@ -277,12 +277,12 @@ def analyzer(symbols: list[str] | None = None) -> int:
 
         # Get configured symbols to analyze
         if symbols is None:
-            symbols = settings_.get_symbols()
-        shortable_symbols_ = settings_.get_shortables()
+            symbols = settings_.symbols
+        shortable_symbols_ = settings_.shortables
 
         if settings_.clean_unlisted and symbols:
             # Clean from the DB the ratios for symbols not listed in `settings.yml`
-            clean(settings_.get_undeletable(), verbosity_level_)
+            clean(settings_.undeletable_symbols, verbosity_level_)
 
         if symbols:
             # Map configuration keys directly to strategy factory functions.
@@ -296,11 +296,10 @@ def analyzer(symbols: list[str] | None = None) -> int:
             }
 
             # Build kwargs dynamically based on enabled strategies in settings.yml
-            # get_evaluable_strategies() returns a list of strings matching the keys in strategy_map_
+            # evaluable_strategies is a list of strings matching the keys in strategy_map_
             # The strategy key in the map is the attribute name
             active_strategies_: dict = {strategy_key_: factory_() for strategy_key_, factory_ in strategy_map_.items()
-                                        if
-                                        strategy_key_ in settings_.get_evaluable_strategies()}
+                                        if  strategy_key_ in settings_.evaluable_strategies}
             # Instantiate strategies container only with active strategies
             strategies_ = EvaluableStrategies(**active_strategies_)
 
@@ -314,10 +313,8 @@ def analyzer(symbols: list[str] | None = None) -> int:
             # Download prices data for all symbols
             prices_data_ = PriceProvider(long_term=False).get_prices(symbols)
 
-            # Determine the number of workers using the new property. os.cpu_count() will automatically use the available cores.
+            # Determine the number of workers configured in settings
             num_workers_ = settings_.max_workers
-            if num_workers_ <= 0:
-                num_workers_ = (os.cpu_count() or 2)
 
             # Use a ProcessPoolExecutor to analyze symbols in parallel
             message_ = f'Starting parallel analysis for {len(prices_data_)} symbols using {num_workers_} workers...'
@@ -492,7 +489,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['BTC-USD']
+    symbols_ = ['BTC-USD', 'SPY']
 
     #  Analyze strategies over historical prices
     exit_code = analyzer(symbols_)

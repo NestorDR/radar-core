@@ -1,6 +1,9 @@
 # tests/test_settings.py
 
 # --- Python modules ---
+from datetime import time
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # --- Third Party Libraries ---
 import pytest
@@ -34,6 +37,7 @@ def test_singleton_identity():
     assert s1_.verbosity_level is not None
     assert s1_.log_config is not None
     assert s1_.db_conn_kwargs is not None
+    assert s1_.price_cache_kwargs is not None
 
 
 def test_singleton_attributes_preserved_on_repeated_calls():
@@ -119,23 +123,6 @@ def test_database_connection_kwargs_builder(monkeypatch):
     assert kwargs_['connect_timeout'] == 10
 
 
-def test_yaml_accessors():
-    """
-    GIVEN standard settings.yml file
-    WHEN get_settings() is initialized
-    THEN symbols, shortables, evaluable_strategies, and undeletable lists are accessible.
-    """
-    s_ = get_settings()
-
-    assert isinstance(s_.get_symbols(), list)
-    assert isinstance(s_.get_shortables(), list)
-    assert isinstance(s_.get_evaluable_strategies(), list)
-    assert isinstance(s_.get_undeletable(), list)
-
-    assert set(s_.get_shortables()).issubset(set(s_.get_symbols()))
-    assert all(sym_ in s_.get_undeletable() for sym_ in s_.get_symbols())
-
-
 def test_reset_clears_singleton():
     """
     GIVEN an initialized Settings singleton
@@ -149,3 +136,116 @@ def test_reset_clears_singleton():
     settings_ = get_settings()
     assert settings_ is not None
     assert Settings._instance is settings_
+
+
+def test_price_cache_kwargs_defaults(monkeypatch):
+    """
+    GIVEN no RADAR_PRICE_CACHE_* environment variables set
+    WHEN get_settings() is initialized
+    THEN price_cache_kwargs contains all expected default keys and typed values.
+    """
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    for var_ in (
+            'RADAR_PRICE_CACHE_DIR',
+            'RADAR_PRICE_CACHE_ENABLED',
+            'RADAR_PRICE_CACHE_IGNORE',
+            'RADAR_PRICE_CACHE_WRITE',
+            'RADAR_PRICE_CACHE_TIMEZONE',
+            'RADAR_PRICE_CACHE_WINDOW_START',
+            'RADAR_PRICE_CACHE_WINDOW_END',
+            'RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES',
+    ):
+        monkeypatch.delenv(var_, raising=False)
+
+    s_ = get_settings()
+    kwargs_ = s_.price_cache_kwargs
+
+    assert kwargs_['dir'] == Path('/home/default/app/cache')
+    assert kwargs_['enabled'] is True
+    assert kwargs_['ignore'] is False
+    assert kwargs_['write'] is True
+    assert kwargs_['timezone'] == ZoneInfo('America/New_York')
+    assert kwargs_['window_start'] == time(9, 30)
+    assert kwargs_['window_end'] == time(17, 0)
+    assert kwargs_['dev_max_age_minutes'] == 10
+
+
+def test_price_cache_kwargs_custom(monkeypatch):
+    """
+    GIVEN custom RADAR_PRICE_CACHE_* environment variables
+    WHEN get_settings() is initialized
+    THEN price_cache_kwargs correctly parses and reflects the custom configuration.
+    """
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_DIR', '/custom/cache/path')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_ENABLED', 'false')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_IGNORE', 'true')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_WRITE', 'false')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_TIMEZONE', 'UTC')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_WINDOW_START', '08:00')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_WINDOW_END', '16:30')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', '15')
+
+    s_ = get_settings()
+    kwargs_ = s_.price_cache_kwargs
+
+    assert kwargs_['dir'] == Path('/custom/cache/path')
+    assert kwargs_['enabled'] is False
+    assert kwargs_['ignore'] is True
+    assert kwargs_['write'] is False
+    assert kwargs_['timezone'] == ZoneInfo('UTC')
+    assert kwargs_['window_start'] == time(8, 0)
+    assert kwargs_['window_end'] == time(16, 30)
+    assert kwargs_['dev_max_age_minutes'] == 15
+
+
+def test_price_cache_malformed_integer_raises(monkeypatch):
+    """
+    GIVEN an invalid non-integer string for RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES
+    WHEN get_settings() is initialized
+    THEN it raises ValueError and fails initialization.
+    """
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', 'not_a_number')
+
+    with pytest.raises(ValueError, match='Invalid integer value for RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES'):
+        get_settings()
+
+
+def test_price_cache_malformed_time_raises(monkeypatch):
+    """
+    GIVEN an invalid time string for RADAR_PRICE_CACHE_WINDOW_START
+    WHEN get_settings() is initialized
+    THEN it raises ValueError and fails initialization.
+    """
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_WINDOW_START', '25:99')
+
+    with pytest.raises(ValueError, match='Invalid time format for RADAR_PRICE_CACHE_WINDOW_START'):
+        get_settings()
+
+
+def test_price_cache_malformed_timezone_raises(monkeypatch):
+    """
+    GIVEN an unknown IANA timezone for RADAR_PRICE_CACHE_TIMEZONE
+    WHEN get_settings() is initialized
+    THEN it raises ValueError and fails initialization.
+    """
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_TIMEZONE', 'Invalid/Non_Existent_Timezone')
+
+    with pytest.raises(ValueError, match='Invalid timezone for RADAR_PRICE_CACHE_TIMEZONE'):
+        get_settings()
+
+
+def test_price_cache_empty_dir_raises(monkeypatch):
+    """
+    GIVEN an empty string for RADAR_PRICE_CACHE_DIR
+    WHEN get_settings() is initialized
+    THEN it raises ValueError and fails initialization.
+    """
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_DIR', '   ')
+
+    with pytest.raises(ValueError, match='RADAR_PRICE_CACHE_DIR cannot be empty'):
+        get_settings()

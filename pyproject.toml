@@ -5,9 +5,7 @@ name = "radar-core"
 version = "0.5.0"
 description = "Financial speculation strategies evaluation using yfinance, polars, and ta-lib."
 readme = "README.md"
-authors = [
-    { name = "Nestor Dario Romero", email = "ndr1970@gmail.com" }
-]
+authors = [{ name = "Nestor Dario Romero", email = "ndr1970@gmail.com" }]
 requires-python = ">=3.13"
 dependencies = [
     "dotenvy-py~=0.1.0",
@@ -18,8 +16,8 @@ dependencies = [
     "psycopg-binary>=3.2",
     "PyYAML>=6.0",
     "setuptools>=80.9",
+    "tzdata>=2026.3",
     "yfinance>=0.2.65",
-
     # --- For TA-Lib ---
     # On Windows run manually: uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.X/ta_lib-0.6.X-cp313-cp313-win_amd64.whl --no-cache-dir
     # On non-Windows platforms (like Linux in Docker) installs TA-Lib from PyPI (environment markers exclude Windows)
@@ -27,15 +25,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "pre-commit>=4.3.0",
-    "pytest>=9.1.1",
-    "ruff>=0.13.2",
-    "ty>=0.0.5",
-]
+dev = ["pre-commit>=4.3.0", "pytest>=9.1.1", "ruff>=0.13.2", "ty>=0.0.5"]
 
 [build-system]
-requires = ["uv_build>=0.11.0"]
+requires = ["uv_build>=0.12.0"]
 build-backend = "uv_build"
 
 [tool.ruff]
@@ -63,7 +56,7 @@ exclude = [
 # R (refactoring) for refactoring suggestions.
 # S (security) for security-related issues.
 select = ["E", "F", "B", "R", "S", "N"]
-ignore = [# Ignored rules
+ignore = [ # Ignored rules
     "E501", # Ignored because line-length is handled by the 'line-length' setting.
     "E203", # Whitespace before ':' (common conflict with Black).
     "B008", # Ignore the use of functions as the default argument in function signatures (common in FastAPI).
@@ -86,6 +79,4 @@ possibly-missing-attribute = "ignore"
 
 [tool.pytest.ini_options]
 addopts = "-m 'not integration'"
-markers = [
-    "integration: mark integration tests",
-]
+markers = ["integration: mark integration tests"]

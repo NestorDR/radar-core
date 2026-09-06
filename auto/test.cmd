@@ -25,5 +25,8 @@ if exist .coverage del /f /q .coverage
 if exist htmlcov rmdir /s /q htmlcov
 if exist .coverage.* del /f /q .coverage.*
 
+:: Remove test price cache directories if left behind
+if exist tests\cache rmdir /s /q tests\cache
+
 :: 4. Restore the original VIRTUAL_ENV and exit with the original pytest exit code.
 endlocal & exit /b %TEST_EXIT_CODE%

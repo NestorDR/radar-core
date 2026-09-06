@@ -1,6 +1,8 @@
 # src/radar_core/settings.py
 
 # --- Python modules ---
+# datetime: provides classes for manipulating dates and times.
+from datetime import time
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import ERROR, DEBUG, INFO, WARNING, getLogger
 # os: provides operating system interfaces and functionality
@@ -12,6 +14,8 @@ from pathlib import Path
 import sys
 # urllib.parse: provides URL parsing and unquoting facilities
 from urllib import parse
+# zoneinfo: provides concrete time zone implementations representing the system's time zones.
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # --- Third Party Libraries ---
 # dotenvy-py: loads environment variables from .env files (first occurrence wins)
@@ -66,22 +70,26 @@ class Settings:
 
         # Load environment variables
         self.verbosity_level = self._initialize_environment()
-        self.clean_unlisted = self._parse_bool_env('RADAR_CLEAN_UNLISTED', False)
+        self.app_environment = (os.getenv('RADAR_ENV') or 'dev').strip().lower()
+        self.clean_unlisted = self._parse_bool('RADAR_CLEAN_UNLISTED', False)
         self.log_config = self._get_log_config(log_filename)
         self.max_workers = self._get_max_workers()
 
         # Database connection parameters
         self.db_conn_kwargs = self._get_db_conn_kwargs()
 
+        # Price cache parameters
+        self.price_cache_kwargs = self._get_price_cache_kwargs()
+
         # Load YAML settings file
-        self._config = self._read_yaml_file() or {}
-        self.symbols: list[str] = self._config.get('symbols', [])
-        raw_shortables_ = self._config.get('shortables', [])
+        config_ = self._read_yaml_file() or {}
+        self.symbols: list[str] = config_.get('symbols', [])
+        raw_shortables_ = config_.get('shortables', [])
         symbols_set_ = set(self.symbols)
         self.shortables: list[str] = [s for s in raw_shortables_ if s in symbols_set_]
-        self.evaluable_strategies: list[str] = self._config.get('evaluable_strategies', [])
-        done_list_ = self._config.get('done', []) or []
-        self.undeletable_symbols: list[str] = done_list_ + self.symbols
+        self.undeletable_symbols: list[str] = config_.get('done', []) or []
+        self.undeletable_symbols += self.symbols
+        self.evaluable_strategies: list[str] = config_.get('evaluable_strategies', [])
 
     @classmethod
     def _reset(cls) -> None:
@@ -138,21 +146,7 @@ class Settings:
         except ValueError:
             return INFO
 
-    @staticmethod
-    def _parse_bool_env(env_var: str,
-                        default: bool = False) -> bool:
-        """
-        Parse a boolean environment variable.
-
-        :param env_var: Name of the environment variable.
-        :param default: Default value if not set.
-
-        :return: Boolean value.
-        """
-        return os.getenv(env_var, str(default)).lower() in ('true', '1', 't')
-
-    def _get_log_config(self,
-                        log_filename: str | None = None) -> dict:
+    def _get_log_config(self, log_filename: str | None = None) -> dict:
         """
         Generates a declarative log configuration dictionary,
         which will allow or not file logging based on the RADAR_ENABLE_FILE_LOGGING value.
@@ -161,7 +155,7 @@ class Settings:
 
         :return: A dictionary with the logging configuration.
         """
-        enable_file_logging_ = self._parse_bool_env('RADAR_ENABLE_FILE_LOGGING', False)
+        enable_file_logging_ = self._parse_bool('RADAR_ENABLE_FILE_LOGGING', False)
         handlers_ = ['console']
 
         logger_config_ = {
@@ -275,7 +269,114 @@ class Settings:
 
         return kwargs_
 
+    @staticmethod
+    def _get_price_cache_kwargs() -> dict:
+        """
+        Builds the configuration dictionary for the price cache from environment variables.
+
+        :return: A dictionary containing the parsed price cache configuration.
+        """
+        return {
+            'dir': Settings._parse_dir('RADAR_PRICE_CACHE_DIR', '/home/default/app/cache'),
+            'enabled': Settings._parse_bool('RADAR_PRICE_CACHE_ENABLED', True),
+            'ignore': Settings._parse_bool('RADAR_PRICE_CACHE_IGNORE', False),
+            'write': Settings._parse_bool('RADAR_PRICE_CACHE_WRITE', True),
+            'timezone': Settings._parse_timezone('RADAR_PRICE_CACHE_TIMEZONE', 'America/New_York'),
+            'window_start': Settings._parse_time('RADAR_PRICE_CACHE_WINDOW_START', '09:30'),
+            'window_end': Settings._parse_time('RADAR_PRICE_CACHE_WINDOW_END', '17:00'),
+            'dev_max_age_minutes': Settings._parse_int('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', 10),
+        }
+
     # endregion Environment Variables
+
+    # region Parsers
+
+    @staticmethod
+    def _parse_bool(env_var: str,
+                    default: bool = False) -> bool:
+        """
+        Parse a boolean environment variable.
+
+        :param env_var: Name of the environment variable.
+        :param default: Default value if not set.
+
+        :return: Boolean value.
+        """
+        return os.getenv(env_var, str(default)).strip().lower() in ('true', '1', 't')
+
+    @staticmethod
+    def _parse_int(env_var: str,
+                   default: int = 0) -> int:
+        """
+        Parses an integer environment variable.
+
+        :param env_var: Name of the environment variable.
+        :param default: Default integer value if not set.
+
+        :return: Parsed integer.
+        :raises ValueError: If the value cannot be parsed as an integer.
+        """
+        value_ = os.getenv(env_var, str(default)).strip()
+        try:
+            return int(value_)
+        except ValueError as e_:
+            raise ValueError(f'Invalid integer value for {env_var}: "{value_}".') from e_
+
+    @staticmethod
+    def _parse_time(env_var: str,
+                    default: str) -> time:
+        """
+        Parses a time environment variable in HH:MM format.
+
+        :param env_var: Name of the environment variable.
+        :param default: Default time string (HH:MM) if not set.
+
+        :return: Parsed time object.
+        :raises ValueError: If the supplied value is not in a valid HH:MM format.
+        """
+        value_ = os.getenv(env_var, default).strip()
+        try:
+            return time.fromisoformat(value_)
+        except ValueError as e_:
+            raise ValueError(f'Invalid time format for {env_var}: "{value_}". Expected HH:MM.') from e_
+
+    @staticmethod
+    def _parse_timezone(env_var: str,
+                        default: str = 'America/New_York') -> ZoneInfo:
+        """
+        Parses and validates an IANA timezone from an environment variable.
+
+        :param env_var: Name of the environment variable.
+        :param default: Default IANA timezone name if not set.
+
+        :return: Validated ZoneInfo instance.
+        :raises ValueError: If the timezone cannot be found or is empty.
+        """
+        value_ = os.getenv(env_var, default).strip()
+        try:
+            return ZoneInfo(value_)
+        except (ZoneInfoNotFoundError, ValueError) as e_:
+            raise ValueError(f'Invalid timezone for {env_var}: "{value_}".') from e_
+
+    @staticmethod
+    def _parse_dir(env_var: str,
+                   default: str) -> Path:
+        """
+        Parses and validates a directory path from an environment variable.
+
+        :param env_var: Name of the environment variable.
+        :param default: Default path to use if the environment variable is not set.
+
+        :return: Path instance for the directory.
+        :raises ValueError: If the directory setting is empty.
+        """
+        value_ = os.getenv(env_var, default).strip()
+        if not value_:
+            raise ValueError(f'{env_var} cannot be empty.')
+
+        return Path(value_)
+
+    # endregion Parsers
 
     # region YAML Settings File
 
@@ -284,7 +385,6 @@ class Settings:
         Reads and parses a YAML file, converting it into a Python object. Handles errors gracefully.
 
         :return: A dictionary representation of the parsed YAML file. If there is an error during parsing, None is returned.
-        
         :raises FileNotFoundError: If the YAML settings file does not exist.
         """
         # Get the settings file path from the environment variable or use a default
@@ -315,38 +415,6 @@ class Settings:
             verbose(message_, ERROR, self.verbosity_level)
             logger_.exception(message_, exc_info=e_)
             raise FileNotFoundError(message_) from e_
-
-    def get_symbols(self) -> list[str]:
-        """
-        Returns the list of symbols to analyze.
-
-        :return: A list of symbol strings.
-        """
-        return self.symbols
-
-    def get_undeletable(self) -> list[str]:
-        """
-        Returns the list of symbols that cannot be deleted from the database.
-
-        :return: A list of undeletable symbol strings.
-        """
-        return self.undeletable_symbols
-
-    def get_shortables(self) -> list[str]:
-        """
-        Returns the list of symbols that can be shorted.
-
-        :return: A list of shortable symbol strings.
-        """
-        return self.shortables
-
-    def get_evaluable_strategies(self) -> list[str]:
-        """
-        Returns the list of strategy Acronyms that can be evaluated.
-
-        :return: A list of evaluable strategy names.
-        """
-        return self.evaluable_strategies
 
     # endregion YAML Settings File
 

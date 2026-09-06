@@ -1,13 +1,16 @@
 # tests/conftest.py
 
 # --- Python modules ---
+import os
+from pathlib import Path
+import shutil
 from unittest.mock import MagicMock
 
 # --- Third Party Libraries ---
 import pytest
 
 # --- App modules ---
-from radar_core.settings import get_settings
+from radar_core.settings import Settings, get_settings
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -15,8 +18,15 @@ def initialize_environment():
     """
     Session fixture to initialize application settings and load environment variables
     from .env before running any pytest test suite.
+    Directs the default price cache directory to tests/cache rather than the repository root.
     """
+    test_cache_dir_ = Path(__file__).parent / 'cache'
+    os.environ['RADAR_PRICE_CACHE_DIR'] = str(test_cache_dir_)
+    Settings._reset()
     get_settings()
+    yield
+    if test_cache_dir_.exists():
+        shutil.rmtree(test_cache_dir_, ignore_errors=True)
 
 
 @pytest.fixture
