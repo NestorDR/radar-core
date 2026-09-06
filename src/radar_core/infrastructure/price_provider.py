@@ -2,20 +2,17 @@
 
 # --- Python modules ---
 # datetime: provides classes for manipulating dates and times.
-# uuid: generates Universally Unique Identifiers.
-import uuid
-from datetime import date, datetime, timedelta, timezone
-
+from datetime import datetime, timedelta, timezone
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG, ERROR, INFO, WARNING, getLogger
+# uuid: generates Universally Unique Identifiers.
+import uuid
 
 # --- Third Party Libraries ---
 # pandas: required by `yfinance`, provides powerful data structures and data analysis tools.
 import pandas as pd
-
 # polars: high-performance DataFrame library for in-memory analytics.
 import polars as pl
-
 # yfinance: offers a threaded way to download market prices from Yahoo!Ⓡ Finance.
 import yfinance as yf
 
@@ -24,10 +21,10 @@ import yfinance as yf
 from radar_core.helpers.constants import DAILY, ORDERED_PRICE_COLS
 from radar_core.helpers.datetime_helper import propose_start_dt
 from radar_core.helpers.log_helper import verbose
-
 # infrastructure: provides access to persisted data.
 from radar_core.infrastructure.price_cache import PriceCache, PriceCacheMetadata
 from radar_core.infrastructure.security_repository import SecurityRepository
+# settings: has the configuration for the radar_core
 from radar_core.settings import get_settings
 
 logger_ = getLogger(__name__)
@@ -49,14 +46,14 @@ class PriceProvider:
         :param long_term: Specifies whether taking an old date.
         :param verbosity_level: Minimum importance level of messages reporting the process progress.
         """
-        self.start_date = propose_start_dt(DAILY, long_term=long_term)
-        self.end_date = date.today() + timedelta(days=1)
-        self.verbosity_level = verbosity_level
         # Load application environment and price cache configuration
         settings_ = get_settings()
         self.app_environment = settings_.app_environment
         self._cache_settings = settings_.price_cache_kwargs
         self._price_cache = PriceCache(self._cache_settings['dir'])
+        self.start_date = propose_start_dt(DAILY, long_term=long_term)
+        self.end_date = datetime.now(self._cache_settings['timezone']).date() + timedelta(days=1)
+        self.verbosity_level = verbosity_level
 
     def _process_dataframe(
             self, symbol: str,
@@ -213,7 +210,7 @@ class PriceProvider:
 
         # Active market window: both environments refresh current-day bar
         is_trading_window_ = (now.weekday() < 5) and (
-            self._cache_settings['window_start'] <= now.time() <= self._cache_settings['window_end']
+                self._cache_settings['window_start'] <= now.time() <= self._cache_settings['window_end']
         )
         if is_trading_window_:
             return True
@@ -270,7 +267,7 @@ class PriceProvider:
             # repair = False, keepna = False, progress = True, period = None, interval = '1d',
             # prepost = False, proxy = _SENTINEL_, rounding = False, timeout = 10, session = None,
             # multi_level_index = True
-            today_df_ = yf.download(tickers, current_date_ - timedelta(days=1), self.end_date,
+            today_df_ = yf.download(tickers, current_date_, self.end_date,
                                     auto_adjust=True, progress=bool(verbosity_level == DEBUG),
                                     threads=max_workers, group_by='ticker')
 
@@ -435,9 +432,9 @@ if __name__ == '__main__':
     from radar_core.settings import get_settings
 
     # Initialize app settings
-    settings_ = get_settings()
+    settings = get_settings()
     # Logger initialization
-    logging.config.dictConfig(settings_.log_config)
+    logging.config.dictConfig(settings.log_config)
     rotate_log_at_startup()
     # Get root logger and log start messages
     logger_ = getLogger(__name__)
@@ -458,7 +455,7 @@ if __name__ == '__main__':
 
     # --- Test Case 2: Download multiple symbols ---
     print('\n--- Testing multiple symbols download ---')
-    test_symbols_ = settings_.symbols
+    test_symbols_ = settings.symbols
     init_dt_ = datetime.now()  # Identify the date and time when the process is started
     prices_data_ = price_provider_.get_prices(test_symbols_)
     end_dt_ = datetime.now()
@@ -471,7 +468,7 @@ if __name__ == '__main__':
     message = (init_dt_.strftime('Concurrent download executed from %Y-%m-%d %H:%M:%S ')
                + end_dt_.strftime('to %Y-%m-%d %H:%M:%S')
                + f' - Elapsed time {(end_dt_ - init_dt_).total_seconds() / 60:.1f} min')
-    verbose(message, INFO, settings_.verbosity_level)
+    verbose(message, INFO, settings.verbosity_level)
     logger_.info(message)
 
     end_logging(logger_)

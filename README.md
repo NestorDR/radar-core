@@ -22,6 +22,7 @@ The fully operational results can be visited for public use:
 - **Concurrent Analysis**: Multi-symbol processing using Python's `ProcessPoolExecutor`.
 - **Yahoo Finance Integration**: Automated download of historical daily prices and local weekly aggregation.
 - **Technical Analysis & Strategies**: Built-in support for Moving Averages (SMA), RSI-based variants (RSI SMA, Two Bands, Rollercoaster), and Mogalef Bands used as stop-loss levels for RSI band strategies.
+- **Local Price Caching**: Persistent Parquet OHLCV caching with JSON metadata, atomic staged writes, production market-window eligibility, and development age-based reuse to eliminate redundant full downloads.
 - **Performance Metrics**: Detailed profiling including net profit, success rate, mathematical expectation, trade averages, and exposure.
 - **Database Synchronization**: Transactional management of trading ratios and optional cleanup of unlisted symbols via `psycopg3`.
 - **Configurable settings**: Symbols, shortable assets, verbosity, concurrency, and enabled strategies.
@@ -32,7 +33,7 @@ The fully operational results can be visited for public use:
 - Required libraries (managed via pyproject.toml):
   - polars
   - yfinance
-  - numba, numpy, PyYAML, dotenvy-py, psycopg, psycopg-binary, setuptools
+  - numba, numpy, PyYAML, dotenvy-py, psycopg, psycopg-binary, setuptools, tzdata
   - TA-Lib (see notes below)
 
 TA-Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA-Lib can be installed from PyPI (see environment markers in pyproject.toml).
@@ -85,6 +86,7 @@ flowchart TD
         Analyzer --> PriceProvider["PriceProvider"]
         PriceProvider --> SymbolMapping["Symbol & Ticker Translation"]
         SymbolMapping -->|psycopg3| DB[("PostgreSQL Database")]
+        PriceProvider --> PriceCache[("Local Price Cache<br>(Parquet + JSON)")]
         PriceProvider -->|yfinance / Pandas| YFinance["Yahoo Finance API"]
     end
 
@@ -119,7 +121,7 @@ flowchart TD
     end
 ```
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, and evaluates only the strategies enabled in `src/radar_core/settings.yml`. When RSI strategies are enabled, shared RSI and, when required, Mogalef stop-loss indicators are calculated once per timeframe, including JIT-accelerated stop-loss bar scanning. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution kernels leverage shared inlined Numba helpers (`src/radar_core/domain/strategies/_kernel_helpers.py`) for crossover detection, trade math, and candidate screening. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, and evaluates only the strategies enabled in `src/radar_core/settings.yml`. Before requesting historical prices from Yahoo Finance, `PriceProvider` evaluates local cache eligibility via `PriceCache`, loading cached Parquet data and refreshing current-day rows during market hours or reusing fresh snapshots in development. When RSI strategies are enabled, shared RSI and, when required, Mogalef stop-loss indicators are calculated once per timeframe, including JIT-accelerated stop-loss bar scanning. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution kernels leverage shared inlined Numba helpers for crossover detection, trade math, and candidate screening. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
 
 Mogalef bands are used directly as `LongStopLoss` and `ShortStopLoss` for the RSI Two Bands and Rollercoaster strategies. Those strategies retain `identify_old` for baseline comparison while `identify` runs the fused implementation. Serialized current-indicator metadata (`Ratios.current_indicators`) preserves dashboard keys across all strategies, including `sma` (and `rsi` for RSI SMA) for Moving Average variants and `rsi`, `up`, and `low` for RSI band strategies.
 
@@ -193,6 +195,14 @@ Project settings are managed by the `Settings` class, implemented as a process-l
 | `RADAR_LOG_FOLDER`          | File-log folder, relative to the `radar_core` package when not absolute                      | `logs`                        |
 | `RADAR_MAX_WORKERS`         | Number of parallel processes; non-positive values are clamped to one by `Settings`          | `1`                           |
 | `RADAR_SETTING_FILE`        | Custom settings YAML path, relative to `src/radar_core` when not absolute                    | `settings.yml`                |
+| `RADAR_PRICE_CACHE_DIR`     | Local or container directory where OHLCV Parquet and metadata files are stored               | `/home/default/app/cache`     |
+| `RADAR_PRICE_CACHE_ENABLED` | Master toggle to enable or disable price cache use                                           | `true`                        |
+| `RADAR_PRICE_CACHE_IGNORE`  | When `true`, forces `PriceProvider` to bypass cache reads and perform a full download        | `false`                       |
+| `RADAR_PRICE_CACHE_WRITE`   | When `false`, downloads complete normally but are not written to disk                        | `true`                        |
+| `RADAR_PRICE_CACHE_TIMEZONE`| IANA timezone for evaluating market session dates and trading windows                        | `America/New_York`            |
+| `RADAR_PRICE_CACHE_WINDOW_START` | Start time of the production market cache refresh window (HH:MM)                        | `09:30`                       |
+| `RADAR_PRICE_CACHE_WINDOW_END`   | End time of the production market cache refresh window (HH:MM)                          | `17:00`                       |
+| `RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES` | Maximum cache age in minutes for automatic reuse outside market windows when `RADAR_ENV=dev` | `10`                   |
 | `POSTGRES_*`                | PostgreSQL host, port, database, user, and password settings                                  |                               |
 | `POSTGRES_SSL_MODE`         | PostgreSQL connection SSL mode                                                               | `prefer`                      |
 | `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options passed to the connection                          | unset                         |
