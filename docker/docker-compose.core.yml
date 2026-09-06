@@ -34,8 +34,8 @@ services:
 # Network configuration for service communication
 networks:
   # Shared external network to communicate with the PostgreSQL container from project `radar-infra` (see there `docker-compose.dev.yml`)
-  radar-network:                              # Network name
+  radar-network:                                 # Network name
     # Enable if you want to work connecting PostgreSQL based on host station, and disable `external: true`
     # name: radar-network
     # Enable if you want to work connection containerized PostgreSQL based on `radar_infra/docker-compose.dev.yml`
-    external: true                            # Use an existing network created outside of this `compose` file (e.g.`docker network create radar-network`)
+    external: true                               # Use an existing network created outside of this `compose` file (e.g.`docker network create radar-network`)

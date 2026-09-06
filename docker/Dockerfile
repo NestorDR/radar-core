@@ -118,7 +118,9 @@ COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir --no-index /wheels/*.whl && rm -rf /wheels
 
 # Create the non-root user for security and set its home directory as the working directory.
-RUN useradd --uid 1001 --create-home default
+RUN useradd --uid 1001 --create-home default && \
+    mkdir -p /home/default/app && \
+    chown -R default:default /home/default/app
 WORKDIR /home/default/app
 
 # Copy settings file and assign the 'default' user property
