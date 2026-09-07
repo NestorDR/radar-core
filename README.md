@@ -183,10 +183,9 @@ Project settings are managed by the `Settings` class, implemented as a process-l
 | `RADAR_PRICE_CACHE_ENABLED` | Master toggle to enable or disable price cache use                                           | `true`                        |
 | `RADAR_PRICE_CACHE_IGNORE`  | When `true`, forces `PriceProvider` to bypass cache reads and perform a full download        | `false`                       |
 | `RADAR_PRICE_CACHE_WRITE`   | When `false`, downloads complete normally but are not written to disk                        | `true`                        |
-| `RADAR_PRICE_CACHE_TIMEZONE`| IANA timezone for evaluating market session dates and trading windows                        | `America/New_York`            |
-| `RADAR_PRICE_CACHE_WINDOW_START` | Start time of the production market cache refresh window (HH:MM)                        | `09:30`                       |
-| `RADAR_PRICE_CACHE_WINDOW_END`   | End time of the production market cache refresh window (HH:MM)                          | `16:00`                       |
-| `RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES` | Maximum cache age in minutes for automatic reuse outside market windows when `RADAR_ENV=dev` | `10`                   |
+| `RADAR_PRICE_CACHE_TIMEZONE`| IANA timezone for evaluating market session dates and trading start time    | `America/New_York`            |
+| `RADAR_PRICE_CACHE_TRADING_START` | Market trading start time (HH:MM) when corporate adjustments settle       | `09:30`                       |
+| `RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES` | Maximum cache age in minutes for automatic reuse outside trading when `RADAR_ENV=dev` | `10`           |
 | `POSTGRES_*`                | PostgreSQL host, port, database, user, and password settings                                  |                               |
 | `POSTGRES_SSL_MODE`         | PostgreSQL connection SSL mode                                                               | `prefer`                      |
 | `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options passed to the connection                          | unset                         |

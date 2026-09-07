@@ -282,8 +282,7 @@ class Settings:
             'ignore': Settings._parse_bool('RADAR_PRICE_CACHE_IGNORE', False),
             'write': Settings._parse_bool('RADAR_PRICE_CACHE_WRITE', True),
             'timezone': Settings._parse_timezone('RADAR_PRICE_CACHE_TIMEZONE', 'America/New_York'),
-            'window_start': Settings._parse_time('RADAR_PRICE_CACHE_WINDOW_START', '09:30'),
-            'window_end': Settings._parse_time('RADAR_PRICE_CACHE_WINDOW_END', '16:00'),
+            'trading_start': Settings._parse_time('RADAR_PRICE_CACHE_TRADING_START', '09:30'),
             'dev_max_age_minutes': Settings._parse_int('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', 10),
         }
 

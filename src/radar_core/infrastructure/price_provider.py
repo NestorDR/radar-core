@@ -208,34 +208,26 @@ class PriceProvider:
             logger_.info(message_)
             return False
 
-        # Active market window: both environments refresh current-day bar
-        is_trading_window_ = (now.weekday() < 5) and (
-                self._cache_settings['window_start'] <= now.time() <= self._cache_settings['window_end']
-        )
-        if is_trading_window_:
-            return True
-
-        # Outside market window: dev mode avoids frequent downloads using dev_max_age_minutes TTL
         try:
-            # Outside market window: allow reuse on the same session date if cache was generated after market close
             updated_at_market_tz_ = datetime.fromisoformat(metadata_.updated_at_utc).astimezone(self._cache_settings['timezone'])
-            is_post_close_settled_ = (
-                (now.weekday() < 5)
-                and (now.time() > self._cache_settings['window_end'])
-                and (metadata_.session_date == str(now.date()))
-                and (updated_at_market_tz_.time() >= self._cache_settings['window_end'])
-            )
-            if is_post_close_settled_:
-                return True
-
-            # In development mode, also allow reuse within dev_max_age_minutes TTL (e.g. pre-market or weekends)
-            if self.app_environment == 'dev':
-                return 0 <= metadata_.age_in_minutes(now) <= self._cache_settings['dev_max_age_minutes']
-
-            return False
         except (ValueError, TypeError) as exc_:
             logger_.warning(f'Failed to parse price cache timestamp: {exc_}. Bypassing cache.')
             return False
+
+        # Once the trading session opens (`09:30`), historical bars are immutable; only the current session's bar fluctuates
+        is_trading_started_ = (
+            now.weekday() < 5
+            and self._cache_settings['trading_start'] <= now.time()
+            and updated_at_market_tz_.time() >= self._cache_settings['trading_start']
+        )
+        if is_trading_started_:
+            return True
+
+        # In development mode, also allow reuse within dev_max_age_minutes TTL (e.g. pre-market or weekends)
+        if self.app_environment == 'dev':
+            return 0 <= metadata_.age_in_minutes(now) <= self._cache_settings['dev_max_age_minutes']
+
+        return False
 
 
     def _refresh_cache(

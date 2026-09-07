@@ -12,7 +12,6 @@
    - Crucial historical price adjustments—such as stock splits, reverse splits, dividend distributions, and spinoffs—are settled and applied by exchanges and providers *prior* to the market opening bell (overnight or pre-market).
    - Once the trading session opens (`09:30`), historical bars are static and immutable; only the current session's bar fluctuates.
    - Consequently, local cache reuse is safest and most effective once the session starts, requiring only the current day's single bar to be fetched and merged in memory.
-   - Once trading closes (`16:00`), a complete post-market snapshot captures finalized daily settlements, remaining valid for the remainder of the evening until the next morning's corporate action adjustment window.
 
 ## 1. File Layout & Storage Contracts
 
@@ -59,9 +58,8 @@ All cache settings are loaded via `Settings` (`src/radar_core/settings.py`) in a
 | `RADAR_PRICE_CACHE_ENABLED` | bool | `true` | Master toggle to enable or disable price cache use. |
 | `RADAR_PRICE_CACHE_IGNORE` | bool | `false` | When `true`, forces `PriceProvider` to bypass cache reads and perform a full download. |
 | `RADAR_PRICE_CACHE_WRITE` | bool | `true` | When `false`, downloads complete normally but are not written to the price cache. |
-| `RADAR_PRICE_CACHE_TIMEZONE` | IANA tz | `America/New_York` | Timezone for evaluating the market session and trading window. |
-| `RADAR_PRICE_CACHE_WINDOW_START` | time | `09:30` | Start time of the production market window (HH:MM). |
-| `RADAR_PRICE_CACHE_WINDOW_END` | time | `16:00` | End time of the production market window (HH:MM). |
+| `RADAR_PRICE_CACHE_TIMEZONE` | IANA tz | `America/New_York` | Timezone for evaluating the market session and trading start time. |
+| `RADAR_PRICE_CACHE_TRADING_START` | time | `09:30` | Market trading start time (HH:MM) when pre-market adjustments settle. |
 | `RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES` | int | `10` | Maximum age in minutes for automatic reuse when `RADAR_ENV=dev`. |
 
 ## 3. Operational Policies & Unified Retrieval
@@ -89,13 +87,13 @@ get_prices(symbols, now)
 The `_is_cache_eligible(symbol_to_ticker_map, now)` method is the sole gatekeeper for cache reuse:
 1. **Disabled / Ignored Check**: If cache is globally disabled or ignored, returns `False`.
 2. **Metadata Compatibility**: Evaluates `metadata.is_compatible(symbol_to_ticker=symbol_to_ticker_map, start_date=str(self.start_date), session_date=str(now.date()))` once. If incompatible, logs the reason and returns `False`.
-3. **Active Market Window**:
-   - Evaluated as: `(now.weekday() < 5) and (window_start <= now.time() <= window_end)`.
-   - When inside active market hours on a weekday, **both DEV and PROD** return `True` to refresh today's price bar in memory.
-4. **Outside Market Window**:
-   - **Post-Market Close Reuse (both DEV and PROD)**: Outside the market window on a weekday, allows cache reuse if the current time is after `window_end` (16:00), the session date matches today, and the cache was generated after market close today (`updated_at >= 16:00`).
-   - **Development TTL (`RADAR_ENV=dev`)**: When not post-market settled (e.g. weekends or pre-market hours), evaluates `0 <= metadata.age_in_minutes(now) <= dev_max_age_minutes` to avoid hitting Yahoo Finance repeatedly during rapid local development sessions.
-   - **Production (`RADAR_ENV!=dev`)**: Returns `False` when not post-market close settled, forcing a complete historical download to reconcile final end-of-day market settlements.
+3. **Session Start & Corporate Action Safeguard**:
+   - Evaluated as: `(now.weekday() < 5) and (now.time() >= trading_start) and (updated_at >= trading_start)`.
+   - Once trading opens on a weekday (`09:30`), all pre-market corporate actions (splits, reverse splits, dividends) have taken effect. If the cache on disk was updated at or after `trading_start` today, the historical bars are settled and valid. **Both DEV and PROD** return `True` to refresh only today's single bar in memory.
+   - Any cache generated pre-market (`updated_at < trading_start`) is rejected after `09:30` to force a complete download that captures the new adjustments.
+4. **Pre-Market & Weekend Execution**:
+   - **Development (`RADAR_ENV=dev`)**: Outside the active session (weekends or pre-market), evaluates `0 <= metadata.age_in_minutes(now) <= dev_max_age_minutes` to avoid repeated external downloads during development.
+   - **Production (`RADAR_ENV!=dev`)**: Returns `False` outside the active session, forcing a complete download.
 
 ### Current-Day Refresh (`_refresh_cache`)
 

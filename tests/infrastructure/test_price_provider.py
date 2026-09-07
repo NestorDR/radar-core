@@ -356,19 +356,19 @@ def test_cache_eligibility_development_environment(tmp_path):
     provider_.app_environment = 'dev'
     assert provider_._is_cache_eligible(mapping_, stale_post_close_now_) is True
 
-    # Same time outside market window with intraday cache (updated 14:00 < 16:00) -> Ineligible in both PROD and DEV
-    intraday_meta_ = PriceCacheMetadata(
+    # Pre-market cache on Friday (updated 08:30 < 09:30) -> Ineligible after market open in both PROD and DEV
+    premarket_meta_ = PriceCacheMetadata(
         symbol_to_ticker=mapping_,
         start_date=str(provider_.start_date),
         session_date='2026-01-09',
-        generation_id='generation-intraday',
+        generation_id='generation-premarket',
         is_complete=True,
-        updated_at_utc=datetime(2026, 1, 9, 14, 0, tzinfo=tz_).astimezone(timezone.utc).isoformat(),
+        updated_at_utc=datetime(2026, 1, 9, 8, 30, tzinfo=tz_).astimezone(timezone.utc).isoformat(),
     )
     cache_.save(pl.DataFrame({
         'Date': [date(2026, 1, 9)], 'Open': [100.0], 'High': [105.0],
         'Low': [99.0], 'Close': [100.0], 'Volume': [1000], 'Symbol': ['SPY']
-    }).with_columns(pl.col('Date').cast(pl.Date)), intraday_meta_)
+    }).with_columns(pl.col('Date').cast(pl.Date)), premarket_meta_)
     assert provider_._is_cache_eligible(mapping_, now_within_ttl_) is False
     provider_.app_environment = 'prod'
     assert provider_._is_cache_eligible(mapping_, now_within_ttl_) is False
