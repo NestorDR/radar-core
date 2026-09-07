@@ -77,48 +77,30 @@ The system follows a three-tier performance model:
 
 ```mermaid
 flowchart TD
-    subgraph CLI ["CLI & Configuration Entry"]
-        Main["__main__.py / CLI"] --> Settings["Settings (settings.yml & Environment Variables)"]
-        Settings --> Analyzer["Analyzer (Orchestrator)"]
+    CLI["CLI & Settings"] --> Analyzer["Analyzer Orchestrator"]
+
+    subgraph Tier1 ["1. Adaptation & Ingestion Layer"]
+        PriceProvider["PriceProvider<br>(Yahoo Finance API / Parquet Cache)"]
     end
 
-    subgraph DataIngestion ["1. Adaptation & Ingestion Layer"]
-        Analyzer --> PriceProvider["PriceProvider"]
-        PriceProvider --> SymbolMapping["Symbol & Ticker Translation"]
-        SymbolMapping -->|psycopg3| DB[("PostgreSQL Database")]
-        PriceProvider --> PriceCache[("Local Price Cache<br>(Parquet + JSON)")]
-        PriceProvider -->|yfinance / Pandas| YFinance["Yahoo Finance API"]
+    subgraph Tier2 ["2. In-Memory Storage Layer (Polars)"]
+        PolarsData["Polars DataFrames<br>(Daily / Weekly & Technical Indicators)"]
     end
 
-    subgraph Concurrency ["Parallel Worker Dispatch"]
-        Analyzer -->|ProcessPoolExecutor| ParallelWorkers["Worker Processes (spawn context)"]
+    subgraph Tier3 ["3. Execution & Calculation Layer (NumPy + Numba)"]
+        Workers["Worker Pool (ProcessPoolExecutor)"] --> JITKernels["Numba JIT-Compiled Strategy Kernels<br>(SMA, RSI, Stop Loss)"]
     end
 
-    subgraph Storage ["2. In-Memory Storage & Processing Layer"]
-        YFinance -->|Convert to Polars| DailyPolarsData["Daily Polars DataFrames"]
-        DailyPolarsData -->|Submit per-symbol frame| ParallelWorkers
-        ParallelWorkers -->|Derive weekly locally with Polars| PolarsWeeklyData["Weekly Polars DataFrames"]
-        ParallelWorkers -->|Calculate when RSI strategies are enabled| TechnicalIndicators["Shared RSI/Mogalef Indicators"]
-        PolarsWeeklyData --> TechnicalIndicators
-        TechnicalIndicators --> StopLoss["Stop-Loss Identification (JIT-compiled kernels)"]
+    subgraph DBBoundary ["Persistence Boundary (psycopg3)"]
+        DB[("PostgreSQL Database")]
     end
 
-    subgraph Execution ["3. Execution & Calculation Layer"]
-        ParallelWorkers --> StrategyOrch["Per-symbol Strategy Orchestration (inside worker)"]
-        StopLoss --> StrategyOrch
-        StrategyOrch --> MA["MovingAverage (SMA/RSI SMA, JIT-compiled kernels)"]
-        StrategyOrch --> RSI2B["RsiTwoBands (JIT-compiled kernels)"]
-        StrategyOrch --> RSIRC["RsiRollerCoaster (JIT-compiled kernels)"]
-    end
-
-    subgraph Persistence ["Persistence Boundary"]
-        MA --> RatiosOutput["Ratios Data Objects"]
-        RSI2B --> RatiosOutput
-        RSIRC --> RatiosOutput
-        RatiosOutput --> RatioRepo["RatioRepository"]
-        RatioRepo -->|Transactional Upsert & Cleanup| RatioCrud["RatioCrud (psycopg3)"]
-        RatioCrud -->|Parameterized Queries| DB
-    end
+    Analyzer --> PriceProvider
+    PriceProvider --> PolarsData
+    Analyzer --> Workers
+    PolarsData --> Workers
+    JITKernels -->|Transactional Upsert| DB
+    PriceProvider -.->|Symbol Auto-Registration| DB
 ```
 
 For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, and evaluates only the strategies enabled in `src/radar_core/settings.yml`. Before requesting historical prices from Yahoo Finance, `PriceProvider` evaluates local cache eligibility via `PriceCache`, loading cached Parquet data and refreshing current-day rows during market hours or reusing fresh snapshots in development. When RSI strategies are enabled, shared RSI and, when required, Mogalef stop-loss indicators are calculated once per timeframe, including JIT-accelerated stop-loss bar scanning. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution kernels leverage shared inlined Numba helpers for crossover detection, trade math, and candidate screening. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
