@@ -11,9 +11,9 @@ The analyzer downloads financial asset prices from Yahoo Finance, converts the e
 The project follows High Performance Practices, using concurrent symbol processing and CPU-optimized JIT kernels. Daily and weekly analyses for each symbol are evaluated sequentially within its worker. Its external runtime infrastructure is supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
 The fully operational results can be visited for public use: 
+- [All Ratios](https://radar.ndromero.com/public/dashboard/6e547cac-cbc3-4354-97c3-6745d8540d83?gain_prob=0.51&profit_vs_change=-0.20&security=&signals=2&strategy=&time_frame=#theme=night)
 - [Ratios for Stocks](https://radar.ndromero.com/public/dashboard/147ee420-badb-451c-a2d5-c30e78688ed0?profit_vs_change=&security=&strategy=&tab=6-day---open-----%7C#theme=night) 
 - [Ratios for Crypto](https://radar.ndromero.com/public/dashboard/0af531b3-df15-4aa4-a665-69704e95451e?profit_vs_change=&security=&strategy=&tab=10-day-open-----%7C#theme=night)
-- [All Ratios](https://radar.ndromero.com/public/dashboard/6e547cac-cbc3-4354-97c3-6745d8540d83?gain_prob=0.51&profit_vs_change=-0.20&security=&signals=2&strategy=&time_frame=#theme=night)
 
 ## Features
 - **Hybrid Data Architecture**:
@@ -208,26 +208,11 @@ Project settings are managed by the `Settings` class, implemented as a process-l
 | `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options passed to the connection                          | unset                         |
 
 ## Docker
-Containerization is available for the application environment. The multi-stage image builds the TA-Lib C library inside the container, eliminating host setup requirements.
+Containerization is available for the application environment. The multi-stage image builds the TA-Lib C library inside the container, eliminating host setup requirements. Running is envisaged through `docker compose`.
 
 ### Build and Run
 ```bash
 docker build -t radar-core:dev-0.5.0 -f docker/Dockerfile .
-```
-
-Run with Docker (connecting to PostgreSQL):
-```powershell
-docker run --rm `
-    -e POSTGRES_HOST=host.docker.internal `
-    -e POSTGRES_PORT=5432 `
-    -e POSTGRES_DB=radar `
-    -e POSTGRES_USER=postgres `
-    -e POSTGRES_PASSWORD=your_password `
-    -e RADAR_SETTING_FILE=/home/default/app/settings.yml `
-    -e RADAR_ENABLE_FILE_LOGGING=false `
-    -e RADAR_LOG_LEVEL=20 `
-    -e RADAR_MAX_WORKERS=4 `
-    radar-core:dev-0.5.0
 ```
 
 ### Docker Compose
