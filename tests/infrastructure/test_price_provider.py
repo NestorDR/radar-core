@@ -942,3 +942,159 @@ def test_post_market_close_cache_eligible_in_both_environments(tmp_path):
     provider_.app_environment = 'dev'
     assert provider_._is_cache_eligible(mapping_, post_close_now_) is True
 
+
+def test_get_prices_updates_end_date_from_now():
+    """
+    GIVEN a PriceProvider instance with an initial default end_date
+    WHEN get_prices is called with a specific evaluation datetime
+    THEN self.end_date is updated to match the injected datetime's date plus 1 day.
+    """
+    provider_ = PriceProvider()
+    custom_now_ = datetime(2025, 6, 15, 10, 0, tzinfo=provider_._cache_settings['timezone'])
+    with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value={'SPY': 'SPY'}), \
+         patch.object(provider_, '_is_cache_eligible', return_value=False), \
+         patch('radar_core.infrastructure.price_provider.yf.download', return_value=pd.DataFrame()):
+        provider_.get_prices(['SPY'], now=custom_now_)
+
+    assert provider_.end_date == date(2025, 6, 16)
+
+
+def test_refresh_cache_subset_slicing(tmp_path):
+    """
+    GIVEN a cache containing multiple symbols ('SPY' and 'QQQ')
+    WHEN _refresh_cache is called for a single symbol subset ('SPY')
+    THEN it returns data for only the requested symbol and leaves cache intact.
+    """
+    cache_ = PriceCache(tmp_path)
+    provider_ = PriceProvider()
+    provider_._price_cache = cache_
+    tz_ = provider_._cache_settings['timezone']
+    eval_now_ = datetime(2026, 1, 5, 10, 30, tzinfo=tz_)
+
+    # Cache has 2 symbols
+    full_mapping_ = {'SPY': 'SPY', 'QQQ': 'QQQ'}
+    meta_ = PriceCacheMetadata(
+        symbol_to_ticker=full_mapping_,
+        start_date=str(provider_.start_date),
+        session_date='2026-01-05',
+        generation_id='gen-subset',
+        is_complete=True,
+        updated_at_utc=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc).isoformat(),
+    )
+    cache_df_ = pl.DataFrame({
+        'Date': [date(2026, 1, 2), date(2026, 1, 2)],
+        'Open': [100.0, 200.0],
+        'High': [105.0, 205.0],
+        'Low': [99.0, 199.0],
+        'Close': [104.0, 204.0],
+        'Volume': [1000, 2000],
+        'Symbol': ['SPY', 'QQQ'],
+    }).with_columns([
+        pl.col('Date').cast(pl.Date),
+        pl.col('Symbol').cast(pl.Categorical),
+    ])
+    cache_.save(cache_df_, meta_)
+
+    # Request only 'SPY'
+    subset_mapping_ = {'SPY': 'SPY'}
+    spy_today_df_ = pd.DataFrame(
+        {'Open': [104.0], 'High': [106.0], 'Low': [103.0], 'Close': [105.0], 'Volume': [1500]},
+        index=[pd.Timestamp('2026-01-05')]
+    )
+    multi_today_df_ = pd.concat({'SPY': spy_today_df_}, axis=1)
+
+    with patch('radar_core.infrastructure.price_provider.yf.download', return_value=multi_today_df_):
+        refreshed_ = provider_._refresh_cache(subset_mapping_, ['SPY'], eval_now_)
+
+    assert refreshed_ is not None
+    assert list(refreshed_.keys()) == ['SPY']
+    assert refreshed_['SPY'].height == 2
+    assert refreshed_['SPY']['Date'].to_list() == [date(2026, 1, 2), date(2026, 1, 5)]
+
+
+def test_refresh_cache_ticker_download_failure_fallback_to_history(tmp_path):
+    """
+    GIVEN a cache containing multiple symbols ('SPY' and 'QQQ')
+    WHEN current-day download for 'QQQ' returns empty data
+    THEN it falls back to cached historical prices for 'QQQ' while updating 'SPY'.
+    """
+    cache_ = PriceCache(tmp_path)
+    provider_ = PriceProvider()
+    provider_._price_cache = cache_
+    tz_ = provider_._cache_settings['timezone']
+    eval_now_ = datetime(2026, 1, 5, 11, 0, tzinfo=tz_)
+
+    mapping_ = {'SPY': 'SPY', 'QQQ': 'QQQ'}
+    meta_ = PriceCacheMetadata(
+        symbol_to_ticker=mapping_,
+        start_date=str(provider_.start_date),
+        session_date='2026-01-05',
+        generation_id='gen-fallback',
+        is_complete=True,
+        updated_at_utc=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc).isoformat(),
+    )
+    cache_df_ = pl.DataFrame({
+        'Date': [date(2026, 1, 2), date(2026, 1, 2)],
+        'Open': [100.0, 200.0],
+        'High': [105.0, 205.0],
+        'Low': [99.0, 199.0],
+        'Close': [104.0, 204.0],
+        'Volume': [1000, 2000],
+        'Symbol': ['SPY', 'QQQ'],
+    }).with_columns([
+        pl.col('Date').cast(pl.Date),
+        pl.col('Symbol').cast(pl.Categorical),
+    ])
+    cache_.save(cache_df_, meta_)
+
+    # yfinance returns SPY, but QQQ is empty
+    spy_today_df_ = pd.DataFrame(
+        {'Open': [104.0], 'High': [106.0], 'Low': [103.0], 'Close': [105.0], 'Volume': [1500]},
+        index=[pd.Timestamp('2026-01-05')]
+    )
+    qqq_empty_df_ = pd.DataFrame(
+        {'Open': [], 'High': [], 'Low': [], 'Close': [], 'Volume': []},
+        index=pd.DatetimeIndex([])
+    )
+    today_df_ = pd.concat({'SPY': spy_today_df_, 'QQQ': qqq_empty_df_}, axis=1)
+
+    with patch('radar_core.infrastructure.price_provider.yf.download', return_value=today_df_):
+        refreshed_ = provider_._refresh_cache(mapping_, ['SPY', 'QQQ'], eval_now_)
+
+    assert refreshed_ is not None
+    assert set(refreshed_.keys()) == {'SPY', 'QQQ'}
+    # SPY has today's bar appended (height 2)
+    assert refreshed_['SPY'].height == 2
+    assert refreshed_['SPY']['Date'][-1] == date(2026, 1, 5)
+    # QQQ fell back to cached historical prices (height 1, ending on Jan 2)
+    assert refreshed_['QQQ'].height == 1
+    assert refreshed_['QQQ']['Date'][-1] == date(2026, 1, 2)
+
+
+def test_save_cache_persists_symbol_as_categorical(tmp_path):
+    """
+    GIVEN processed symbol results
+    WHEN _save_cache persists DataFrame to disk
+    THEN the 'Symbol' column in the Parquet file is stored with Categorical data type.
+    """
+    cache_ = PriceCache(tmp_path)
+    provider_ = PriceProvider()
+    provider_._price_cache = cache_
+    mapping_ = {'SPY': 'SPY'}
+    df_ = pl.DataFrame({
+        'Date': [date(2026, 1, 5)],
+        'Open': [100.0],
+        'High': [105.0],
+        'Low': [99.0],
+        'Close': [104.0],
+        'Volume': [1000],
+        'PercentChange': [0.0],
+    }).with_columns(pl.col('Date').cast(pl.Date))
+
+    provider_._save_cache(mapping_, {'SPY': df_}, '2026-01-05')
+
+    saved_df_ = cache_.read_data()
+    assert saved_df_ is not None
+    assert saved_df_['Symbol'].dtype == pl.Categorical
+
+

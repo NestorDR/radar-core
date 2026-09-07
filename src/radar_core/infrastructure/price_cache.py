@@ -74,7 +74,11 @@ class PriceCacheMetadata:
             return False, 'Cache is incomplete'
         if self.start_date != start_date:
             return False, f'Start date mismatch ({self.start_date} != {start_date})'
-        if self.symbol_to_ticker != symbol_to_ticker:
+        is_subset_ = all(
+            symbol_ in self.symbol_to_ticker and self.symbol_to_ticker[symbol_] == ticker_
+            for symbol_, ticker_ in symbol_to_ticker.items()
+        )
+        if not is_subset_:
             return False, 'Symbol or ticker mapping mismatch'
         if self.session_date != session_date:
             return False, f'Session date mismatch ({self.session_date} != {session_date})'

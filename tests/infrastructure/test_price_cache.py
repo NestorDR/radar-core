@@ -202,6 +202,29 @@ def test_is_compatible_rejects_mapping_mismatch():
     assert 'Symbol or ticker mapping mismatch' in reason_
 
 
+def test_is_compatible_accepts_subset_mapping():
+    """
+    GIVEN a metadata entry with multiple cached symbols {'SPY': 'SPY', 'QQQ': 'QQQ'}
+    WHEN requested with a subset of cached symbols {'SPY': 'SPY'}
+    THEN it returns True with reason 'Compatible'.
+    """
+    metadata_ = PriceCacheMetadata(
+        symbol_to_ticker={'SPY': 'SPY', 'QQQ': 'QQQ'},
+        start_date='2020-01-01',
+        session_date='2026-09-05',
+        generation_id='generation-1',
+        is_complete=True,
+        updated_at_utc='2026-09-05T23:00:00+00:00',
+    )
+    is_compat_, reason_ = metadata_.is_compatible(
+        symbol_to_ticker={'SPY': 'SPY'},
+        start_date='2020-01-01',
+        session_date='2026-09-05',
+    )
+    assert is_compat_ is True
+    assert reason_ == 'Compatible'
+
+
 def test_is_compatible_rejects_session_date_mismatch():
     """
     GIVEN a metadata entry from session_date '2026-09-04'

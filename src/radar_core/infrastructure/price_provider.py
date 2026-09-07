@@ -150,7 +150,7 @@ class PriceProvider:
             combined_df_ = pl.concat([
                 symbol_df_.drop('PercentChange').with_columns(pl.lit(symbol_).alias('Symbol'))
                 for symbol_, symbol_df_ in results.items()
-            ])
+            ]).with_columns(pl.col('Symbol').cast(pl.Categorical))
             # Record metadata with the provided local session date
             metadata_ = PriceCacheMetadata(
                 symbol_to_ticker=symbol_to_ticker_map,
@@ -209,16 +209,17 @@ class PriceProvider:
             return False
 
         try:
-            updated_at_market_tz_ = datetime.fromisoformat(metadata_.updated_at_utc).astimezone(self._cache_settings['timezone'])
+            updated_at_market_tz_ = datetime.fromisoformat(metadata_.updated_at_utc).astimezone(
+                self._cache_settings['timezone'])
         except (ValueError, TypeError) as exc_:
             logger_.warning(f'Failed to parse price cache timestamp: {exc_}. Bypassing cache.')
             return False
 
         # Once the trading session opens (`09:30`), historical bars are immutable; only the current session's bar fluctuates
         is_trading_started_ = (
-            now.weekday() < 5
-            and self._cache_settings['trading_start'] <= now.time()
-            and updated_at_market_tz_.time() >= self._cache_settings['trading_start']
+                now.weekday() < 5
+                and self._cache_settings['trading_start'] <= now.time()
+                and updated_at_market_tz_.time() >= self._cache_settings['trading_start']
         )
         if is_trading_started_:
             return True
@@ -228,7 +229,6 @@ class PriceProvider:
             return 0 <= metadata_.age_in_minutes(now) <= self._cache_settings['dev_max_age_minutes']
 
         return False
-
 
     def _refresh_cache(
             self,
@@ -284,12 +284,13 @@ class PriceProvider:
                 logger_.warning(message_)
                 return None
 
-            # Partition cached data by Symbol for O(1) lookups and release original cache frame
-            # Result is a dictionary mapping { 'symbol': DataFrame(Date, OHLCV), ... }
+            # Filter cached DataFrame to only the requested symbols and partition for O(1) lookups
+            requested_symbols_ = list(symbol_to_ticker_map.keys())
             empty_history_template_ = cached_df_.clear().drop('Symbol')
             history_by_symbol_ = {
-                symbol_: partition_df_.drop('Symbol')
+                str(symbol_): partition_df_.drop('Symbol')
                 for (symbol_,), partition_df_ in cached_df_.filter(pl.col('Date') != current_date_)
+                .filter(pl.col('Symbol').is_in(requested_symbols_))
                 .partition_by('Symbol', as_dict=True)
                 .items()
             }
@@ -297,15 +298,25 @@ class PriceProvider:
 
             results_: dict[str, pl.DataFrame] = {}
             for symbol_, ticker_ in symbol_to_ticker_map.items():
-                if ticker_ not in today_df_.columns:
-                    message_ = f'Ticker {ticker_} missing from current-day download.'
-                    verbose(message_, WARNING, verbosity_level)
-                    logger_.warning(message_)
-                    return None
+                ticker_df_ = today_df_[ticker_].dropna(how='all') if ticker_ in today_df_.columns else pd.DataFrame()
 
-                ticker_df_ = today_df_[ticker_].dropna(how='all')
                 if ticker_df_.empty:
-                    message_ = f'No current-day data returned for {symbol_} (ticker: {ticker_}).'
+                    history_ = history_by_symbol_.get(symbol_)
+                    if history_ is not None and history_.height > 0:
+                        message_ = (
+                            f'No current-day data returned for {symbol_}. Falling back to cached historical prices.'
+                        )
+                        verbose(message_, WARNING, verbosity_level)
+                        logger_.warning(message_)
+                        results_[symbol_] = (
+                            history_
+                            .sort('Date')
+                            .with_columns(_PERCENT_CHANGE_EXPR)
+                            .select(ORDERED_PRICE_COLS)
+                        )
+                        continue
+
+                    message_ = f'No current-day or cached data returned for {symbol_} (ticker: {ticker_}).'
                     verbose(message_, WARNING, verbosity_level)
                     logger_.warning(message_)
                     return None
@@ -358,6 +369,7 @@ class PriceProvider:
 
         tz_ = self._cache_settings['timezone']
         now_ = now.astimezone(tz_) if now.tzinfo is not None else now.replace(tzinfo=tz_)
+        self.end_date = now_.date() + timedelta(days=1)
 
         # Step 1: Translate internal symbols to provider tickers (currently only Yahoo Finance is supported)
         symbol_to_ticker_map_ = SecurityRepository(verbosity_level).map_symbol_to_ticker(symbols)

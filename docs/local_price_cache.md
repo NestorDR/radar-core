@@ -17,7 +17,7 @@
 
 Cache files are managed by `PriceCache` in the directory specified by `RADAR_PRICE_CACHE_DIR` (`/home/default/app/cache` by default):
 
-- **`price_cache_data.parquet`**: Clean, normalized daily OHLCV bars (`Date`, `Open`, `High`, `Low`, `Close`, `Volume`, `Symbol`). Derived metrics such as `PercentChange` are excluded from disk persistence and computed on demand in Polars when loaded into memory.
+- **`price_cache_data.parquet`**: Clean, normalized daily OHLCV bars (`Date`, `Open`, `High`, `Low`, `Close`, `Volume`, `Symbol`). The `Symbol` column is stored with dictionary encoding (`pl.Categorical`) to accelerate in-memory partitioning. Derived metrics such as `PercentChange` are excluded from disk persistence and computed on demand in Polars when loaded into memory.
 - **`price_cache_metadata.json`**: Operational metadata verifying cache validity and compatibility:
   - `symbol_to_ticker`: Exact mapping of internal security symbols to Yahoo Finance tickers.
   - `start_date`: Configured historical start date (ISO format `YYYY-MM-DD`).
@@ -29,7 +29,7 @@ Cache files are managed by `PriceCache` in the directory specified by `RADAR_PRI
 ### Compatibility & Age Evaluation
 
 - **Compatibility**: Verified via `PriceCacheMetadata.is_compatible(symbol_to_ticker, start_date, session_date)`:
-  - Validates that `is_complete` is True, `symbol_to_ticker` exactly matches the requested map, `start_date` matches the provider's configured start date, and `session_date` matches the current session date.
+  - Validates that `is_complete` is True, all requested symbols in `symbol_to_ticker` are a valid subset of cached symbols with matching tickers (`requested <= cached`), `start_date` matches the provider's configured start date, and `session_date` matches the current session date.
   - Returns a tuple `(is_compatible: bool, reason: str)`. When incompatible, the human-readable `reason` is logged directly by `PriceProvider`.
 - **Age Calculation**: Computed via `PriceCacheMetadata.age_in_minutes(now)`:
   - Encapsulates ISO timestamp parsing and timezone-aware delta calculations relative to the current market time.
@@ -96,14 +96,17 @@ The `_is_cache_eligible(symbol_to_ticker_map, now)` method is the sole gatekeepe
    - **Production (`RADAR_ENV!=dev`)**: Returns `False` outside the active session, forcing a complete download.
 
 ### Current-Day Refresh (`_refresh_cache`)
-
+ 
 When cache is eligible, `_refresh_cache(symbol_to_ticker_map, tickers, now)`:
 1. Loads cached historical data directly via `PriceCache.read_data()` (using memory mapping) without redundant metadata re-reads.
-2. Downloads the current session's bar from Yahoo Finance:
+2. Dynamically binds `self.end_date` to `now.date() + timedelta(days=1)`.
+3. Downloads the current session's bar from Yahoo Finance for requested tickers:
    `yf.download(tickers, current_date, self.end_date, threads=self.max_workers, ...)`
-3. Filters out the existing current-day bar and partitions historical data by `'Symbol'` in a single pass (`partition_by('Symbol', as_dict=True)`) for $O(1)$ dictionary lookups, immediately releasing the original cache DataFrame (`del cached_df_`).
-4. Extracts today's bar for each ticker, vertically combines historical rows with today's row, and recalculates `PercentChange` across the merged series.
-5. Retains the refreshed series in-memory for strategy analysis without calling `_save_cache()`. This ensures provisional intraday data is discarded at the end of the run and cannot pollute subsequent executions before official end-of-day market settlement.
+4. Filters the cached DataFrame strictly to the requested symbols and partitions historical data by `'Symbol'` in a single pass (`partition_by('Symbol', as_dict=True)`) for $O(1)$ dictionary lookups, immediately releasing the original cache DataFrame (`del cached_df_`).
+5. For each requested symbol:
+   - If today's bar was successfully fetched, vertically combines historical rows with today's row and recalculates `PercentChange`.
+   - **Fault-Tolerant Fallback**: If an individual ticker's current-day data is missing or empty (e.g. trading halt, data provider delay), `PriceProvider` logs a warning and falls back to the symbol's cached historical prices, ensuring the remaining universe continues uninterrupted.
+6. Retains the refreshed series in-memory for strategy analysis without calling `_save_cache()`. This ensures provisional intraday data is discarded at the end of the run and cannot pollute subsequent executions before official end-of-day market settlement.
 
 ### Fallback Policy
 
