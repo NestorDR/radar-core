@@ -5,6 +5,8 @@
 from datetime import datetime, timedelta, timezone
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG, ERROR, INFO, WARNING, getLogger
+# typing: provides runtime support for type hints
+from typing import Final
 # uuid: generates Universally Unique Identifiers.
 import uuid
 
@@ -29,6 +31,9 @@ from radar_core.settings import get_settings
 
 logger_ = getLogger(__name__)
 
+# Centralized percentage change expression for DRY computation across pipelines
+_PERCENT_CHANGE_EXPR: Final[pl.Expr] = (pl.col('Close').pct_change() * 100).alias('PercentChange')
+
 
 class PriceProvider:
     """
@@ -49,6 +54,7 @@ class PriceProvider:
         # Load application environment and price cache configuration
         settings_ = get_settings()
         self.app_environment = settings_.app_environment
+        self.max_workers = settings_.max_workers
         self._cache_settings = settings_.price_cache_kwargs
         self._price_cache = PriceCache(self._cache_settings['dir'])
         self.start_date = propose_start_dt(DAILY, long_term=long_term)
@@ -56,7 +62,8 @@ class PriceProvider:
         self.verbosity_level = verbosity_level
 
     def _process_dataframe(
-            self, symbol: str,
+            self,
+            symbol: str,
             prices_df: pd.DataFrame,
             verbosity_level: int = DEBUG
     ) -> pl.DataFrame:
@@ -72,48 +79,40 @@ class PriceProvider:
         """
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
-        # Reset Date index as a column Date
-        prices_df = prices_df.reset_index()
-
-        # Make sure that only required columns are part of the Pandas Dataframe to avoid future conversion issues
-        prices_df = prices_df.loc[:, ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
-
-        # Normalize dtypes to numpy-backed ones and avoid use of `pyarrow`
-        # Date -> datetime64[ns] (naive), OHLC -> float64
-        prices_df = prices_df.astype({
-            'Date': 'datetime64[ns]',
-            'Open': 'float64',
-            'High': 'float64',
-            'Low': 'float64',
-            'Close': 'float64',
-        })
-
-        # Volume -> int64 if possible else float64 (because NaN cannot live in int64)
-        prices_df['Volume'] = (
-            prices_df['Volume'].astype('float64')
-            if prices_df['Volume'].isna().any()
-            else prices_df['Volume'].astype('int64')
+        # Extract naive datetime64[ns] date array from index or column directly without intermediate DataFrame
+        date_array_ = (
+            prices_df['Date'].to_numpy(dtype='datetime64[ns]', copy=False)
+            if 'Date' in prices_df.columns
+            else prices_df.index.to_numpy(dtype='datetime64[ns]', copy=False)
         )
 
-        # Convert to Polars, filter, cast, and compute percentage change in a single optimized context
+        # Extract raw NumPy arrays with to_numpy(copy=False) directly from the Series/Index without intermediate DataFrame
+        raw_data_ = {
+            'Date': date_array_,
+            'Open': prices_df['Open'].to_numpy(dtype=float, copy=False),
+            'High': prices_df['High'].to_numpy(dtype=float, copy=False),
+            'Low': prices_df['Low'].to_numpy(dtype=float, copy=False),
+            'Close': prices_df['Close'].to_numpy(dtype=float, copy=False),
+            'Volume': prices_df['Volume'].to_numpy(copy=False),
+        }
+
+        # Convert to Polars directly, filter invalid rows, cast types, and compute percentage change
         # Note: rows without 'Close' prices are removed, and OHLC prices are rounded to 4 decimals
         prices_pl_df_ = (
-            pl.from_pandas(prices_df)
-            .filter(pl.col('Close').is_not_nan())
+            pl.DataFrame(raw_data_)
+            .filter(pl.col('Close').is_not_nan() & pl.col('Close').is_not_null())
             .with_columns([
                 pl.col('Date').cast(pl.Date),
                 pl.col('Open').round(4),
                 pl.col('High').round(4),
                 pl.col('Low').round(4),
                 pl.col('Close').round(4),
+                pl.col('Volume').cast(pl.Int64, strict=False),
             ])
-            .with_columns(
-                # Calculate percentage change
-                (pl.col('Close').pct_change() * 100).alias('PercentChange')
-            )
+            .with_columns(_PERCENT_CHANGE_EXPR)
         )
 
-        # To check if a DataFrame is empty, use the shape attribute and check if the row count is zero
+        # To check if a DataFrame is empty, use the height attribute and check if the row count is zero
         if prices_pl_df_.height > 0:
             # Report the last Close price
             last_close_ = prices_pl_df_['Close'][-1]
@@ -149,9 +148,9 @@ class PriceProvider:
         try:
             # Exclude derived PercentChange from persistence and identify rows with their symbol
             combined_df_ = pl.concat([
-                df_.drop('PercentChange').with_columns(pl.lit(sym_).alias('Symbol'))
-                for sym_, df_ in results.items()
-            ])
+                symbol_df_.drop('PercentChange').with_columns(pl.lit(symbol_).alias('Symbol'))
+                for symbol_, symbol_df_ in results.items()
+            ]).with_columns(pl.col('Symbol').cast(pl.Categorical))
             # Record metadata with the provided local session date
             metadata_ = PriceCacheMetadata(
                 symbol_to_ticker=symbol_to_ticker_map,
@@ -163,6 +162,7 @@ class PriceProvider:
             )
             # Atomically persist data and metadata to disk
             self._price_cache.save(combined_df_, metadata_)
+            del combined_df_
             message_ = f'Price cache saved for {len(results)} symbols.'
             verbose(message_, INFO, verbosity_level)
             logger_.info(message_)
@@ -208,14 +208,23 @@ class PriceProvider:
             logger_.info(message_)
             return False
 
-        # Active market window: both environments refresh current-day bar
-        is_trading_window_ = (now.weekday() < 5) and (
-                self._cache_settings['window_start'] <= now.time() <= self._cache_settings['window_end']
+        try:
+            updated_at_market_tz_ = datetime.fromisoformat(metadata_.updated_at_utc).astimezone(
+                self._cache_settings['timezone'])
+        except (ValueError, TypeError) as exc_:
+            logger_.warning(f'Failed to parse price cache timestamp: {exc_}. Bypassing cache.')
+            return False
+
+        # Once the trading session opens (`09:30`), historical bars are immutable; only the current session's bar fluctuates
+        is_trading_started_ = (
+                now.weekday() < 5
+                and self._cache_settings['trading_start'] <= now.time()
+                and updated_at_market_tz_.time() >= self._cache_settings['trading_start']
         )
-        if is_trading_window_:
+        if is_trading_started_:
             return True
 
-        # Outside market window: dev mode avoids frequent downloads using dev_max_age_minutes TTL
+        # In development mode, also allow reuse within dev_max_age_minutes TTL (e.g. pre-market or weekends)
         if self.app_environment == 'dev':
             return 0 <= metadata_.age_in_minutes(now) <= self._cache_settings['dev_max_age_minutes']
 
@@ -225,22 +234,20 @@ class PriceProvider:
             self,
             symbol_to_ticker_map: dict[str, str],
             tickers: list[str],
-            max_workers: int,
             now: datetime,
             verbosity_level: int = DEBUG
     ) -> dict[str, pl.DataFrame] | None:
         """
         Updates cached historical data by downloading only the current session's OHLCV bar from Yahoo Finance,
-        replacing today's row, updating percentage changes, and saving the updated cache to disk.
+        replacing today's row, and updating percentage changes in memory without modifying the on-disk cache.
 
         :param symbol_to_ticker_map: Mapping of symbols to provider tickers.
         :param tickers: List of provider tickers.
-        :param max_workers: Maximum worker threads for yfinance download.
         :param now: Current datetime in market timezone.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
 
-        :return: Dictionary of merged DataFrames per symbol, or None if download/merge fails.
+        :return: A dictionary mapping symbol to updated Polars DataFrame, or None if refresh failed.
         """
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
@@ -269,7 +276,7 @@ class PriceProvider:
             # multi_level_index = True
             today_df_ = yf.download(tickers, current_date_, self.end_date,
                                     auto_adjust=True, progress=bool(verbosity_level == DEBUG),
-                                    threads=max_workers, group_by='ticker')
+                                    threads=self.max_workers, group_by='ticker')
 
             if today_df_.empty:
                 message_ = 'Current-day download returned an empty DataFrame.'
@@ -277,39 +284,56 @@ class PriceProvider:
                 logger_.warning(message_)
                 return None
 
+            # Filter cached DataFrame to only the requested symbols and partition for O(1) lookups
+            requested_symbols_ = list(symbol_to_ticker_map.keys())
+            empty_history_template_ = cached_df_.clear().drop('Symbol')
+            history_by_symbol_ = {
+                str(symbol_): partition_df_.drop('Symbol')
+                for (symbol_,), partition_df_ in cached_df_.filter(pl.col('Date') != current_date_)
+                .filter(pl.col('Symbol').is_in(requested_symbols_))
+                .partition_by('Symbol', as_dict=True)
+                .items()
+            }
+            del cached_df_
+
             results_: dict[str, pl.DataFrame] = {}
             for symbol_, ticker_ in symbol_to_ticker_map.items():
-                if ticker_ not in today_df_.columns:
-                    message_ = f'Ticker {ticker_} missing from current-day download.'
-                    verbose(message_, WARNING, verbosity_level)
-                    logger_.warning(message_)
-                    return None
+                ticker_df_ = today_df_[ticker_].dropna(how='all') if ticker_ in today_df_.columns else pd.DataFrame()
 
-                ticker_df_ = today_df_[ticker_].dropna(how='all')
                 if ticker_df_.empty:
-                    message_ = f'No current-day data returned for {symbol_} (ticker: {ticker_}).'
+                    history_ = history_by_symbol_.get(symbol_)
+                    if history_ is not None and history_.height > 0:
+                        message_ = (
+                            f'No current-day data returned for {symbol_}. Falling back to cached historical prices.'
+                        )
+                        verbose(message_, WARNING, verbosity_level)
+                        logger_.warning(message_)
+                        results_[symbol_] = (
+                            history_
+                            .sort('Date')
+                            .with_columns(_PERCENT_CHANGE_EXPR)
+                            .select(ORDERED_PRICE_COLS)
+                        )
+                        continue
+
+                    message_ = f'No current-day or cached data returned for {symbol_} (ticker: {ticker_}).'
                     verbose(message_, WARNING, verbosity_level)
                     logger_.warning(message_)
                     return None
 
                 # Process today's row and combine with historical rows
                 today_row_ = self._process_dataframe(symbol_, ticker_df_).drop('PercentChange')
-                history_ = cached_df_.filter(
-                    (pl.col('Symbol') == symbol_) & (pl.col('Date') != current_date_)
-                ).drop('Symbol')
+                history_ = history_by_symbol_.get(symbol_, empty_history_template_)
 
                 # Recompute PercentChange across the merged series
                 results_[symbol_] = (
                     pl.concat([history_, today_row_], how='vertical_relaxed')
                     .sort('Date')
-                    .with_columns(
-                        (pl.col('Close').pct_change() * 100).alias('PercentChange')
-                    )
+                    .with_columns(_PERCENT_CHANGE_EXPR)
                     .select(ORDERED_PRICE_COLS)
                 )
 
-            self._save_cache(symbol_to_ticker_map, results_, session_date=str(current_date_))
-            message_ = f'Price cache successfully refreshed for {len(results_)} symbols.'
+            message_ = f'Price cache successfully refreshed in memory for {len(results_)} symbols.'
             verbose(message_, INFO, verbosity_level)
             logger_.info(message_)
             return results_
@@ -324,14 +348,14 @@ class PriceProvider:
     def get_prices(
             self,
             symbols: list[str],
-            max_workers: int = 4,
+            now: datetime,
             verbosity_level: int = DEBUG
     ) -> dict[str, pl.DataFrame]:
         """
         Downloads historical prices for a list of symbols concurrently using yfinance built-in capabilities.
 
         :param symbols: A list of security symbols to download (e.g., ['SPY', 'NDQ']).
-        :param max_workers: The maximum number of threads yfinance should use for the concurrent downloads.
+        :param now: Current evaluation datetime in or convertible to the configured market timezone.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
 
@@ -343,6 +367,10 @@ class PriceProvider:
             logger_.warning('List of symbols empty.')
             return {}
 
+        tz_ = self._cache_settings['timezone']
+        now_ = now.astimezone(tz_) if now.tzinfo is not None else now.replace(tzinfo=tz_)
+        self.end_date = now_.date() + timedelta(days=1)
+
         # Step 1: Translate internal symbols to provider tickers (currently only Yahoo Finance is supported)
         symbol_to_ticker_map_ = SecurityRepository(verbosity_level).map_symbol_to_ticker(symbols)
         tickers_ = list(symbol_to_ticker_map_.values())
@@ -352,12 +380,11 @@ class PriceProvider:
             return {}
 
         # Step 2: In either environment, refresh price cache if eligible
-        now_ = datetime.now(self._cache_settings['timezone'])
         if self._is_cache_eligible(symbol_to_ticker_map_, now_):
             message_ = 'Price cache is eligible. Attempting current-day refresh...'
             verbose(message_, INFO, verbosity_level)
             logger_.info(message_)
-            refreshed_ = self._refresh_cache(symbol_to_ticker_map_, tickers_, max_workers, now_, verbosity_level)
+            refreshed_ = self._refresh_cache(symbol_to_ticker_map_, tickers_, now_, verbosity_level)
             if refreshed_ is not None:
                 return refreshed_
             logger_.warning('Current-day refresh failed; falling back to full download.')
@@ -381,7 +408,7 @@ class PriceProvider:
             # multi_level_index = True
             multi_symbol_df_ = yf.download(tickers_, self.start_date, self.end_date,
                                            auto_adjust=True, progress=bool(verbosity_level == DEBUG),
-                                           threads=max_workers, group_by='ticker')
+                                           threads=self.max_workers, group_by='ticker')
 
             if multi_symbol_df_.empty:
                 logger_.warning('Download returned an empty DataFrame for all tickers.')
@@ -392,18 +419,18 @@ class PriceProvider:
             logger_.info(message_)
 
             # Step 4: Process results, mapping tickers back to original symbols and converting Pandas to Polars
-            for symbol, ticker in symbol_to_ticker_map_.items():
+            for symbol_, ticker_ in symbol_to_ticker_map_.items():
                 # For single ticker downloads, yfinance might not use multi-level columns unless group_by is used.
                 # The current code handles both multi-level and single-level column structures.
-                if ticker not in multi_symbol_df_.columns:
-                    logger_.warning(f'No data downloaded for symbol: {symbol} (ticker: {ticker}).')
+                if ticker_ not in multi_symbol_df_.columns:
+                    logger_.warning(f'No data downloaded for symbol: {symbol_} (ticker: {ticker_}).')
                     continue
 
-                symbol_df_ = multi_symbol_df_[ticker].dropna(how='all')
+                symbol_df_ = multi_symbol_df_[ticker_].dropna(how='all')
 
                 if not symbol_df_.empty:
                     # Convert Pandas DataFrame into a Polars DataFrame.
-                    results_[symbol] = self._process_dataframe(symbol, symbol_df_)
+                    results_[symbol_] = self._process_dataframe(symbol_, symbol_df_)
 
         except Exception as e_:
             logger_.exception(f'An exception occurred during download: {e_}', exc_info=True)
@@ -446,7 +473,8 @@ if __name__ == '__main__':
     # --- Test Case 1: Download a single symbol that requires translation ---
     print('--- Testing single download ---')
     test_symbol_ = 'QQQ'
-    prices_data_ = price_provider_.get_prices([test_symbol_])
+    init_dt_ = datetime.now()  # Identify the date and time when the process is started
+    prices_data_ = price_provider_.get_prices([test_symbol_], init_dt_)
     if test_symbol_ in prices_data_:
         data_ = prices_data_[test_symbol_]
         print(f'{test_symbol_} - Shape: {data_.shape}')
@@ -456,8 +484,7 @@ if __name__ == '__main__':
     # --- Test Case 2: Download multiple symbols ---
     print('\n--- Testing multiple symbols download ---')
     test_symbols_ = settings.symbols
-    init_dt_ = datetime.now()  # Identify the date and time when the process is started
-    prices_data_ = price_provider_.get_prices(test_symbols_)
+    prices_data_ = price_provider_.get_prices(test_symbols_, init_dt_)
     end_dt_ = datetime.now()
 
     print('\nConcurrent download complete. Results:')

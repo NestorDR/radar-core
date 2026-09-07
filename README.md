@@ -22,7 +22,7 @@ The fully operational results can be visited for public use:
 - **Concurrent Analysis**: Multi-symbol processing using Python's `ProcessPoolExecutor`.
 - **Yahoo Finance Integration**: Automated download of historical daily prices and local weekly aggregation.
 - **Technical Analysis & Strategies**: Built-in support for Moving Averages (SMA), RSI-based variants (RSI SMA, Two Bands, Rollercoaster), and Mogalef Bands used as stop-loss levels for RSI band strategies.
-- **Local Price Caching**: Persistent Parquet OHLCV caching with JSON metadata, atomic staged writes, production market-window eligibility, and development age-based reuse to eliminate redundant full downloads.
+- **Local Price Caching**: Persistent Parquet OHLCV caching to eliminate redundant external downloads (see [Price Cache Guide](docs/local_price_cache.md)).
 - **Performance Metrics**: Detailed profiling including net profit, success rate, mathematical expectation, trade averages, and exposure.
 - **Database Synchronization**: Transactional management of trading ratios and optional cleanup of unlisted symbols via `psycopg3`.
 - **Configurable settings**: Symbols, shortable assets, verbosity, concurrency, and enabled strategies.
@@ -77,51 +77,33 @@ The system follows a three-tier performance model:
 
 ```mermaid
 flowchart TD
-    subgraph CLI ["CLI & Configuration Entry"]
-        Main["__main__.py / CLI"] --> Settings["Settings (settings.yml & Environment Variables)"]
-        Settings --> Analyzer["Analyzer (Orchestrator)"]
+    CLI["CLI & Settings"] --> Analyzer["Analyzer Orchestrator"]
+
+    subgraph Tier1 ["1. Adaptation & Ingestion Layer"]
+        PriceProvider["PriceProvider<br>(Yahoo Finance API / Parquet Cache)"]
     end
 
-    subgraph DataIngestion ["1. Adaptation & Ingestion Layer"]
-        Analyzer --> PriceProvider["PriceProvider"]
-        PriceProvider --> SymbolMapping["Symbol & Ticker Translation"]
-        SymbolMapping -->|psycopg3| DB[("PostgreSQL Database")]
-        PriceProvider --> PriceCache[("Local Price Cache<br>(Parquet + JSON)")]
-        PriceProvider -->|yfinance / Pandas| YFinance["Yahoo Finance API"]
+    subgraph Tier2 ["2. In-Memory Storage Layer (Polars)"]
+        PolarsData["Polars DataFrames<br>(Daily / Weekly & Technical Indicators)"]
     end
 
-    subgraph Concurrency ["Parallel Worker Dispatch"]
-        Analyzer -->|ProcessPoolExecutor| ParallelWorkers["Worker Processes (spawn context)"]
+    subgraph Tier3 ["3. Execution & Calculation Layer (NumPy + Numba)"]
+        Workers["Worker Pool (ProcessPoolExecutor)"] --> JITKernels["Numba JIT-Compiled Strategy Kernels<br>(SMA, RSI, Stop Loss)"]
     end
 
-    subgraph Storage ["2. In-Memory Storage & Processing Layer"]
-        YFinance -->|Convert to Polars| DailyPolarsData["Daily Polars DataFrames"]
-        DailyPolarsData -->|Submit per-symbol frame| ParallelWorkers
-        ParallelWorkers -->|Derive weekly locally with Polars| PolarsWeeklyData["Weekly Polars DataFrames"]
-        ParallelWorkers -->|Calculate when RSI strategies are enabled| TechnicalIndicators["Shared RSI/Mogalef Indicators"]
-        PolarsWeeklyData --> TechnicalIndicators
-        TechnicalIndicators --> StopLoss["Stop-Loss Identification (JIT-compiled kernels)"]
+    subgraph DBBoundary ["Persistence Boundary (psycopg3)"]
+        DB[("PostgreSQL Database")]
     end
 
-    subgraph Execution ["3. Execution & Calculation Layer"]
-        ParallelWorkers --> StrategyOrch["Per-symbol Strategy Orchestration (inside worker)"]
-        StopLoss --> StrategyOrch
-        StrategyOrch --> MA["MovingAverage (SMA/RSI SMA, JIT-compiled kernels)"]
-        StrategyOrch --> RSI2B["RsiTwoBands (JIT-compiled kernels)"]
-        StrategyOrch --> RSIRC["RsiRollerCoaster (JIT-compiled kernels)"]
-    end
-
-    subgraph Persistence ["Persistence Boundary"]
-        MA --> RatiosOutput["Ratios Data Objects"]
-        RSI2B --> RatiosOutput
-        RSIRC --> RatiosOutput
-        RatiosOutput --> RatioRepo["RatioRepository"]
-        RatioRepo -->|Transactional Upsert & Cleanup| RatioCrud["RatioCrud (psycopg3)"]
-        RatioCrud -->|Parameterized Queries| DB
-    end
+    Analyzer --> PriceProvider
+    PriceProvider --> PolarsData
+    Analyzer --> Workers
+    PolarsData --> Workers
+    JITKernels -->|Transactional Upsert| DB
+    PriceProvider -.->|Symbol Auto-Registration| DB
 ```
 
-For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, and evaluates only the strategies enabled in `src/radar_core/settings.yml`. Before requesting historical prices from Yahoo Finance, `PriceProvider` evaluates local cache eligibility via `PriceCache`, loading cached Parquet data and refreshing current-day rows during market hours or reusing fresh snapshots in development. When RSI strategies are enabled, shared RSI and, when required, Mogalef stop-loss indicators are calculated once per timeframe, including JIT-accelerated stop-loss bar scanning. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution kernels leverage shared inlined Numba helpers for crossover detection, trade math, and candidate screening. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
+For each symbol, `analyzer.py` downloads daily prices, derives weekly prices with Polars, and evaluates only the strategies enabled in `settings.yml`. Before requesting historical prices from Yahoo Finance, `PriceProvider` checks a local Parquet cache (`PriceCache`) to eliminate redundant downloads when eligible (see [docs/local_price_cache.md](docs/local_price_cache.md)). When RSI strategies are enabled, shared RSI and, when required, Mogalef stop-loss indicators are calculated once per timeframe, including JIT-accelerated stop-loss bar scanning. `PriceProvider` uses `SecurityRepository` to translate internal symbols to Yahoo Finance tickers—auto-registering missing symbols from Yahoo Finance into PostgreSQL—and guards against empty ticker downloads before converting the Pandas response to Polars. Strategy execution kernels leverage shared inlined Numba helpers for crossover detection, trade math, and candidate screening. Strategy execution results (`Ratios`) are managed transactionally by `RatioRepository`, which flags in-process evaluations and atomically persists positive ratios while purging stale flagged rows.
 
 Mogalef bands are used directly as `LongStopLoss` and `ShortStopLoss` for the RSI Two Bands and Rollercoaster strategies. Those strategies retain `identify_old` for baseline comparison while `identify` runs the fused implementation. Serialized current-indicator metadata (`Ratios.current_indicators`) preserves dashboard keys across all strategies, including `sma` (and `rsi` for RSI SMA) for Moving Average variants and `rsi`, `up`, and `low` for RSI band strategies.
 
@@ -129,6 +111,7 @@ Mogalef bands are used directly as `LongStopLoss` and `ShortStopLoss` for the RS
 Below is a minimal snippet that shows how you might pull prices and run a simple analysis, similar to what the analyzer does internally. It requires the project dependencies, database connection settings, and an initialized Radar database with the strategy records.
 
 ```python
+from datetime import datetime, timezone
 import polars as pl
 from radar_core.infrastructure.price_provider import PriceProvider
 from radar_core.domain.strategies import MovingAverage
@@ -138,7 +121,8 @@ from radar_core.helpers.constants import DAILY, SMA
 symbols_ = ["BTC-USD"]
 
 # Download prices data for all symbols to be analyzed
-prices_data_ = PriceProvider(long_term=False).get_prices(symbols_)
+now_ = datetime.now(timezone.utc)
+prices_data_ = PriceProvider(long_term=False).get_prices(symbols_, now_)
 
 # Configure analyzer
 ma = MovingAverage(SMA, value_column_name="Close", ma_column_name="Sma")
@@ -199,10 +183,9 @@ Project settings are managed by the `Settings` class, implemented as a process-l
 | `RADAR_PRICE_CACHE_ENABLED` | Master toggle to enable or disable price cache use                                           | `true`                        |
 | `RADAR_PRICE_CACHE_IGNORE`  | When `true`, forces `PriceProvider` to bypass cache reads and perform a full download        | `false`                       |
 | `RADAR_PRICE_CACHE_WRITE`   | When `false`, downloads complete normally but are not written to disk                        | `true`                        |
-| `RADAR_PRICE_CACHE_TIMEZONE`| IANA timezone for evaluating market session dates and trading windows                        | `America/New_York`            |
-| `RADAR_PRICE_CACHE_WINDOW_START` | Start time of the production market cache refresh window (HH:MM)                        | `09:30`                       |
-| `RADAR_PRICE_CACHE_WINDOW_END`   | End time of the production market cache refresh window (HH:MM)                          | `17:00`                       |
-| `RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES` | Maximum cache age in minutes for automatic reuse outside market windows when `RADAR_ENV=dev` | `10`                   |
+| `RADAR_PRICE_CACHE_TIMEZONE`| IANA timezone for evaluating market session dates and trading start time    | `America/New_York`            |
+| `RADAR_PRICE_CACHE_TRADING_START` | Market trading start time (HH:MM) when corporate adjustments settle       | `09:30`                       |
+| `RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES` | Maximum cache age in minutes for automatic reuse outside trading when `RADAR_ENV=dev` | `10`           |
 | `POSTGRES_*`                | PostgreSQL host, port, database, user, and password settings                                  |                               |
 | `POSTGRES_SSL_MODE`         | PostgreSQL connection SSL mode                                                               | `prefer`                      |
 | `POSTGRES_OPTIONS`          | Optional PostgreSQL connection options passed to the connection                          | unset                         |

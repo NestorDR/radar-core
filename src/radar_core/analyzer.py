@@ -311,7 +311,7 @@ def analyzer(symbols: list[str] | None = None) -> int:
                 return 0
 
             # Download prices data for all symbols
-            prices_data_ = PriceProvider(long_term=False).get_prices(symbols)
+            prices_data_ = PriceProvider(long_term=False).get_prices(symbols, datetime.now())
 
             # Determine the number of workers configured in settings
             num_workers_ = settings_.max_workers
@@ -489,13 +489,19 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['BTC-USD', 'SPY']
+    symbols_ = ['BTC-USD', 'SPY','GOLD']
 
-    #  Analyze strategies over historical prices
-    exit_code = analyzer(symbols_)
-
-    # Logger finalization
-    end_logging(logger_)
+    try:
+        #  Analyze strategies over historical prices
+        exit_code = analyzer(symbols_)
+    except Exception as e_:
+        message_ = f'An exception occurred during the analysis: {e_}'
+        verbose(message_, ERROR, DEBUG)
+        logger_.exception(message_, exc_info=True)
+        exit_code = -100
+    finally:
+        # Finish logging, remove logger handlers and release memory
+        end_logging(logger_)
 
     # Return exit code
     raise SystemExit(exit_code)

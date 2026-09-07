@@ -202,6 +202,29 @@ def test_is_compatible_rejects_mapping_mismatch():
     assert 'Symbol or ticker mapping mismatch' in reason_
 
 
+def test_is_compatible_accepts_subset_mapping():
+    """
+    GIVEN a metadata entry with multiple cached symbols {'SPY': 'SPY', 'QQQ': 'QQQ'}
+    WHEN requested with a subset of cached symbols {'SPY': 'SPY'}
+    THEN it returns True with reason 'Compatible'.
+    """
+    metadata_ = PriceCacheMetadata(
+        symbol_to_ticker={'SPY': 'SPY', 'QQQ': 'QQQ'},
+        start_date='2020-01-01',
+        session_date='2026-09-05',
+        generation_id='generation-1',
+        is_complete=True,
+        updated_at_utc='2026-09-05T23:00:00+00:00',
+    )
+    is_compat_, reason_ = metadata_.is_compatible(
+        symbol_to_ticker={'SPY': 'SPY'},
+        start_date='2020-01-01',
+        session_date='2026-09-05',
+    )
+    assert is_compat_ is True
+    assert reason_ == 'Compatible'
+
+
 def test_is_compatible_rejects_session_date_mismatch():
     """
     GIVEN a metadata entry from session_date '2026-09-04'
@@ -246,11 +269,11 @@ def test_price_cache_paths(tmp_path):
     assert cache_.metadata_path == tmp_path / CACHE_METADATA_FILENAME
 
 
-def test_price_cache_save_and_load(tmp_path):
+def test_price_cache_save_roundtrip(tmp_path):
     """
     GIVEN a Polars DataFrame and PriceCacheMetadata
-    WHEN save is called followed by load
-    THEN the data and metadata roundtrip accurately.
+    WHEN save is called
+    THEN the data and metadata can be read back accurately via read_data and read_metadata.
     """
     cache_ = PriceCache(tmp_path)
     df_ = pl.DataFrame({
@@ -269,10 +292,11 @@ def test_price_cache_save_and_load(tmp_path):
     )
 
     cache_.save(df_, meta_)
-    result_ = cache_.load()
+    loaded_df_ = cache_.read_data()
+    loaded_meta_ = cache_.read_metadata()
 
-    assert result_ is not None
-    loaded_df_, loaded_meta_ = result_
+    assert loaded_df_ is not None
+    assert loaded_meta_ is not None
     assert loaded_df_.equals(df_)
     assert loaded_meta_.generation_id == meta_.generation_id
     assert loaded_meta_.symbol_to_ticker == meta_.symbol_to_ticker
@@ -302,26 +326,15 @@ def test_price_cache_read_metadata_missing_or_corrupt(tmp_path):
     assert cache_.read_metadata() is None
 
 
-def test_price_cache_load_missing_or_corrupt_data(tmp_path):
+def test_price_cache_read_data_corrupt_file(tmp_path):
     """
-    GIVEN a PriceCache with valid metadata
-    WHEN data parquet file is missing or corrupted
-    THEN load returns None.
+    GIVEN a cache directory with a corrupted parquet data file
+    WHEN read_data is called
+    THEN it returns None cleanly.
     """
     cache_ = PriceCache(tmp_path)
-    meta_ = PriceCacheMetadata(
-        symbol_to_ticker={'SPY': 'SPY'},
-        start_date='2026-01-01',
-        session_date='2026-09-05',
-        generation_id='generation-1',
-        is_complete=True,
-        updated_at_utc='2026-09-05T23:00:00+00:00',
-    )
-    cache_.metadata_path.write_text(meta_.to_json(), encoding='utf-8')
-    assert cache_.load() is None
-
     cache_.data_path.write_bytes(b'not a parquet file')
-    assert cache_.load() is None
+    assert cache_.read_data() is None
 
 
 def test_price_cache_save_atomic_failure_safety(tmp_path):
@@ -355,9 +368,10 @@ def test_price_cache_save_atomic_failure_safety(tmp_path):
          pytest.raises(IOError, match='Disk full'):
         cache_.save(df_, failing_meta_)
 
-    result_ = cache_.load()
-    assert result_ is not None
-    loaded_df_, loaded_meta_ = result_
+    loaded_df_ = cache_.read_data()
+    loaded_meta_ = cache_.read_metadata()
+    assert loaded_df_ is not None
+    assert loaded_meta_ is not None
     assert loaded_meta_.symbol_to_ticker == {'SPY': 'SPY'}
     assert list(tmp_path.glob('.tmp_*')) == []
 

@@ -151,8 +151,7 @@ def test_price_cache_kwargs_defaults(monkeypatch):
             'RADAR_PRICE_CACHE_IGNORE',
             'RADAR_PRICE_CACHE_WRITE',
             'RADAR_PRICE_CACHE_TIMEZONE',
-            'RADAR_PRICE_CACHE_WINDOW_START',
-            'RADAR_PRICE_CACHE_WINDOW_END',
+            'RADAR_PRICE_CACHE_TRADING_START',
             'RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES',
     ):
         monkeypatch.delenv(var_, raising=False)
@@ -165,8 +164,7 @@ def test_price_cache_kwargs_defaults(monkeypatch):
     assert kwargs_['ignore'] is False
     assert kwargs_['write'] is True
     assert kwargs_['timezone'] == ZoneInfo('America/New_York')
-    assert kwargs_['window_start'] == time(9, 30)
-    assert kwargs_['window_end'] == time(17, 0)
+    assert kwargs_['trading_start'] == time(9, 30)
     assert kwargs_['dev_max_age_minutes'] == 10
 
 
@@ -182,8 +180,7 @@ def test_price_cache_kwargs_custom(monkeypatch):
     monkeypatch.setenv('RADAR_PRICE_CACHE_IGNORE', 'true')
     monkeypatch.setenv('RADAR_PRICE_CACHE_WRITE', 'false')
     monkeypatch.setenv('RADAR_PRICE_CACHE_TIMEZONE', 'UTC')
-    monkeypatch.setenv('RADAR_PRICE_CACHE_WINDOW_START', '08:00')
-    monkeypatch.setenv('RADAR_PRICE_CACHE_WINDOW_END', '16:30')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_TRADING_START', '08:00')
     monkeypatch.setenv('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', '15')
 
     s_ = get_settings()
@@ -194,8 +191,7 @@ def test_price_cache_kwargs_custom(monkeypatch):
     assert kwargs_['ignore'] is True
     assert kwargs_['write'] is False
     assert kwargs_['timezone'] == ZoneInfo('UTC')
-    assert kwargs_['window_start'] == time(8, 0)
-    assert kwargs_['window_end'] == time(16, 30)
+    assert kwargs_['trading_start'] == time(8, 0)
     assert kwargs_['dev_max_age_minutes'] == 15
 
 
@@ -214,14 +210,14 @@ def test_price_cache_malformed_integer_raises(monkeypatch):
 
 def test_price_cache_malformed_time_raises(monkeypatch):
     """
-    GIVEN an invalid time string for RADAR_PRICE_CACHE_WINDOW_START
+    GIVEN an invalid time string for RADAR_PRICE_CACHE_TRADING_START
     WHEN get_settings() is initialized
     THEN it raises ValueError and fails initialization.
     """
     monkeypatch.setenv('RADAR_ENV', 'test')
-    monkeypatch.setenv('RADAR_PRICE_CACHE_WINDOW_START', '25:99')
+    monkeypatch.setenv('RADAR_PRICE_CACHE_TRADING_START', '25:99')
 
-    with pytest.raises(ValueError, match='Invalid time format for RADAR_PRICE_CACHE_WINDOW_START'):
+    with pytest.raises(ValueError, match='Invalid time format for RADAR_PRICE_CACHE_TRADING_START'):
         get_settings()
 
 

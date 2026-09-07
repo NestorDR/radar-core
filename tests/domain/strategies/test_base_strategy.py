@@ -1,7 +1,7 @@
 # tests/domain/strategies/test_base_strategy.py
 
 # --- Python modules ---
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 import json
 from unittest.mock import patch
 
@@ -178,7 +178,7 @@ def test_stop_loss_jit_handles_no_breaches() -> None:
 def real_spy_prices() -> pl.DataFrame:
     """Fixture downloading real SPY daily data from Yahoo Finance."""
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value={'SPY': 'SPY'}):
-        prices_data_ = PriceProvider(long_term=False).get_prices(['SPY'])
+        prices_data_ = PriceProvider(long_term=False).get_prices(['SPY'], datetime.now(timezone.utc))
 
     prices_df_ = prices_data_['SPY']
     return prices_df_.with_columns(

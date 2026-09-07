@@ -113,7 +113,7 @@ def test_price_provider_empty_symbols_guard():
     provider_ = PriceProvider()
     with patch.object(SecurityRepository, 'map_symbol_to_ticker') as mock_map_, \
          patch('yfinance.download') as mock_download_:
-        results_ = provider_.get_prices([])
+        results_ = provider_.get_prices([], datetime.now(timezone.utc))
         assert results_ == {}
         mock_map_.assert_not_called()
         mock_download_.assert_not_called()
@@ -128,7 +128,7 @@ def test_price_provider_empty_tickers_guard():
     provider_ = PriceProvider()
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value={}), \
          patch('yfinance.download') as mock_download_:
-        results_ = provider_.get_prices(['INVALID_SYMBOL'])
+        results_ = provider_.get_prices(['INVALID_SYMBOL'], datetime.now(timezone.utc))
         assert results_ == {}
         mock_download_.assert_not_called()
 
@@ -150,7 +150,7 @@ def test_full_download_writes_price_cache(tmp_path):
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mock_mapping_), \
          patch('yfinance.download', return_value=mock_df_):
 
-        results_ = provider_.get_prices(symbols_)
+        results_ = provider_.get_prices(symbols_, datetime(2026, 1, 5, 18, 0, tzinfo=timezone.utc))
 
         assert len(results_) == 2
         assert 'SPY' in results_
@@ -158,10 +158,10 @@ def test_full_download_writes_price_cache(tmp_path):
         assert results_['SPY'].columns == ORDERED_PRICE_COLS
 
         # Verify price cache was saved to disk
-        load_result_ = cache_.load()
-        assert load_result_ is not None
-
-        cached_df_, metadata_ = load_result_
+        cached_df_ = cache_.read_data()
+        metadata_ = cache_.read_metadata()
+        assert cached_df_ is not None
+        assert metadata_ is not None
         assert metadata_.is_complete is True
         assert metadata_.symbol_to_ticker == mock_mapping_
         assert metadata_.start_date == str(provider_.start_date)
@@ -189,12 +189,13 @@ def test_partial_download_skips_cache_write(tmp_path):
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mock_mapping_), \
          patch('yfinance.download', return_value=mock_df_):
 
-        results_ = provider_.get_prices(symbols_)
+        results_ = provider_.get_prices(symbols_, datetime(2026, 1, 5, 18, 0, tzinfo=timezone.utc))
 
         assert len(results_) == 1
         assert 'SPY' in results_
         assert 'FAILING' not in results_
-        assert cache_.load() is None
+        assert cache_.read_data() is None
+        assert cache_.read_metadata() is None
 
 
 def test_cache_write_disabled_skips_save(tmp_path):
@@ -216,11 +217,12 @@ def test_cache_write_disabled_skips_save(tmp_path):
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mock_mapping_), \
          patch('yfinance.download', return_value=mock_df_):
 
-        results_ = provider_.get_prices(symbols_)
+        results_ = provider_.get_prices(symbols_, datetime(2026, 1, 5, 18, 0, tzinfo=timezone.utc))
 
         assert len(results_) == 1
         assert 'SPY' in results_
-        assert cache_.load() is None
+        assert cache_.read_data() is None
+        assert cache_.read_metadata() is None
 
 
 def test_cache_save_error_does_not_crash_get_prices(tmp_path):
@@ -241,7 +243,7 @@ def test_cache_save_error_does_not_crash_get_prices(tmp_path):
          patch('yfinance.download', return_value=mock_df_), \
          patch.object(cache_, 'save', side_effect=OSError('Disk write error')):
 
-        results_ = provider_.get_prices(symbols_)
+        results_ = provider_.get_prices(symbols_, datetime(2026, 1, 5, 18, 0, tzinfo=timezone.utc))
 
         assert len(results_) == 1
         assert 'SPY' in results_
@@ -326,7 +328,7 @@ def test_cache_eligibility_development_environment(tmp_path):
     tz_ = provider_._cache_settings['timezone']
     mapping_ = {'SPY': 'SPY'}
 
-    # 20:05 is outside market window (09:30 - 17:00)
+    # 20:05 is outside market window (09:30 - 16:00)
     now_within_ttl_ = datetime(2026, 1, 9, 20, 5, tzinfo=tz_)
     now_utc_ = now_within_ttl_.astimezone(timezone.utc)
     updated_at_utc_ = (now_utc_ - timedelta(minutes=5)).isoformat()
@@ -343,20 +345,67 @@ def test_cache_eligibility_development_environment(tmp_path):
         'Low': [99.0], 'Close': [100.0], 'Volume': [1000], 'Symbol': ['SPY']
     }).with_columns(pl.col('Date').cast(pl.Date)), meta_)
 
-    # Within 5 minutes outside market window -> Eligible in DEV
+    # Post-market cache on Friday (updated 20:00 >= 16:00) -> Eligible in both DEV and PROD (even after 20 minutes)
+    assert provider_._is_cache_eligible(mapping_, now_within_ttl_) is True
+    provider_.app_environment = 'prod'
     assert provider_._is_cache_eligible(mapping_, now_within_ttl_) is True
 
-    # Same time outside market window in PROD -> Ineligible
+    # 20 minutes later on the same evening: still eligible in both DEV and PROD because it is settled post-close
+    stale_post_close_now_ = datetime(2026, 1, 9, 20, 20, tzinfo=tz_)
+    assert provider_._is_cache_eligible(mapping_, stale_post_close_now_) is True
+    provider_.app_environment = 'dev'
+    assert provider_._is_cache_eligible(mapping_, stale_post_close_now_) is True
+
+    # Pre-market cache on Friday (updated 08:30 < 09:30) -> Ineligible after market open in both PROD and DEV
+    premarket_meta_ = PriceCacheMetadata(
+        symbol_to_ticker=mapping_,
+        start_date=str(provider_.start_date),
+        session_date='2026-01-09',
+        generation_id='generation-premarket',
+        is_complete=True,
+        updated_at_utc=datetime(2026, 1, 9, 8, 30, tzinfo=tz_).astimezone(timezone.utc).isoformat(),
+    )
+    cache_.save(pl.DataFrame({
+        'Date': [date(2026, 1, 9)], 'Open': [100.0], 'High': [105.0],
+        'Low': [99.0], 'Close': [100.0], 'Volume': [1000], 'Symbol': ['SPY']
+    }).with_columns(pl.col('Date').cast(pl.Date)), premarket_meta_)
+    assert provider_._is_cache_eligible(mapping_, now_within_ttl_) is False
     provider_.app_environment = 'prod'
     assert provider_._is_cache_eligible(mapping_, now_within_ttl_) is False
 
-    # Switch back to DEV: Stale (15 minutes old > 10 min TTL) outside market window -> Ineligible
+    # Weekend (not post-market settled): within 5 min TTL -> Eligible in DEV, Ineligible in PROD
+    sat_now_ = datetime(2026, 1, 10, 11, 5, tzinfo=tz_)
+    sat_meta_ = PriceCacheMetadata(
+        symbol_to_ticker=mapping_,
+        start_date=str(provider_.start_date),
+        session_date='2026-01-10',
+        generation_id='generation-sat',
+        is_complete=True,
+        updated_at_utc=datetime(2026, 1, 10, 11, 0, tzinfo=tz_).astimezone(timezone.utc).isoformat(),
+    )
+    cache_.save(pl.DataFrame({
+        'Date': [date(2026, 1, 10)], 'Open': [100.0], 'High': [105.0],
+        'Low': [99.0], 'Close': [100.0], 'Volume': [1000], 'Symbol': ['SPY']
+    }).with_columns(pl.col('Date').cast(pl.Date)), sat_meta_)
     provider_.app_environment = 'dev'
-    stale_now_ = datetime(2026, 1, 9, 20, 20, tzinfo=tz_)
-    assert provider_._is_cache_eligible(mapping_, stale_now_) is False
+    assert provider_._is_cache_eligible(mapping_, sat_now_) is True
+    provider_.app_environment = 'prod'
+    assert provider_._is_cache_eligible(mapping_, sat_now_) is False
+
+    # Weekend when stale (20 min old > 10 min TTL) -> Ineligible in both DEV and PROD
+    sat_stale_now_ = datetime(2026, 1, 10, 11, 20, tzinfo=tz_)
+    provider_.app_environment = 'dev'
+    assert provider_._is_cache_eligible(mapping_, sat_stale_now_) is False
+    provider_.app_environment = 'prod'
+    assert provider_._is_cache_eligible(mapping_, sat_stale_now_) is False
 
     # Inside market window -> Eligible in both DEV and PROD
+    cache_.save(pl.DataFrame({
+        'Date': [date(2026, 1, 9)], 'Open': [100.0], 'High': [105.0],
+        'Low': [99.0], 'Close': [100.0], 'Volume': [1000], 'Symbol': ['SPY']
+    }).with_columns(pl.col('Date').cast(pl.Date)), meta_)
     trading_now_ = datetime(2026, 1, 9, 11, 0, tzinfo=tz_)
+    provider_.app_environment = 'dev'
     assert provider_._is_cache_eligible(mapping_, trading_now_) is True
     provider_.app_environment = 'prod'
     assert provider_._is_cache_eligible(mapping_, trading_now_) is True
@@ -403,12 +452,9 @@ def test_eligible_execution_makes_current_day_request_and_refreshes_rows(tmp_pat
     mock_today_df_ = _make_mock_yfinance_df(['SPY'], dates=today_dates_, close_vals=[110.0])
 
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
-         patch('radar_core.infrastructure.price_provider.datetime') as mock_dt_, \
          patch('yfinance.download', return_value=mock_today_df_) as mock_download_:
 
-        mock_dt_.now.return_value = mock_now_
-
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], mock_now_)
 
         assert len(results_) == 1
         assert 'SPY' in results_
@@ -432,9 +478,12 @@ def test_eligible_execution_makes_current_day_request_and_refreshes_rows(tmp_pat
         assert pct_list_[0] is None
         assert abs(pct_list_[1] - 10.0) < 1e-4
 
-        # Verify disk cache was updated
-        loaded_df_, loaded_meta_ = cache_.load()
-        assert loaded_df_['Close'][-1] == 110.0
+        # Verify in-memory results have updated row while disk cache preserves settled baseline (no provisional overwrite)
+        loaded_df_ = cache_.read_data()
+        loaded_meta_ = cache_.read_metadata()
+        assert loaded_df_ is not None
+        assert loaded_meta_ is not None
+        assert loaded_df_['Close'][-1] == 105.0
         assert loaded_meta_.session_date == '2026-01-05'
 
 
@@ -470,12 +519,9 @@ def test_ineligible_execution_makes_complete_request(tmp_path):
     full_df_ = _make_mock_yfinance_df(['SPY'])
 
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
-         patch('radar_core.infrastructure.price_provider.datetime') as mock_dt_, \
          patch('yfinance.download', return_value=full_df_) as mock_download_:
 
-        mock_dt_.now.return_value = mock_now_
-
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], mock_now_)
 
         assert len(results_) == 1
         # Called with full historical range (positional args: tickers, start_date, end_date)
@@ -519,12 +565,9 @@ def test_failed_refresh_falls_back_to_full_download(tmp_path):
     full_df_ = _make_mock_yfinance_df(['SPY'])
 
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
-         patch('radar_core.infrastructure.price_provider.datetime') as mock_dt_, \
          patch('yfinance.download', side_effect=[empty_today_df_, full_df_]) as mock_download_:
 
-        mock_dt_.now.return_value = mock_now_
-
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], mock_now_)
 
         assert len(results_) == 1
         assert mock_download_.call_count == 2
@@ -534,7 +577,8 @@ def test_failed_refresh_falls_back_to_full_download(tmp_path):
         assert mock_download_.call_args_list[1].args[1] == provider_.start_date
 
         # Existing cache remained intact
-        _, post_meta_ = cache_.load()
+        post_meta_ = cache_.read_metadata()
+        assert post_meta_ is not None
         assert post_meta_.is_complete is True
 
 
@@ -576,13 +620,9 @@ def test_dev_cache_eligible_performs_current_day_refresh(tmp_path):
     mock_today_df_ = _make_mock_yfinance_df(['SPY'], dates=today_dates_, close_vals=[110.0])
 
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
-         patch('radar_core.infrastructure.price_provider.datetime') as mock_dt_, \
          patch('yfinance.download', return_value=mock_today_df_) as mock_download_:
 
-        mock_dt_.now.return_value = now_utc_
-        mock_dt_.fromisoformat = datetime.fromisoformat
-
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], now_utc_)
 
         assert len(results_) == 1
         assert 'SPY' in results_
@@ -611,20 +651,23 @@ def test_dev_cache_stale_triggers_complete_download(tmp_path):
     provider_.app_environment = 'dev'
     mapping_ = {'SPY': 'SPY'}
 
-    now_utc_ = datetime(2026, 1, 9, 20, 0, tzinfo=timezone.utc)
+    tz_ = provider_._cache_settings['timezone']
+    # Saturday Jan 10, 2026 (outside market window and not post-market settled)
+    sat_now_ = datetime(2026, 1, 10, 11, 0, tzinfo=tz_)
+    now_utc_ = sat_now_.astimezone(timezone.utc)
     # Stale cache: 15 minutes old (dev_max_age_minutes defaults to 10)
     updated_at_utc_ = (now_utc_ - timedelta(minutes=15)).isoformat()
 
     meta_ = PriceCacheMetadata(
         symbol_to_ticker=mapping_,
         start_date=str(provider_.start_date),
-        session_date='2026-01-09',
+        session_date='2026-01-10',
         generation_id='generation-1',
         is_complete=True,
         updated_at_utc=updated_at_utc_,
     )
     cached_df_ = pl.DataFrame({
-        'Date': [date(2026, 1, 9)],
+        'Date': [date(2026, 1, 10)],
         'Open': [100.0], 'High': [105.0], 'Low': [99.0], 'Close': [100.0],
         'Volume': [100000], 'Symbol': ['SPY'],
     }).with_columns(pl.col('Date').cast(pl.Date))
@@ -633,13 +676,9 @@ def test_dev_cache_stale_triggers_complete_download(tmp_path):
     mock_df_ = _make_mock_yfinance_df(['SPY'], close_vals=[120.0, 125.0, 130.0])
 
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
-         patch('radar_core.infrastructure.price_provider.datetime') as mock_dt_, \
          patch('yfinance.download', return_value=mock_df_) as mock_download_:
 
-        mock_dt_.now.return_value = now_utc_
-        mock_dt_.fromisoformat = datetime.fromisoformat
-
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], sat_now_)
 
         assert len(results_) == 1
         mock_download_.assert_called_once()
@@ -647,7 +686,8 @@ def test_dev_cache_stale_triggers_complete_download(tmp_path):
         assert args_[1] == provider_.start_date
 
         # Cache was updated on disk with new data
-        loaded_df_, _ = cache_.load()
+        loaded_df_ = cache_.read_data()
+        assert loaded_df_ is not None
         assert loaded_df_['Close'][-1] == 130.0
 
 
@@ -685,12 +725,9 @@ def test_dev_max_age_not_permitted_in_production(tmp_path):
     full_df_ = _make_mock_yfinance_df(['SPY'])
 
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
-         patch('radar_core.infrastructure.price_provider.datetime') as mock_dt_, \
          patch('yfinance.download', return_value=full_df_) as mock_download_:
 
-        mock_dt_.now.return_value = sat_now_
-
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], sat_now_)
 
         assert len(results_) == 1
         mock_download_.assert_called_once()
@@ -732,7 +769,7 @@ def test_cache_disabled_and_ignore_bypass_cache_reads(tmp_path):
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
          patch('yfinance.download', return_value=full_df_) as mock_download_:
 
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], now_utc_)
         assert len(results_) == 1
         mock_download_.assert_called_once()
 
@@ -742,7 +779,7 @@ def test_cache_disabled_and_ignore_bypass_cache_reads(tmp_path):
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
          patch('yfinance.download', return_value=full_df_) as mock_download_:
 
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], now_utc_)
         assert len(results_) == 1
         mock_download_.assert_called_once()
 
@@ -766,10 +803,11 @@ def test_cache_disabled_skips_save(tmp_path):
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mock_mapping_), \
          patch('yfinance.download', return_value=mock_df_):
 
-        results_ = provider_.get_prices(symbols_)
+        results_ = provider_.get_prices(symbols_, datetime(2026, 1, 5, 18, 0, tzinfo=timezone.utc))
 
         assert len(results_) == 1
-        assert cache_.load() is None
+        assert cache_.read_data() is None
+        assert cache_.read_metadata() is None
 
 
 def test_cache_consumption_failure_falls_back_to_download(tmp_path):
@@ -804,13 +842,9 @@ def test_cache_consumption_failure_falls_back_to_download(tmp_path):
     full_df_ = _make_mock_yfinance_df(['SPY'], close_vals=[150.0, 155.0, 160.0])
 
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
-         patch('radar_core.infrastructure.price_provider.datetime') as mock_dt_, \
          patch('yfinance.download', return_value=full_df_) as mock_download_:
 
-        mock_dt_.now.return_value = now_utc_
-        mock_dt_.fromisoformat = datetime.fromisoformat
-
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], now_utc_)
 
         assert len(results_) == 1
         assert mock_download_.call_count == 2
@@ -831,6 +865,8 @@ def test_dev_cache_invalid_timestamp_falls_back_to_download(tmp_path):
     cache_ = PriceCache(tmp_path)
     provider_._price_cache = cache_
     provider_.app_environment = 'dev'
+    tz_ = provider_._cache_settings['timezone']
+    now_market_ = datetime(2026, 1, 9, 20, 0, tzinfo=tz_)
     mapping_ = {'SPY': 'SPY'}
 
     meta_ = PriceCacheMetadata(
@@ -852,7 +888,7 @@ def test_dev_cache_invalid_timestamp_falls_back_to_download(tmp_path):
     with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value=mapping_), \
          patch('yfinance.download', return_value=full_df_) as mock_download_:
 
-        results_ = provider_.get_prices(['SPY'])
+        results_ = provider_.get_prices(['SPY'], now_market_)
 
         assert len(results_) == 1
         mock_download_.assert_called_once()
@@ -870,4 +906,195 @@ def test_price_provider_end_date_uses_cache_timezone():
 
         provider_ = PriceProvider()
         assert provider_.end_date == date(2026, 1, 6)
+
+
+def test_post_market_close_cache_eligible_in_both_environments(tmp_path):
+    """
+    GIVEN a compatible price cache generated after market close on a weekday
+    WHEN evaluating _is_cache_eligible in production and development mode after trading hours
+    THEN it permits cache reuse on the same session date across both environments.
+    """
+    provider_ = PriceProvider()
+    cache_ = PriceCache(tmp_path)
+    provider_._price_cache = cache_
+    provider_.app_environment = 'prod'
+    tz_ = provider_._cache_settings['timezone']
+    mapping_ = {'SPY': 'SPY'}
+
+    # Monday Jan 5, 2026 at 18:30 (after 16:00 market close)
+    post_close_now_ = datetime(2026, 1, 5, 18, 30, tzinfo=tz_)
+    post_close_updated_ = datetime(2026, 1, 5, 16, 30, tzinfo=tz_).astimezone(timezone.utc).isoformat()
+
+    meta_ = PriceCacheMetadata(
+        symbol_to_ticker=mapping_,
+        start_date=str(provider_.start_date),
+        session_date='2026-01-05',
+        generation_id='generation-post-close',
+        is_complete=True,
+        updated_at_utc=post_close_updated_,
+    )
+    cache_.save(pl.DataFrame({
+        'Date': [date(2026, 1, 5)], 'Open': [100.0], 'High': [105.0],
+        'Low': [99.0], 'Close': [104.0], 'Volume': [1000], 'Symbol': ['SPY']
+    }).with_columns(pl.col('Date').cast(pl.Date)), meta_)
+
+    assert provider_._is_cache_eligible(mapping_, post_close_now_) is True
+    provider_.app_environment = 'dev'
+    assert provider_._is_cache_eligible(mapping_, post_close_now_) is True
+
+
+def test_get_prices_updates_end_date_from_now():
+    """
+    GIVEN a PriceProvider instance with an initial default end_date
+    WHEN get_prices is called with a specific evaluation datetime
+    THEN self.end_date is updated to match the injected datetime's date plus 1 day.
+    """
+    provider_ = PriceProvider()
+    custom_now_ = datetime(2025, 6, 15, 10, 0, tzinfo=provider_._cache_settings['timezone'])
+    with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value={'SPY': 'SPY'}), \
+         patch.object(provider_, '_is_cache_eligible', return_value=False), \
+         patch('radar_core.infrastructure.price_provider.yf.download', return_value=pd.DataFrame()):
+        provider_.get_prices(['SPY'], now=custom_now_)
+
+    assert provider_.end_date == date(2025, 6, 16)
+
+
+def test_refresh_cache_subset_slicing(tmp_path):
+    """
+    GIVEN a cache containing multiple symbols ('SPY' and 'QQQ')
+    WHEN _refresh_cache is called for a single symbol subset ('SPY')
+    THEN it returns data for only the requested symbol and leaves cache intact.
+    """
+    cache_ = PriceCache(tmp_path)
+    provider_ = PriceProvider()
+    provider_._price_cache = cache_
+    tz_ = provider_._cache_settings['timezone']
+    eval_now_ = datetime(2026, 1, 5, 10, 30, tzinfo=tz_)
+
+    # Cache has 2 symbols
+    full_mapping_ = {'SPY': 'SPY', 'QQQ': 'QQQ'}
+    meta_ = PriceCacheMetadata(
+        symbol_to_ticker=full_mapping_,
+        start_date=str(provider_.start_date),
+        session_date='2026-01-05',
+        generation_id='gen-subset',
+        is_complete=True,
+        updated_at_utc=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc).isoformat(),
+    )
+    cache_df_ = pl.DataFrame({
+        'Date': [date(2026, 1, 2), date(2026, 1, 2)],
+        'Open': [100.0, 200.0],
+        'High': [105.0, 205.0],
+        'Low': [99.0, 199.0],
+        'Close': [104.0, 204.0],
+        'Volume': [1000, 2000],
+        'Symbol': ['SPY', 'QQQ'],
+    }).with_columns([
+        pl.col('Date').cast(pl.Date),
+        pl.col('Symbol').cast(pl.Categorical),
+    ])
+    cache_.save(cache_df_, meta_)
+
+    # Request only 'SPY'
+    subset_mapping_ = {'SPY': 'SPY'}
+    spy_today_df_ = pd.DataFrame(
+        {'Open': [104.0], 'High': [106.0], 'Low': [103.0], 'Close': [105.0], 'Volume': [1500]},
+        index=[pd.Timestamp('2026-01-05')]
+    )
+    multi_today_df_ = pd.concat({'SPY': spy_today_df_}, axis=1)
+
+    with patch('radar_core.infrastructure.price_provider.yf.download', return_value=multi_today_df_):
+        refreshed_ = provider_._refresh_cache(subset_mapping_, ['SPY'], eval_now_)
+
+    assert refreshed_ is not None
+    assert list(refreshed_.keys()) == ['SPY']
+    assert refreshed_['SPY'].height == 2
+    assert refreshed_['SPY']['Date'].to_list() == [date(2026, 1, 2), date(2026, 1, 5)]
+
+
+def test_refresh_cache_ticker_download_failure_fallback_to_history(tmp_path):
+    """
+    GIVEN a cache containing multiple symbols ('SPY' and 'QQQ')
+    WHEN current-day download for 'QQQ' returns empty data
+    THEN it falls back to cached historical prices for 'QQQ' while updating 'SPY'.
+    """
+    cache_ = PriceCache(tmp_path)
+    provider_ = PriceProvider()
+    provider_._price_cache = cache_
+    tz_ = provider_._cache_settings['timezone']
+    eval_now_ = datetime(2026, 1, 5, 11, 0, tzinfo=tz_)
+
+    mapping_ = {'SPY': 'SPY', 'QQQ': 'QQQ'}
+    meta_ = PriceCacheMetadata(
+        symbol_to_ticker=mapping_,
+        start_date=str(provider_.start_date),
+        session_date='2026-01-05',
+        generation_id='gen-fallback',
+        is_complete=True,
+        updated_at_utc=datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc).isoformat(),
+    )
+    cache_df_ = pl.DataFrame({
+        'Date': [date(2026, 1, 2), date(2026, 1, 2)],
+        'Open': [100.0, 200.0],
+        'High': [105.0, 205.0],
+        'Low': [99.0, 199.0],
+        'Close': [104.0, 204.0],
+        'Volume': [1000, 2000],
+        'Symbol': ['SPY', 'QQQ'],
+    }).with_columns([
+        pl.col('Date').cast(pl.Date),
+        pl.col('Symbol').cast(pl.Categorical),
+    ])
+    cache_.save(cache_df_, meta_)
+
+    # yfinance returns SPY, but QQQ is empty
+    spy_today_df_ = pd.DataFrame(
+        {'Open': [104.0], 'High': [106.0], 'Low': [103.0], 'Close': [105.0], 'Volume': [1500]},
+        index=[pd.Timestamp('2026-01-05')]
+    )
+    qqq_empty_df_ = pd.DataFrame(
+        {'Open': [], 'High': [], 'Low': [], 'Close': [], 'Volume': []},
+        index=pd.DatetimeIndex([])
+    )
+    today_df_ = pd.concat({'SPY': spy_today_df_, 'QQQ': qqq_empty_df_}, axis=1)
+
+    with patch('radar_core.infrastructure.price_provider.yf.download', return_value=today_df_):
+        refreshed_ = provider_._refresh_cache(mapping_, ['SPY', 'QQQ'], eval_now_)
+
+    assert refreshed_ is not None
+    assert set(refreshed_.keys()) == {'SPY', 'QQQ'}
+    # SPY has today's bar appended (height 2)
+    assert refreshed_['SPY'].height == 2
+    assert refreshed_['SPY']['Date'][-1] == date(2026, 1, 5)
+    # QQQ fell back to cached historical prices (height 1, ending on Jan 2)
+    assert refreshed_['QQQ'].height == 1
+    assert refreshed_['QQQ']['Date'][-1] == date(2026, 1, 2)
+
+
+def test_save_cache_persists_symbol_as_categorical(tmp_path):
+    """
+    GIVEN processed symbol results
+    WHEN _save_cache persists DataFrame to disk
+    THEN the 'Symbol' column in the Parquet file is stored with Categorical data type.
+    """
+    cache_ = PriceCache(tmp_path)
+    provider_ = PriceProvider()
+    provider_._price_cache = cache_
+    mapping_ = {'SPY': 'SPY'}
+    df_ = pl.DataFrame({
+        'Date': [date(2026, 1, 5)],
+        'Open': [100.0],
+        'High': [105.0],
+        'Low': [99.0],
+        'Close': [104.0],
+        'Volume': [1000],
+        'PercentChange': [0.0],
+    }).with_columns(pl.col('Date').cast(pl.Date))
+
+    provider_._save_cache(mapping_, {'SPY': df_}, '2026-01-05')
+
+    saved_df_ = cache_.read_data()
+    assert saved_df_ is not None
+    assert saved_df_['Symbol'].dtype == pl.Categorical
+
 

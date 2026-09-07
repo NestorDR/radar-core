@@ -4,7 +4,7 @@
 # json: provides functions for working with JSON data.
 import json
 # dataclasses: provides support for defining data-oriented classes.
-from dataclasses import asdict, dataclass, fields
+from dataclasses import dataclass, fields
 # datetime: provides classes for manipulating dates and times.
 from datetime import datetime, timezone
 # logging: provides flexible event logging.
@@ -28,11 +28,11 @@ CACHE_METADATA_FILENAME: Final[str] = 'price_cache_metadata.json'
 class PriceCacheMetadata:
     """Metadata associated with cached price data."""
 
-    symbol_to_ticker: dict[str, str]
-    start_date: str
-    session_date: str
     generation_id: str
     is_complete: bool
+    session_date: str
+    start_date: str
+    symbol_to_ticker: dict[str, str]
     updated_at_utc: str
 
     def to_json(self) -> str:
@@ -41,26 +41,25 @@ class PriceCacheMetadata:
 
         :return: JSON formatted string.
         """
-        return json.dumps(asdict(self), indent=2, sort_keys=True)
+        return json.dumps(self.__dict__, indent=2, sort_keys=True)
 
     @classmethod
     def from_json(cls, json_str: str) -> 'PriceCacheMetadata':
         """
-        Deserializes metadata from a JSON string.
+        Deserializes metadata from a JSON string using precomputed field names.
 
         :param json_str: JSON string containing metadata.
 
         :return: PriceCacheMetadata instance.
         """
         data_ = json.loads(json_str)
-        field_names_ = {f_.name for f_ in fields(cls)}
-        return cls(**{k_: v_ for k_, v_ in data_.items() if k_ in field_names_})
+        return cls(**{k_: v_ for k_, v_ in data_.items() if k_ in _METADATA_FIELD_NAMES})
 
     def is_compatible(
-        self,
-        symbol_to_ticker: dict[str, str],
-        start_date: str,
-        session_date: str,
+            self,
+            symbol_to_ticker: dict[str, str],
+            start_date: str,
+            session_date: str,
     ) -> tuple[bool, str]:
         """
         Evaluates whether this cached data is compatible with request criteria.
@@ -75,7 +74,11 @@ class PriceCacheMetadata:
             return False, 'Cache is incomplete'
         if self.start_date != start_date:
             return False, f'Start date mismatch ({self.start_date} != {start_date})'
-        if self.symbol_to_ticker != symbol_to_ticker:
+        is_subset_ = all(
+            symbol_ in self.symbol_to_ticker and self.symbol_to_ticker[symbol_] == ticker_
+            for symbol_, ticker_ in symbol_to_ticker.items()
+        )
+        if not is_subset_:
             return False, 'Symbol or ticker mapping mismatch'
         if self.session_date != session_date:
             return False, f'Session date mismatch ({self.session_date} != {session_date})'
@@ -95,6 +98,10 @@ class PriceCacheMetadata:
             updated_dt_ = updated_dt_.replace(tzinfo=timezone.utc)
         now_utc_ = now.astimezone(timezone.utc) if now.tzinfo else now.replace(tzinfo=timezone.utc)
         return (now_utc_ - updated_dt_).total_seconds() / 60.0
+
+
+# Precompute dataclass field names once to eliminate runtime reflection overhead in from_json()
+_METADATA_FIELD_NAMES: Final[frozenset[str]] = frozenset(f_.name for f_ in fields(PriceCacheMetadata))
 
 
 class PriceCache:
@@ -129,14 +136,14 @@ class PriceCache:
                 logger_.warning('Cache metadata at %s is incomplete; treating as cache miss', self.metadata_path)
                 return None
             return metadata_
-            
+
         except Exception as e_:
             logger_.exception('Failed to read or parse cache metadata at %s: %s', self.metadata_path, e_)
             return None
 
     def read_data(self) -> pl.DataFrame | None:
         """
-        Reads and returns the cached Parquet DataFrame from disk.
+        Reads and returns the cached Parquet DataFrame from disk using memory-mapping.
 
         :return: Polars DataFrame if file exists and reads cleanly, else None.
         """
@@ -145,26 +152,10 @@ class PriceCache:
             return None
 
         try:
-            return pl.read_parquet(self.data_path)
+            return pl.read_parquet(self.data_path, memory_map=True)
         except Exception as e_:
             logger_.exception('Failed reading cached Parquet data at %s: %s', self.data_path, e_)
             return None
-
-    def load(self) -> tuple[pl.DataFrame, PriceCacheMetadata] | None:
-        """
-        Loads the cached data (DataFrame and metadata) from the disk.
-
-        :return: Tuple of (DataFrame, PriceCacheMetadata) if valid, else None.
-        """
-        metadata_ = self.read_metadata()
-        if metadata_ is None:
-            return None
-
-        df_ = self.read_data()
-        if df_ is None:
-            return None
-
-        return df_, metadata_
 
     def save(self, df: pl.DataFrame, metadata: PriceCacheMetadata) -> None:
         """
@@ -185,13 +176,15 @@ class PriceCache:
         temp_meta_path_ = self.cache_dir / f'.tmp_{metadata.generation_id}_{CACHE_METADATA_FILENAME}'
 
         try:
-            df.write_parquet(temp_data_path_)
+            # Explicit compression setup guarantees optimal read/write throughput balance and
+            # deterministic compression behavior across host and container environments.
+            df.write_parquet(temp_data_path_, compression='zstd', compression_level=3)
             temp_meta_path_.write_text(metadata.to_json(), encoding='utf-8')
 
             # Atomic swap: data first, then metadata acts as the commit gatekeeper
             temp_data_path_.replace(self.data_path)
             temp_meta_path_.replace(self.metadata_path)
-            
+
         except Exception as e_:
             logger_.exception('Failed saving cache generation %s: %s', metadata.generation_id, e_)
             temp_data_path_.unlink(missing_ok=True)
