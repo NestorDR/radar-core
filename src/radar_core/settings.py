@@ -283,7 +283,7 @@ class Settings:
             'write': Settings._parse_bool('RADAR_PRICE_CACHE_WRITE', True),
             'timezone': Settings._parse_timezone('RADAR_PRICE_CACHE_TIMEZONE', 'America/New_York'),
             'window_start': Settings._parse_time('RADAR_PRICE_CACHE_WINDOW_START', '09:30'),
-            'window_end': Settings._parse_time('RADAR_PRICE_CACHE_WINDOW_END', '17:00'),
+            'window_end': Settings._parse_time('RADAR_PRICE_CACHE_WINDOW_END', '16:00'),
             'dev_max_age_minutes': Settings._parse_int('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', 10),
         }
 

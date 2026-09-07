@@ -166,7 +166,7 @@ def test_price_cache_kwargs_defaults(monkeypatch):
     assert kwargs_['write'] is True
     assert kwargs_['timezone'] == ZoneInfo('America/New_York')
     assert kwargs_['window_start'] == time(9, 30)
-    assert kwargs_['window_end'] == time(17, 0)
+    assert kwargs_['window_end'] == time(16, 0)
     assert kwargs_['dev_max_age_minutes'] == 10
 
 
