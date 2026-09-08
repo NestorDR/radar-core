@@ -2,7 +2,7 @@
 
 # --- Python modules ---
 # datetime: provides classes for manipulating dates and times.
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG, ERROR, INFO, WARNING, getLogger
 # typing: provides runtime support for type hints
@@ -122,6 +122,76 @@ class PriceProvider:
 
         return prices_pl_df_.select(ORDERED_PRICE_COLS)
 
+    @staticmethod
+    def _format_price_dataframe(df: pl.DataFrame) -> pl.DataFrame:
+        """
+        Sorts a price DataFrame by Date, computes percentage change, and selects ordered columns.
+
+        :param df: Price Polars DataFrame containing OHLCV columns.
+        
+        :return: A formatted Polars DataFrame ordered and selected according to ORDERED_PRICE_COLS.
+        """
+        return (
+            df.sort('Date')
+            .with_columns(_PERCENT_CHANGE_EXPR)
+            .select(ORDERED_PRICE_COLS)
+        )
+
+    @staticmethod
+    def _extract_ticker_dataframe(
+            source_df: pd.DataFrame,
+            ticker: str
+    ) -> pd.DataFrame:
+        """
+        Extracts a single ticker slice from a multi-ticker DataFrame and drops all-null rows.
+
+        :param source_df: Multi-ticker pandas DataFrame returned by yfinance.
+        :param ticker: Provider ticker string.
+
+        :return: A cleaned single-ticker pandas DataFrame, or an empty DataFrame if ticker is absent.
+        """
+        if ticker in source_df.columns:
+            return source_df[ticker].dropna(how='all')
+        return pd.DataFrame()
+
+    def _download_tickers(
+            self,
+            tickers: list[str],
+            start_date: date | datetime,
+            verbosity_level: int = DEBUG
+    ) -> pd.DataFrame:
+        """
+        Downloads price data from Yahoo Finance for a list of tickers.
+
+        :param tickers: List of provider tickers to download.
+        :param start_date: Start date for the download range.
+        :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
+         it will be taken into account only if it is greater than the level of detail specified for the entire class.
+
+        :return: A pandas DataFrame containing OHLCV price data grouped by ticker.
+        """
+        verbosity_level = min(verbosity_level, self.verbosity_level)
+
+        # Visit: https://pandas-datareader.readthedocs.io/en/latest/remote_data.html
+        #        https://github.com/pydata/pandas-datareader/issues/170
+        #        https://pypi.org/project/yfinance/
+
+        # Download prices from price source with this parameter list:
+        # tickers, start = None, end = None, actions = False, threads = True,
+        # ignore_tz = None, group_by = 'column', auto_adjust = None, back_adjust = False,
+        # repair = False, keepna = False, progress = True, period = None, interval = '1d',
+        # prepost = False, proxy = _SENTINEL_, rounding = False, timeout = 10, session = None,
+        # multi_level_index = True
+        return yf.download(
+            tickers,
+            start_date,
+            self.end_date,
+            auto_adjust=True,
+            progress=bool(verbosity_level == DEBUG),
+            threads=self.max_workers,
+            group_by='ticker',
+        )
+
     def _save_cache(
             self,
             symbol_to_ticker_map: dict[str, str],
@@ -137,7 +207,6 @@ class PriceProvider:
         :param session_date: Local session date string (YYYY-MM-DD).
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
-
         """
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
@@ -224,7 +293,15 @@ class PriceProvider:
         if is_trading_started_:
             return True
 
-        # In development mode, also allow reuse within dev_max_age_minutes TTL (e.g. pre-market or weekends)
+        # On weekends: allow reuse on the same session date (forces 1 full download per weekend day)
+        is_weekend_eligible_ = (
+                now.weekday() >= 5
+                and metadata_.session_date == str(now.date())
+        )
+        if is_weekend_eligible_:
+            return True
+
+        # In development mode, allow reuse within dev_max_age_minutes TTL (e.g. pre-market or across date boundaries)
         if self.app_environment == 'dev':
             return 0 <= metadata_.age_in_minutes(now) <= self._cache_settings['dev_max_age_minutes']
 
@@ -264,25 +341,7 @@ class PriceProvider:
         logger_.info(message_)
 
         try:
-            # Visit: https://pandas-datareader.readthedocs.io/en/latest/remote_data.html
-            #        https://github.com/pydata/pandas-datareader/issues/170
-            #        https://pypi.org/project/yfinance/
-
-            # Download prices from price source with this parameter list:
-            # tickers, start = None, end = None, actions = False, threads = True,
-            # ignore_tz = None, group_by = 'column', auto_adjust = None, back_adjust = False,
-            # repair = False, keepna = False, progress = True, period = None, interval = '1d',
-            # prepost = False, proxy = _SENTINEL_, rounding = False, timeout = 10, session = None,
-            # multi_level_index = True
-            today_df_ = yf.download(tickers, current_date_, self.end_date,
-                                    auto_adjust=True, progress=bool(verbosity_level == DEBUG),
-                                    threads=self.max_workers, group_by='ticker')
-
-            if today_df_.empty:
-                message_ = 'Current-day download returned an empty DataFrame.'
-                verbose(message_, WARNING, verbosity_level)
-                logger_.warning(message_)
-                return None
+            today_df_ = self._download_tickers(tickers, current_date_, verbosity_level)
 
             # Filter cached DataFrame to only the requested symbols and partition for O(1) lookups
             requested_symbols_ = list(symbol_to_ticker_map.keys())
@@ -296,9 +355,34 @@ class PriceProvider:
             }
             del cached_df_
 
+            if today_df_.empty:
+                # When markets are closed on weekends (e.g. stocks only),
+                # use cached historical prices directly for all requested symbols
+                if now.weekday() >= 5:
+                    message_ = (
+                        f'Current-day ({current_date_}) yfinance download returned empty DataFrame on weekend. '
+                        f'Using cached historical prices.'
+                    )
+                    verbose(message_, INFO, verbosity_level)
+                    logger_.info(message_)
+                    cached_results_ = {
+                        symbol_: self._format_price_dataframe(history_by_symbol_[symbol_])
+                        for symbol_ in symbol_to_ticker_map
+                        if symbol_ in history_by_symbol_ and history_by_symbol_[symbol_].height > 0
+                    }
+                    return cached_results_ if len(cached_results_) == len(symbol_to_ticker_map) else None
+
+                message_ = (
+                    f'Current-day download returned an empty DataFrame during trading session on {current_date_}. '
+                    f'Aborting cache refresh to trigger full download.'
+                )
+                verbose(message_, WARNING, verbosity_level)
+                logger_.warning(message_)
+                return None
+
             results_: dict[str, pl.DataFrame] = {}
             for symbol_, ticker_ in symbol_to_ticker_map.items():
-                ticker_df_ = today_df_[ticker_].dropna(how='all') if ticker_ in today_df_.columns else pd.DataFrame()
+                ticker_df_ = self._extract_ticker_dataframe(today_df_, ticker_)
 
                 if ticker_df_.empty:
                     history_ = history_by_symbol_.get(symbol_)
@@ -308,12 +392,7 @@ class PriceProvider:
                         )
                         verbose(message_, WARNING, verbosity_level)
                         logger_.warning(message_)
-                        results_[symbol_] = (
-                            history_
-                            .sort('Date')
-                            .with_columns(_PERCENT_CHANGE_EXPR)
-                            .select(ORDERED_PRICE_COLS)
-                        )
+                        results_[symbol_] = self._format_price_dataframe(history_)
                         continue
 
                     message_ = f'No current-day or cached data returned for {symbol_} (ticker: {ticker_}).'
@@ -326,11 +405,8 @@ class PriceProvider:
                 history_ = history_by_symbol_.get(symbol_, empty_history_template_)
 
                 # Recompute PercentChange across the merged series
-                results_[symbol_] = (
+                results_[symbol_] = self._format_price_dataframe(
                     pl.concat([history_, today_row_], how='vertical_relaxed')
-                    .sort('Date')
-                    .with_columns(_PERCENT_CHANGE_EXPR)
-                    .select(ORDERED_PRICE_COLS)
                 )
 
             message_ = f'Price cache successfully refreshed in memory for {len(results_)} symbols.'
@@ -396,19 +472,7 @@ class PriceProvider:
         logger_.info(message_)
 
         try:
-            # Visit: https://pandas-datareader.readthedocs.io/en/latest/remote_data.html
-            #        https://github.com/pydata/pandas-datareader/issues/170
-            #        https://pypi.org/project/yfinance/
-
-            # Download prices from price source with this parameter list:
-            # tickers, start = None, end = None, actions = False, threads = True,
-            # ignore_tz = None, group_by = 'column', auto_adjust = None, back_adjust = False,
-            # repair = False, keepna = False, progress = True, period = None, interval = '1d',
-            # prepost = False, proxy = _SENTINEL_, rounding = False, timeout = 10, session = None,
-            # multi_level_index = True
-            multi_symbol_df_ = yf.download(tickers_, self.start_date, self.end_date,
-                                           auto_adjust=True, progress=bool(verbosity_level == DEBUG),
-                                           threads=self.max_workers, group_by='ticker')
+            multi_symbol_df_ = self._download_tickers(tickers_, self.start_date, verbosity_level)
 
             if multi_symbol_df_.empty:
                 logger_.warning('Download returned an empty DataFrame for all tickers.')
@@ -422,15 +486,13 @@ class PriceProvider:
             for symbol_, ticker_ in symbol_to_ticker_map_.items():
                 # For single ticker downloads, yfinance might not use multi-level columns unless group_by is used.
                 # The current code handles both multi-level and single-level column structures.
-                if ticker_ not in multi_symbol_df_.columns:
+                symbol_df_ = self._extract_ticker_dataframe(multi_symbol_df_, ticker_)
+                if symbol_df_.empty:
                     logger_.warning(f'No data downloaded for symbol: {symbol_} (ticker: {ticker_}).')
                     continue
 
-                symbol_df_ = multi_symbol_df_[ticker_].dropna(how='all')
-
-                if not symbol_df_.empty:
-                    # Convert Pandas DataFrame into a Polars DataFrame.
-                    results_[symbol_] = self._process_dataframe(symbol_, symbol_df_)
+                # Convert Pandas DataFrame into a Polars DataFrame.
+                results_[symbol_] = self._process_dataframe(symbol_, symbol_df_)
 
         except Exception as e_:
             logger_.exception(f'An exception occurred during download: {e_}', exc_info=True)

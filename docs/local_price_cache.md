@@ -92,8 +92,10 @@ The `_is_cache_eligible(symbol_to_ticker_map, now)` method is the sole gatekeepe
    - Once trading opens on a weekday (`09:30`), all pre-market corporate actions (splits, reverse splits, dividends) have taken effect. If the cache on disk was updated at or after `trading_start` today, the historical bars are settled and valid. **Both DEV and PROD** return `True` to refresh only today's single bar in memory.
    - Any cache generated pre-market (`updated_at < trading_start`) is rejected after `09:30` to force a complete download that captures the new adjustments.
 4. **Pre-Market & Weekend Execution**:
-   - **Development (`RADAR_ENV=dev`)**: Outside the active session (weekends or pre-market), evaluates `0 <= metadata.age_in_minutes(now) <= dev_max_age_minutes` to avoid repeated external downloads during development.
-   - **Production (`RADAR_ENV!=dev`)**: Returns `False` outside the active session, forcing a complete download.
+   - **Development (`RADAR_ENV=dev`)**: Outside the active weekday session (weekends or pre-market), evaluates `0 <= metadata.age_in_minutes(now) <= dev_max_age_minutes` to avoid repeated external downloads during development.
+   - **Production (`RADAR_ENV!=dev`)**:
+     - **Pre-Market (Weekdays before 09:30)**: Returns `False`, forcing a complete download.
+     - **Weekends (Saturday & Sunday)**: Returns `True` if `metadata.session_date == str(now.date())`. On the first execution of each weekend day, the date mismatch between Friday and Saturday (or Saturday and Sunday) forces exactly one full historical download. Subsequent runs on the same weekend day reuse the cache snapshot.
 
 ### Current-Day Refresh (`_refresh_cache`)
  
@@ -104,8 +106,9 @@ When cache is eligible, `_refresh_cache(symbol_to_ticker_map, tickers, now)`:
    `yf.download(tickers, current_date, self.end_date, threads=self.max_workers, ...)`
 4. Filters the cached DataFrame strictly to the requested symbols and partitions historical data by `'Symbol'` in a single pass (`partition_by('Symbol', as_dict=True)`) for $O(1)$ dictionary lookups, immediately releasing the original cache DataFrame (`del cached_df_`).
 5. For each requested symbol:
-   - If today's bar was successfully fetched, vertically combines historical rows with today's row and recalculates `PercentChange`.
-   - **Fault-Tolerant Fallback**: If an individual ticker's current-day data is missing or empty (e.g. trading halt, data provider delay), `PriceProvider` logs a warning and falls back to the symbol's cached historical prices, ensuring the remaining universe continues uninterrupted.
+   - If today's bar was successfully fetched (e.g. 24/7 crypto or weekday equities), vertically combines historical rows with today's row and recalculates `PercentChange`.
+   - **Closed Market & Weekend Support**: If the entire current-day download is empty on a weekend (`now.weekday() >= 5`, e.g. an equities-only portfolio where markets are closed), `PriceProvider` uses cached historical prices directly for all requested symbols.
+   - **Fault-Tolerant Fallback**: If an individual ticker's current-day data is missing or empty (e.g. closed stock market during weekend mixed runs, trading halt, or data provider delay), `PriceProvider` logs a warning and falls back to the symbol's cached historical prices, ensuring the remaining universe continues uninterrupted.
 6. Retains the refreshed series in-memory for strategy analysis without calling `_save_cache()`. This ensures provisional intraday data is discarded at the end of the run and cannot pollute subsequent executions before official end-of-day market settlement.
 
 ### Fallback Policy
