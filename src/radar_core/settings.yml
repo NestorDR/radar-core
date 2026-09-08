@@ -24,3 +24,4 @@ evaluable_strategies:  # Use attribute name in `class Strategies`, module `evalu
   - rsi_sma   # Profitable RSI(14) SMA
   - rsi_rc    # Profitable RSI(14) RC
   - rsi_2b    # Profitable RSI(14) 2B
+rsi_input_filter: 'price_action'  # options: 'none', 'price_action', 'atr_volatility', 'sma_trend'

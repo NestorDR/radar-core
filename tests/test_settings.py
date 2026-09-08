@@ -245,3 +245,38 @@ def test_price_cache_empty_dir_raises(monkeypatch):
 
     with pytest.raises(ValueError, match='RADAR_PRICE_CACHE_DIR cannot be empty'):
         get_settings()
+
+
+def test_rsi_input_filter_explicitly_configured():
+    """
+    GIVEN settings.dev.yml with explicit rsi_input_filter configuration
+    WHEN get_settings() is initialized
+    THEN rsi_input_filter returns 'price_action'.
+    """
+    s_ = get_settings()
+    assert s_.rsi_input_filter == 'price_action'
+
+
+def test_rsi_input_filter_explicitly_configured_production(monkeypatch):
+    """
+    GIVEN settings.yml (production) with explicit rsi_input_filter configuration
+    WHEN get_settings() is initialized
+    THEN rsi_input_filter returns 'price_action'.
+    """
+    monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
+    s_ = get_settings()
+    assert s_.rsi_input_filter == 'price_action'
+
+
+def test_rsi_input_filter_omitted_returns_none(monkeypatch, tmp_path):
+    """
+    GIVEN a custom YAML configuration without rsi_input_filter
+    WHEN get_settings() is initialized
+    THEN rsi_input_filter returns None adhering to 'explicit is better than implicit'.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text('symbols:\n  - SPY\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.rsi_input_filter is None

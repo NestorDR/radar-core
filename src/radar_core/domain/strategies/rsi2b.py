@@ -47,6 +47,7 @@ def _find_trades_2b(
     out_: int,
     is_long_position: bool,
     future_bar_number: int,
+    is_input_eligible: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Fast JIT-compiled kernel to identify trades based on RSI Two Bands logic.
@@ -58,6 +59,7 @@ def _find_trades_2b(
     :param out_: Output level for the strategy.
     :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
     :param future_bar_number: The number of a price bar that will be available in the future.
+    :param is_input_eligible: Optional 1D boolean array indicating whether each bar is eligible to input.
 
     :return: Tuple of numpy arrays with the input and output bar numbers for each trade.
     """
@@ -84,6 +86,8 @@ def _find_trades_2b(
         # Long.: RSI > in_ AND Previous <= in_
         # Short: RSI < in_ AND Previous >= in_
         if not _crosses_input(previous_rsi_, rsi_, in_, in_, is_long_position):
+            continue
+        if is_input_eligible is not None and not is_input_eligible[bar_number_]:
             continue
 
         # This assignment is purely semantic, indicating that once the input condition was met,
@@ -151,6 +155,7 @@ def _grid_search_2b_fused(
     step: int,
     is_long_position: bool,
     future_bar_number: int,
+    is_input_eligible: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     Fast JIT-compiled fused grid search kernel for RSI Two Bands.
@@ -165,6 +170,7 @@ def _grid_search_2b_fused(
     :param step: Step size for input level iteration.
     :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
     :param future_bar_number: The number of a price bar that will be available in the future.
+    :param is_input_eligible: Optional 1D boolean array indicating whether each bar is eligible to input.
 
     :return: 2D NumPy array of shape (K, 2) containing [in_, out_] for winning candidates.
     """
@@ -224,6 +230,8 @@ def _grid_search_2b_fused(
                 # Long.: RSI > in_ AND Previous <= in_
                 # Short: RSI < in_ AND Previous >= in_
                 if not _crosses_input(previous_rsi_, rsi_, in_, in_, is_long_position):
+                    continue
+                if is_input_eligible is not None and not is_input_eligible[bar_number_]:
                     continue
 
                 # This assignment is purely semantic, indicating that once the input condition was met,
@@ -536,6 +544,7 @@ class RsiTwoBands(RsiStrategyABC):
         prices_df: pl.DataFrame,
         close_prices: np.ndarray,
         percent_changes: np.ndarray,
+        is_input_eligible: np.ndarray | tuple[np.ndarray, np.ndarray] | None = None,
         verbosity_level: int = DEBUG,
     ) -> None:
         """
@@ -551,6 +560,7 @@ class RsiTwoBands(RsiStrategyABC):
         :param prices_df: Dataframe with required columns [Date, Close, Volume, PercentChange], indexed by numbers.
         :param close_prices: Close prices for the given symbol and timeframe.
         :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
+        :param is_input_eligible: Optional boolean eligibility array or tuple of (long_mask, short_mask) for input bars.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
         """
@@ -589,6 +599,12 @@ class RsiTwoBands(RsiStrategyABC):
             analysis_context_.is_long_position = is_long_position_
 
             stop_loss_bar_numbers_ = long_stops_ if is_long_position_ else short_stops_
+            if is_input_eligible is None:
+                eligible_mask_ = None
+            elif isinstance(is_input_eligible, tuple):
+                eligible_mask_ = is_input_eligible[0] if is_long_position_ else is_input_eligible[1]
+            else:
+                eligible_mask_ = is_input_eligible
 
             if verbosity_level == DEBUG:
                 print('', end='\r')
@@ -603,6 +619,7 @@ class RsiTwoBands(RsiStrategyABC):
                 step_,
                 is_long_position_,
                 future_bar_number_,
+                eligible_mask_,
             )
 
             # Materialize complete Ratios objects only for surviving best candidates/combinations
@@ -614,7 +631,7 @@ class RsiTwoBands(RsiStrategyABC):
                 # Reconstruct the trade lifecycle using the existing JIT kernel.
                 # (input and output) with the current candidate/combination.
                 input_bar_numbers_, output_bar_numbers_ = _find_trades_2b(
-                    rsi_values_, stop_loss_bar_numbers_, in_, out_, is_long_position_, future_bar_number_
+                    rsi_values_, stop_loss_bar_numbers_, in_, out_, is_long_position_, future_bar_number_, eligible_mask_
                 )
                 # If no trades identified, skip
                 if len(input_bar_numbers_) == 0:

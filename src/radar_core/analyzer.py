@@ -28,6 +28,8 @@ import polars as pl
 from psycopg import OperationalError
 
 # --- App modules ---
+# filters: provides candle/volatility signal masks for strategy trade entry
+from radar_core.domain.filters import get_filter_masks
 # strategies: provides identification and evaluation of speculation/investment strategies on financial instruments
 from radar_core.domain.strategies import (EvaluableStrategies, RsiStrategyABC,
                                           MovingAverage, RsiRollerCoaster, RsiTwoBands)
@@ -159,12 +161,17 @@ def analyze(timeframe: int,
             # Identify and calculate where to stop losses for both long and short positions.
             prices_df = RsiStrategyABC.identify_where_to_stop_loss(timeframe, prices_df, close_prices_)
 
+            # Precompute input eligibility masks for RSI input filtering if configured
+            filter_name_ = get_settings().rsi_input_filter
+            long_mask_, short_mask_ = get_filter_masks(filter_name_, prices_df)
+            is_input_eligible_ = (long_mask_, short_mask_) if long_mask_ is not None else None
+
             if strategies.rsi_2b:
                 strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
-                                           percent_changes_, verbosity_level)
+                                           percent_changes_, is_input_eligible_, verbosity_level)
             if strategies.rsi_rc:
                 strategies.rsi_rc.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
-                                           percent_changes_, verbosity_level)
+                                           percent_changes_, is_input_eligible_, verbosity_level)
 
     # Release memory
     del close_prices_, percent_changes_

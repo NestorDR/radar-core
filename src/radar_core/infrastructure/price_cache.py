@@ -145,7 +145,7 @@ class PriceCache:
         """
         Reads and returns the cached Parquet DataFrame from disk using memory-mapping.
 
-        :return: Polars DataFrame if file exists and reads cleanly, else None.
+        :return: A Polars DataFrame if the file exists and reads cleanly, else None.
         """
         if not self.data_path.is_file():
             logger_.warning('Cached Parquet data file missing at %s', self.data_path)
