@@ -1,5 +1,10 @@
 # src/radar_core/helpers/constants.py
 
+# --- Python modules ---
+from zoneinfo import ZoneInfo
+
+LOCAL_TIMEZONE = ZoneInfo("Europe/Brussels")
+
 UNKNOWN = 'Unknown'
 
 # Time frames

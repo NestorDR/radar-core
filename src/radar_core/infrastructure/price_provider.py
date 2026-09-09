@@ -58,7 +58,7 @@ class PriceProvider:
         self._cache_settings = settings_.price_cache_kwargs
         self._price_cache = PriceCache(self._cache_settings['dir'])
         self.start_date = propose_start_dt(DAILY, long_term=long_term)
-        self.end_date = datetime.now(self._cache_settings['timezone']).date() + timedelta(days=1)
+        self.end_date = datetime.now(timezone.utc).date() + timedelta(days=1)
         self.verbosity_level = verbosity_level
 
     def _process_dataframe(
@@ -148,7 +148,7 @@ class PriceProvider:
         :param source_df: Multi-ticker pandas DataFrame returned by yfinance.
         :param ticker: Provider ticker string.
 
-        :return: A cleaned single-ticker pandas DataFrame, or an empty DataFrame if ticker is absent.
+        :return: A cleaned single-ticker pandas DataFrame, or an empty DataFrame if the ticker is absent.
         """
         if ticker in source_df.columns:
             return source_df[ticker].dropna(how='all')
@@ -182,7 +182,7 @@ class PriceProvider:
         # repair = False, keepna = False, progress = True, period = None, interval = '1d',
         # prepost = False, proxy = _SENTINEL_, rounding = False, timeout = 10, session = None,
         # multi_level_index = True
-        return yf.download(
+        downloaded_multi_symbol_df_ = yf.download(
             tickers,
             start_date,
             self.end_date,
@@ -191,6 +191,7 @@ class PriceProvider:
             threads=self.max_workers,
             group_by='ticker',
         )
+        return downloaded_multi_symbol_df_ if downloaded_multi_symbol_df_ is not None else pd.DataFrame()
 
     def _save_cache(
             self,
@@ -301,7 +302,7 @@ class PriceProvider:
         if is_weekend_eligible_:
             return True
 
-        # In development mode, allow reuse within dev_max_age_minutes TTL (e.g. pre-market or across date boundaries)
+        # In development mode, allow reuse within dev_max_age_minutes TTL (e.g., pre-market or across date boundaries)
         if self.app_environment == 'dev':
             return 0 <= metadata_.age_in_minutes(now) <= self._cache_settings['dev_max_age_minutes']
 
@@ -356,7 +357,7 @@ class PriceProvider:
             del cached_df_
 
             if today_df_.empty:
-                # When markets are closed on weekends (e.g. stocks only),
+                # When markets are closed on weekends (e.g., stocks only),
                 # use cached historical prices directly for all requested symbols
                 if now.weekday() >= 5:
                     message_ = (
@@ -517,6 +518,7 @@ if __name__ == '__main__':
     from datetime import datetime
 
     # --- App modules ---
+    from radar_core.helpers.constants import LOCAL_TIMEZONE
     from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
     from radar_core.settings import get_settings
 
@@ -535,7 +537,7 @@ if __name__ == '__main__':
     # --- Test Case 1: Download a single symbol that requires translation ---
     print('--- Testing single download ---')
     test_symbol_ = 'QQQ'
-    init_dt_ = datetime.now()  # Identify the date and time when the process is started
+    init_dt_ = datetime.now(LOCAL_TIMEZONE)  # Identify the date and time when the process is started
     prices_data_ = price_provider_.get_prices([test_symbol_], init_dt_)
     if test_symbol_ in prices_data_:
         data_ = prices_data_[test_symbol_]
@@ -547,7 +549,7 @@ if __name__ == '__main__':
     print('\n--- Testing multiple symbols download ---')
     test_symbols_ = settings.symbols
     prices_data_ = price_provider_.get_prices(test_symbols_, init_dt_)
-    end_dt_ = datetime.now()
+    end_dt_ = datetime.now(LOCAL_TIMEZONE)
 
     print('\nConcurrent download complete. Results:')
     for test_symbol_, data_ in prices_data_.items():

@@ -6,7 +6,7 @@ import concurrent.futures
 # contextlib: provides utilities for working with context managers, including stream redirection.
 from contextlib import ExitStack, redirect_stderr, redirect_stdout
 # datetime: provides classes for manipulating dates and times.
-from datetime import datetime
+from datetime import datetime, timezone
 # io: implements the core facilities for file-like objects and I/O streams.
 import io
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
@@ -36,7 +36,7 @@ from radar_core.domain.strategies import (EvaluableStrategies, RsiStrategyABC,
 # technical: provides calculations of TA indicators
 from radar_core.domain.technical import RSI
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRICE_COLS, RSI_SMA, SMA
+from radar_core.helpers.constants import LOCAL_TIMEZONE, DAILY, WEEKLY, TIMEFRAMES, REQUIRED_PRICE_COLS, RSI_SMA, SMA
 from radar_core.helpers.datetime_helper import to_weekly_timeframe
 from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own DB and/or integration with external prices providers
@@ -130,7 +130,7 @@ def analyze(timeframe: int,
     # Show pricing frame information with prices to process
     if verbosity_level <= INFO:
         print(
-            f'\n[{symbol}]: {TIMEFRAMES[timeframe]} time frame analysis started at {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}...')
+            f'\n[{symbol}]: {TIMEFRAMES[timeframe]} time frame analysis started at {datetime.now(LOCAL_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")}...')
         if verbosity_level == DEBUG:
             print(prices_df.head(1))
         print(prices_df.tail(1))
@@ -200,7 +200,7 @@ def process_symbol(symbol: str,
     only_long_positions_ = symbol_ not in shortable_symbols
 
     # Log inside the child process (always goes to file/console depending on config, before buffering starts)
-    message_ = datetime.now().strftime(f'[{symbol}]: Analysis started at %Y-%m-%d %H:%M:%S...')
+    message_ = datetime.now(LOCAL_TIMEZONE).strftime(f'[{symbol}]: Analysis started at %Y-%m-%d %H:%M:%S...')
     verbose(message_, INFO, verbosity_level)
     logger_.info(message_)
 
@@ -272,7 +272,7 @@ def analyzer(symbols: list[str] | None = None) -> int:
     """
 
     # Set information about the start of the process
-    init_dt_ = datetime.now()  # Identify the date and time when the process is started
+    init_dt_ = datetime.now(LOCAL_TIMEZONE)  # Identify the date and time when the process is started
     settings_ = get_settings()
     verbosity_level_ = settings_.verbosity_level
 
@@ -306,7 +306,7 @@ def analyzer(symbols: list[str] | None = None) -> int:
             # evaluable_strategies is a list of strings matching the keys in strategy_map_
             # The strategy key in the map is the attribute name
             active_strategies_: dict = {strategy_key_: factory_() for strategy_key_, factory_ in strategy_map_.items()
-                                        if  strategy_key_ in settings_.evaluable_strategies}
+                                        if strategy_key_ in settings_.evaluable_strategies}
             # Instantiate strategies container only with active strategies
             strategies_ = EvaluableStrategies(**active_strategies_)
 
@@ -318,7 +318,7 @@ def analyzer(symbols: list[str] | None = None) -> int:
                 return 0
 
             # Download prices data for all symbols
-            prices_data_ = PriceProvider(long_term=False).get_prices(symbols, datetime.now())
+            prices_data_ = PriceProvider(long_term=False).get_prices(symbols, datetime.now(LOCAL_TIMEZONE))
 
             # Determine the number of workers configured in settings
             num_workers_ = settings_.max_workers
@@ -446,8 +446,8 @@ def analyzer(symbols: list[str] | None = None) -> int:
             logger_.warning(message_)
 
         message_ = (init_dt_.strftime('Analysis executed from %Y-%m-%d %H:%M:%S ')
-                    + datetime.now().strftime('to %Y-%m-%d %H:%M:%S')
-                    + f' - Elapsed time {(datetime.now() - init_dt_).total_seconds() / 60:.2f} min')
+                    + datetime.now(LOCAL_TIMEZONE).strftime('to %Y-%m-%d %H:%M:%S')
+                    + f' - Elapsed time {(datetime.now(LOCAL_TIMEZONE) - init_dt_).total_seconds() / 60:.2f} min')
         verbose(message_, INFO, verbosity_level_)
         logger_.info(message_)
 
@@ -496,7 +496,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['BTC-USD', 'SPY','GOLD']
+    symbols_ = ['BTC-USD', 'SPY', 'GOLD']
 
     try:
         #  Analyze strategies over historical prices
