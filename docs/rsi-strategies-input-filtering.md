@@ -68,26 +68,30 @@ class FilterABC(ABC):
 - **`get_filter(filter_name: str, **kwargs)`**: Instantiates the requested filter class or raises `KeyError` with available filters.
 - **`get_filter_masks(filter_name: str | None, prices_df: pl.DataFrame)`**: Factory method that handles baseline queries (`None`, `''`, `'none'`, `'baseline'`) by returning `(None, None)` without array allocation.
 
-### 2.3 Price Action Filter with True Range (`price_action.py`)
-Upgraded to evaluate candle confirmation against **True Range (TR)** rather than nominal High-Low range to account for overnight gaps:
+### 2.3 Price Action Filter with Directional Retention Ratio (`price_action.py`)
+Evaluates candle confirmation against **Directional Retention Ratios** relative to the prior close anchor ($Close_{t-1}$) rather than symmetric True Range, ensuring entries genuinely penetrate and hold directional territory:
 
-$$\text{TR}_t = \max(High_t - Low_t, |High_t - Close_{t-1}|, |Low_t - Close_{t-1}|)$$
-
-$$\text{TrueLow}_t = \min(Low_t, Close_{t-1})$$
-
-$$\text{TrueHigh}_t = \max(High_t, Close_{t-1})$$
+- **Directional Spans**:
+  $$\text{Span}_{\text{long}} = High_t - Close_{t-1}$$
+  $$\text{Span}_{\text{short}} = Close_{t-1} - Low_t$$
 
 - **Long Entry Eligibility**:
   - Requires bullish candle close: $Close_t > Open_t$
-  - Requires close in the upper portion of the True Range:
-    $$\frac{Close_t - \text{TrueLow}_t}{\text{TR}_t} \ge \text{long\_threshold} \quad (\text{default: } 0.60)$$
+  - Requires positive upward span: $\text{Span}_{\text{long}} > 0$
+  - Requires close in the upper portion of the upward span:
+    $$\frac{Close_t - Close_{t-1}}{High_t - Close_{t-1}} \ge \text{long\_threshold} \quad (\text{defaults to } \text{DEFAULT\_LONG\_THRESHOLD})$$
+  - *Guarantees the session broke and held at least `DEFAULT_LONG_THRESHOLD` of the upside penetration above yesterday's close.*
+
 - **Short Entry Eligibility**:
   - Requires bearish candle close: $Close_t < Open_t$
-  - Requires close in the lower portion of the True Range:
-    $$\frac{Close_t - \text{TrueLow}_t}{\text{TR}_t} \le \text{short\_threshold} \quad (\text{default: } 0.25)$$
+  - Requires positive downward span: $\text{Span}_{\text{short}} > 0$
+  - Requires close near the session low relative to the downward span:
+    $$\frac{Close_t - Low_t}{Close_{t-1} - Low_t} \le \text{short\_threshold} \quad (\text{defaults to } \text{DEFAULT\_SHORT\_THRESHOLD})$$
+  - *Equivalent to retaining at least $(1 - \text{short\_threshold})$ of the downward drop, seamlessly preserving `DEFAULT_SHORT_THRESHOLD`.*
+
 - **Boundary Conditions**:
-  - On bar 0 (where $Close_{t-1}$ is null), falls back to the nominal bar range: $\text{TR}_0 = High_0 - Low_0$.
-  - Where $\text{TR}_t == 0.0$, evaluates to `False`.
+  - On bar 0 (where $Close_{t-1}$ is null), directional spans cannot be anchored and evaluate safely to `False`.
+  - Where directional span $\le 0.0$ (e.g. submerged sessions where $High_t \le Close_{t-1}$ or gap-ups where $Low_t \ge Close_{t-1}$), evaluates to `False`.
 
 ### 2.4 ATR Volatility Regime Filter (`atr_volatility.py`)
 Filters entries based on whether prevailing volatility falls within historically normal regimes:
@@ -194,12 +198,13 @@ Comprehensive unit tests validate the filtering subsystem:
 - **Registry Lookup**: Verifies mapping for `'price_action'`, `'atr_volatility'`, and `'sma_trend'`.
 - **Zero-Allocation Baseline**: Asserts that `get_filter_masks` with `None`, `''`, `'none'`, or `'baseline'` returns `(None, None)`.
 - **Unknown Filter Handling**: Confirms `KeyError` is raised with the registry key list on invalid names.
-- **Price Action True Range**:
-  - Validates gap detection and True Range calculation.
-  - Confirms Long eligibility requires $Close > Open$ and upper range close.
-  - Confirms Short eligibility requires $Close < Open$ and lower range close.
-  - Validates bar 0 fallback behavior when prior close is absent.
-  - Validates flat-line zero range ($TR = 0$) evaluates to `False`.
+- **Price Action Directional Retention**:
+  - Validates directional retention calculations for Long and Short entries.
+  - Rejects submerged green sessions where price fails to penetrate or hold territory above prior close.
+  - Confirms Long eligibility requires $Close > Open$, positive upward span, and $\ge 0.60$ span retention.
+  - Confirms Short eligibility requires $Close < Open$, positive downward span, and $\le 0.25$ low-distance location.
+  - Validates unanchored bar 0 safely evaluates to `False`.
+  - Validates flat-line zero directional spans evaluate to `False`.
 - **ATR Volatility Regime**: Validates percentile bounds and history length requirements.
 - **SMA Trend & Slope**: Validates uptrend, downtrend, and history threshold guards.
 

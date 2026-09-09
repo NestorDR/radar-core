@@ -10,17 +10,19 @@ import polars as pl
 # --- App modules ---
 from radar_core.domain.filters.base import FilterABC
 
-DEFAULT_LONG_THRESHOLD: Final[float] = 0.60
+DEFAULT_LONG_THRESHOLD: Final[float] = 0.10
 DEFAULT_SHORT_THRESHOLD: Final[float] = 0.25
 
 
 class PriceActionFilter(FilterABC):
     """
-    Price-action candle confirmation filter based on True Range.
-    Evaluates candle direction and close location relative to the True Range
-    (incorporating prior close and session gaps) on the input bar.
-    Long setups require a bullish candle (Close > Open) with close location >= 0.60.
-    Short setups require a bearish candle (Close < Open) with close location <= 0.25.
+    Price-action candle confirmation filter based on Directional Retention Ratios.
+    Evaluates candle direction and directional progress relative to prior close
+    on the input bar.
+    Long setups require a bullish candle (Close > Open) retaining >= long_threshold
+    (defaults to DEFAULT_LONG_THRESHOLD) of the upward span.
+    Short setups require a bearish candle (Close < Open) with low-distance location <= short_threshold
+    (defaults to DEFAULT_SHORT_THRESHOLD).
     """
 
     def __init__(
@@ -29,8 +31,8 @@ class PriceActionFilter(FilterABC):
             short_threshold: float = DEFAULT_SHORT_THRESHOLD,
     ) -> None:
         """
-        :param long_threshold: Minimum close location for Long setups (default 0.60).
-        :param short_threshold: Maximum close location for Short setups (default 0.25).
+        :param long_threshold: Minimum upward span retention for Long setups (defaults to DEFAULT_LONG_THRESHOLD).
+        :param short_threshold: Maximum low-distance location for Short setups (defaults to DEFAULT_SHORT_THRESHOLD).
         """
         self.long_threshold = long_threshold
         self.short_threshold = short_threshold
@@ -58,32 +60,36 @@ class PriceActionFilter(FilterABC):
             return empty_mask_, empty_mask_
 
         prior_close_expr_ = pl.col('Close').shift(1)
-        true_high_expr_ = pl.max_horizontal(pl.col('High'), prior_close_expr_.fill_null(pl.col('High')))
-        true_low_expr_ = pl.min_horizontal(pl.col('Low'), prior_close_expr_.fill_null(pl.col('Low')))
-        true_range_expr_ = (true_high_expr_ - true_low_expr_).alias('true_range')
-        close_location_expr_ = (
-                (pl.col('Close') - true_low_expr_) / pl.col('true_range')
-        ).alias('close_location')
+        long_span_expr_ = (pl.col('High') - prior_close_expr_).alias('long_span')
+        short_span_expr_ = (prior_close_expr_ - pl.col('Low')).alias('short_span')
+
+        long_retention_expr_ = (
+            (pl.col('Close') - prior_close_expr_) / pl.col('long_span')
+        ).alias('long_retention')
+
+        short_location_expr_ = (
+            (pl.col('Close') - pl.col('Low')) / pl.col('short_span')
+        ).alias('short_location')
 
         df_ = (
             prices_df
-            .with_columns(true_high_expr_.alias('true_high'), true_low_expr_.alias('true_low'))
-            .with_columns(true_range_expr_)
-            .with_columns(close_location_expr_)
+            .with_columns(prior_close_expr_.alias('prior_close'))
+            .with_columns(long_span_expr_, short_span_expr_)
+            .with_columns(long_retention_expr_, short_location_expr_)
         )
 
         long_condition_expr_ = (
-                (pl.col('true_range') > 0.0)
-                & (pl.col('Close') > pl.col('Open'))
-                & (pl.col('close_location') >= self.long_threshold)
-                & pl.col('close_location').is_not_null()
+            (pl.col('long_span') > 0.0)
+            & (pl.col('Close') > pl.col('Open'))
+            & (pl.col('long_retention') >= self.long_threshold)
+            & pl.col('long_retention').is_not_null()
         ).fill_null(False)
 
         short_condition_expr_ = (
-                (pl.col('true_range') > 0.0)
-                & (pl.col('Close') < pl.col('Open'))
-                & (pl.col('close_location') <= self.short_threshold)
-                & pl.col('close_location').is_not_null()
+            (pl.col('short_span') > 0.0)
+            & (pl.col('Close') < pl.col('Open'))
+            & (pl.col('short_location') <= self.short_threshold)
+            & pl.col('short_location').is_not_null()
         ).fill_null(False)
 
         long_mask_series_ = df_.select(long_condition_expr_.alias('long_eligible')).to_series()
