@@ -11,7 +11,7 @@ import polars as pl
 from radar_core.domain.filters.base import FilterABC
 
 DEFAULT_LONG_THRESHOLD: Final[float] = 0.10
-DEFAULT_SHORT_THRESHOLD: Final[float] = 0.75
+DEFAULT_SHORT_THRESHOLD: Final[float] = 0.95
 
 
 class PriceActionFilter(FilterABC):
