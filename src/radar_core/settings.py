@@ -90,7 +90,8 @@ class Settings:
         self.undeletable_symbols: list[str] = config_.get('done', []) or []
         self.undeletable_symbols += self.symbols
         self.evaluable_strategies: list[str] = config_.get('evaluable_strategies', [])
-        self.rsi_input_filter: str | None = config_.get('rsi_input_filter', 'none')
+        raw_filter_ = config_.get('rsi_input_filter')
+        self.rsi_input_filter: str | None = raw_filter_.strip() if isinstance(raw_filter_, str) else raw_filter_
 
     @classmethod
     def _reset(cls) -> None:

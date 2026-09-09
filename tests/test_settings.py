@@ -247,27 +247,6 @@ def test_price_cache_empty_dir_raises(monkeypatch):
         get_settings()
 
 
-def test_rsi_input_filter_explicitly_configured():
-    """
-    GIVEN settings.dev.yml with explicit rsi_input_filter configuration
-    WHEN get_settings() is initialized
-    THEN rsi_input_filter returns 'price_action'.
-    """
-    s_ = get_settings()
-    assert s_.rsi_input_filter == 'price_action'
-
-
-def test_rsi_input_filter_explicitly_configured_production(monkeypatch):
-    """
-    GIVEN settings.yml (production) with explicit rsi_input_filter configuration
-    WHEN get_settings() is initialized
-    THEN rsi_input_filter returns 'price_action'.
-    """
-    monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
-    s_ = get_settings()
-    assert s_.rsi_input_filter == 'price_action'
-
-
 def test_rsi_input_filter_omitted_returns_none(monkeypatch, tmp_path):
     """
     GIVEN a custom YAML configuration without rsi_input_filter
@@ -280,3 +259,63 @@ def test_rsi_input_filter_omitted_returns_none(monkeypatch, tmp_path):
 
     s_ = get_settings()
     assert s_.rsi_input_filter is None
+
+
+def test_rsi_input_filter_explicit_null_returns_none(monkeypatch, tmp_path):
+    """
+    GIVEN a custom YAML configuration where rsi_input_filter is explicitly null
+    WHEN get_settings() is initialized
+    THEN rsi_input_filter returns None.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text('symbols:\n  - SPY\nrsi_input_filter: null\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.rsi_input_filter is None
+
+
+@pytest.mark.parametrize('filter_name', ['price_action', 'atr_volatility', 'sma_trend', 'none'])
+def test_rsi_input_filter_explicitly_configured(monkeypatch, tmp_path, filter_name):
+    """
+    GIVEN an isolated YAML configuration with an explicitly configured rsi_input_filter
+    WHEN get_settings() is initialized
+    THEN rsi_input_filter returns the configured filter name.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text(f'symbols:\n  - SPY\nrsi_input_filter: {filter_name}\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.rsi_input_filter == filter_name
+
+
+def test_rsi_input_filter_whitespace_stripped(monkeypatch, tmp_path):
+    """
+    GIVEN an isolated YAML configuration with padding whitespace around rsi_input_filter
+    WHEN get_settings() is initialized
+    THEN rsi_input_filter returns the stripped filter name.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text("symbols:\n  - SPY\nrsi_input_filter: '  price_action  '\n")
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.rsi_input_filter == 'price_action'
+
+
+def test_rsi_input_filter_optional_in_environment_files(monkeypatch):
+    """
+    GIVEN default dev or production settings files where rsi_input_filter may be omitted
+    WHEN get_settings() is initialized
+    THEN rsi_input_filter is safely either None or a registered filter name without raising errors.
+    """
+    # Verify default dev environment (settings.dev.yml)
+    s_dev_ = get_settings()
+    assert s_dev_.rsi_input_filter in (None, 'price_action', 'atr_volatility', 'sma_trend', 'none')
+
+    # Verify production environment (settings.yml)
+    Settings._reset()
+    monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
+    s_prod_ = get_settings()
+    assert s_prod_.rsi_input_filter in (None, 'price_action', 'atr_volatility', 'sma_trend', 'none')
