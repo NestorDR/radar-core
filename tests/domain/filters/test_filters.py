@@ -71,7 +71,7 @@ def test_price_action_filter_directional_logic() -> None:
     GIVEN candles with known prior closes, directional spans, and close locations.
     WHEN PriceActionFilter evaluates the bars with default thresholds.
     THEN bullish bars with upward retention >= DEFAULT_LONG_THRESHOLD are Long eligible,
-         bearish bars with downward location <= DEFAULT_SHORT_THRESHOLD are Short eligible,
+         bearish bars with downward retention >= DEFAULT_SHORT_THRESHOLD are Short eligible,
          and unconfirmed or zero-span bars are ineligible for both.
     """
     df_ = pl.DataFrame({
@@ -86,9 +86,9 @@ def test_price_action_filter_directional_logic() -> None:
         # Bar 1: Bullish confirmation: Prior close 10. Open 10, Low 10, High 20, Close 18
         #        Span = 20 - 10 = 10, Retention = (18 - 10) / 10 = 0.80 >= DEFAULT_LONG_THRESHOLD, Close > Open -> Long True, Short False
         # Bar 2: Bearish confirmation: Prior close 18. Open 18, High 18, Low 8, Close 10
-        #        Span = 18 - 8 = 10, Location = (10 - 8) / 10 = 0.20 <= DEFAULT_SHORT_THRESHOLD, Close < Open -> Long False, Short True
-        # Bar 3: Bearish but location > DEFAULT_SHORT_THRESHOLD: Prior close 10. Open 10, High 12, Low 2, Close 5
-        #        Span = 10 - 2 = 8, Location = (5 - 2) / 8 = 0.375 > DEFAULT_SHORT_THRESHOLD, Close < Open -> Long False, Short False
+        #        Span = 18 - 8 = 10, Retention = (18 - 10) / 10 = 0.80 >= DEFAULT_SHORT_THRESHOLD, Close < Open -> Long False, Short True
+        # Bar 3: Bearish but retention < DEFAULT_SHORT_THRESHOLD: Prior close 10. Open 10, High 12, Low 2, Close 5
+        #        Span = 10 - 2 = 8, Retention = (10 - 5) / 8 = 0.625 < DEFAULT_SHORT_THRESHOLD, Close < Open -> Long False, Short False
         # Bar 4: Flat zero-span day: Prior close 5. Open 5, High 5, Low 5, Close 5 (Close == Open) -> Long False, Short False
         'Open': [10.0, 10.0, 18.0, 10.0, 5.0],
         'High': [15.0, 20.0, 18.0, 12.0, 5.0],
@@ -119,7 +119,7 @@ def test_price_action_filter_directional_gap_and_submerged_handling() -> None:
         # Bar 0: Benchmark session: High 105, Low 95, Close 100
         # Bar 1: Submerged gap down with green candle: Open 80, High 85, Low 75, Close 82 (Close > Open)
         #        Long span = 85 - 100 = -15 <= 0 -> Long False!
-        #        Short span = 100 - 75 = 25, Location = (82 - 75) / 25 = 0.28 > DEFAULT_SHORT_THRESHOLD -> Short False!
+        #        Short span = 100 - 75 = 25, Retention = (100 - 82) / 25 = 0.72 < DEFAULT_SHORT_THRESHOLD (and Close > Open) -> Short False!
         # Bar 2: Bullish recovery penetrating prior close: Prior close 82. Open 83, Low 82, High 92, Close 90
         #        Long span = 92 - 82 = 10, Retention = (90 - 82) / 10 = 0.80 >= DEFAULT_LONG_THRESHOLD -> Long True!
         'Open': [98.0, 80.0, 83.0],

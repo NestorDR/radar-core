@@ -69,7 +69,24 @@ class FilterABC(ABC):
 - **`get_filter_masks(filter_name: str | None, prices_df: pl.DataFrame)`**: Factory method that handles baseline queries (`None`, `''`, `'none'`, `'baseline'`) by returning `(None, None)` without array allocation.
 
 ### 2.3 Price Action Filter with Directional Retention Ratio (`price_action.py`)
-Evaluates candle confirmation against **Directional Retention Ratios** relative to the prior close anchor ($Close_{t-1}$) rather than symmetric True Range, ensuring entries genuinely penetrate and hold directional territory:
+Evaluates candle confirmation against **Directional Retention Ratios** relative to the prior close anchor ($Close_{t-1}$), ensuring entries genuinely penetrate and hold directional territory:
+
+In technical analysis, relative to the prior close anchor $Close_{t-1}$:
+
+- $High_t - Close_{t-1}$ is the Upside True Range ($UTR_t$) (maximum upward excursion/buying reach).
+- $Close_{t-1} - Low_t$ is the Downside True Range ($DTR_t$) (maximum downward excursion/selling reach).
+Whenever yesterday's close falls within today's range ($Low_t \le Close_{t-1} \le High_t$): $$(High_t - Close_{t-1}) + (Close_{t-1} - Low_t) = High_t - Low_t = \text{True Range}_t$$
+
+The proposed expressions are the two directional halves of the True Range.
+```
+       High_t ────────────────┐
+                              │  Upside Span:
+                              │  High_t - Close_{t-1}
+  Close_{t-1} ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄─┼───────────────────────
+                              │  Downside Span:
+                              │  Close_{t-1} - Low_t
+        Low_t ────────────────┘
+```
 
 - **Directional Spans**:
   $$\text{Span}_{\text{long}} = High_t - Close_{t-1}$$
@@ -77,17 +94,17 @@ Evaluates candle confirmation against **Directional Retention Ratios** relative 
 
 - **Long Entry Eligibility**:
   - Requires bullish candle close: $Close_t > Open_t$
-  - Requires positive upward span: $\text{Span}_{\text{long}} > 0$
+  - Requires a positive upward span: $\text{Span}_{\text{long}} > 0$
   - Requires close in the upper portion of the upward span:
     $$\frac{Close_t - Close_{t-1}}{High_t - Close_{t-1}} \ge \text{long\_threshold} \quad (\text{defaults to } \text{DEFAULT\_LONG\_THRESHOLD})$$
   - *Guarantees the session broke and held at least `DEFAULT_LONG_THRESHOLD` of the upside penetration above yesterday's close.*
 
 - **Short Entry Eligibility**:
   - Requires bearish candle close: $Close_t < Open_t$
-  - Requires positive downward span: $\text{Span}_{\text{short}} > 0$
-  - Requires close near the session low relative to the downward span:
-    $$\frac{Close_t - Low_t}{Close_{t-1} - Low_t} \le \text{short\_threshold} \quad (\text{defaults to } \text{DEFAULT\_SHORT\_THRESHOLD})$$
-  - *Equivalent to retaining at least $(1 - \text{short\_threshold})$ of the downward drop, seamlessly preserving `DEFAULT_SHORT_THRESHOLD`.*
+  - Requires a positive downward span: $\text{Span}_{\text{short}} > 0$
+  - Requires close retaining the downward drop relative to the downward span:
+    $$\frac{Close_{t-1} - Close_t}{Close_{t-1} - Low_t} \ge \text{short\_threshold} \quad (\text{defaults to } \text{DEFAULT\_SHORT\_THRESHOLD})$$
+  - *Guarantees the session broke and held at least `DEFAULT_SHORT_THRESHOLD` of the downward drop below yesterday's close.*
 
 - **Boundary Conditions**:
   - On bar 0 (where $Close_{t-1}$ is null), directional spans cannot be anchored and evaluate safely to `False`.

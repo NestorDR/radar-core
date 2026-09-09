@@ -11,7 +11,7 @@ import polars as pl
 from radar_core.domain.filters.base import FilterABC
 
 DEFAULT_LONG_THRESHOLD: Final[float] = 0.10
-DEFAULT_SHORT_THRESHOLD: Final[float] = 0.25
+DEFAULT_SHORT_THRESHOLD: Final[float] = 0.75
 
 
 class PriceActionFilter(FilterABC):
@@ -21,8 +21,8 @@ class PriceActionFilter(FilterABC):
     on the input bar.
     Long setups require a bullish candle (Close > Open) retaining >= long_threshold
     (defaults to DEFAULT_LONG_THRESHOLD) of the upward span.
-    Short setups require a bearish candle (Close < Open) with low-distance location <= short_threshold
-    (defaults to DEFAULT_SHORT_THRESHOLD).
+    Short setups require a bearish candle (Close < Open) retaining >= short_threshold
+    (defaults to DEFAULT_SHORT_THRESHOLD) of the downward drop.
     """
 
     def __init__(
@@ -32,7 +32,7 @@ class PriceActionFilter(FilterABC):
     ) -> None:
         """
         :param long_threshold: Minimum upward span retention for Long setups (defaults to DEFAULT_LONG_THRESHOLD).
-        :param short_threshold: Maximum low-distance location for Short setups (defaults to DEFAULT_SHORT_THRESHOLD).
+        :param short_threshold: Minimum downward drop retention for Short setups (defaults to DEFAULT_SHORT_THRESHOLD).
         """
         self.long_threshold = long_threshold
         self.short_threshold = short_threshold
@@ -67,15 +67,15 @@ class PriceActionFilter(FilterABC):
             (pl.col('Close') - prior_close_expr_) / pl.col('long_span')
         ).alias('long_retention')
 
-        short_location_expr_ = (
-            (pl.col('Close') - pl.col('Low')) / pl.col('short_span')
-        ).alias('short_location')
+        short_retention_expr_ = (
+            (prior_close_expr_ - pl.col('Close')) / pl.col('short_span')
+        ).alias('short_retention')
 
         df_ = (
             prices_df
             .with_columns(prior_close_expr_.alias('prior_close'))
             .with_columns(long_span_expr_, short_span_expr_)
-            .with_columns(long_retention_expr_, short_location_expr_)
+            .with_columns(long_retention_expr_, short_retention_expr_)
         )
 
         long_condition_expr_ = (
@@ -88,8 +88,8 @@ class PriceActionFilter(FilterABC):
         short_condition_expr_ = (
             (pl.col('short_span') > 0.0)
             & (pl.col('Close') < pl.col('Open'))
-            & (pl.col('short_location') <= self.short_threshold)
-            & pl.col('short_location').is_not_null()
+            & (pl.col('short_retention') >= self.short_threshold)
+            & pl.col('short_retention').is_not_null()
         ).fill_null(False)
 
         long_mask_series_ = df_.select(long_condition_expr_.alias('long_eligible')).to_series()
