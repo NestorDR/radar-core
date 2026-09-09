@@ -17,6 +17,10 @@ from radar_core.domain.filters import (
     get_filter,
     get_filter_masks,
 )
+from radar_core.domain.filters.price_action import (
+    DEFAULT_LONG_THRESHOLD,
+    DEFAULT_SHORT_THRESHOLD,
+)
 
 
 class _DummyPassthroughFilter(FilterABC):
@@ -65,7 +69,6 @@ def test_filter_abc_contract_with_dummy_filter() -> None:
     assert np.all(short_mask_)
 
 
-
 def test_price_action_filter_directional_logic() -> None:
     """
     GIVEN candles with known prior closes, directional spans, and close locations.
@@ -74,6 +77,19 @@ def test_price_action_filter_directional_logic() -> None:
          bearish bars with downward retention >= DEFAULT_SHORT_THRESHOLD are Short eligible,
          and unconfirmed or zero-span bars are ineligible for both.
     """
+    # Bar 0: Benchmark setup session (Prior close is null -> ineligible)
+    # Bar 1: Bullish confirmation: Prior close 100. Open 100, Low 100, High 120
+    #        Upward span = 20. Close retains DEFAULT_LONG_THRESHOLD of the span -> Long True, Short False
+    bar1_close_ = 100.0 + 20.0 * max(DEFAULT_LONG_THRESHOLD, 0.05)
+
+    # Bar 2: Bearish confirmation: Prior close bar1_close_. Open bar1_close_, High bar1_close_, Low bar1_close_ - 20
+    #        Downward span = 20. Close retains DEFAULT_SHORT_THRESHOLD of the span -> Long False, Short True
+    bar2_close_ = bar1_close_ - 20.0 * min(1.0, max(DEFAULT_SHORT_THRESHOLD, 0.05))
+
+    # Bar 3: Bearish failure: Prior close bar2_close_. Open bar2_close_, High bar2_close_, Low bar2_close_ - 20
+    #        Downward span = 20. Close retains DEFAULT_SHORT_THRESHOLD * 0.5 (< DEFAULT_SHORT_THRESHOLD) -> Long False, Short False
+    bar3_close_ = bar2_close_ - 20.0 * (DEFAULT_SHORT_THRESHOLD * 0.5)
+
     df_ = pl.DataFrame({
         'Date': [
             datetime.date(2020, 1, 1),
@@ -82,18 +98,10 @@ def test_price_action_filter_directional_logic() -> None:
             datetime.date(2020, 1, 4),
             datetime.date(2020, 1, 5),
         ],
-        # Bar 0: Benchmark setup session: Open 10, Low 9, High 15, Close 10 (Prior close is null -> ineligible)
-        # Bar 1: Bullish confirmation: Prior close 10. Open 10, Low 10, High 20, Close 18
-        #        Span = 20 - 10 = 10, Retention = (18 - 10) / 10 = 0.80 >= DEFAULT_LONG_THRESHOLD, Close > Open -> Long True, Short False
-        # Bar 2: Bearish confirmation: Prior close 18. Open 18, High 18, Low 8, Close 10
-        #        Span = 18 - 8 = 10, Retention = (18 - 10) / 10 = 0.80 >= DEFAULT_SHORT_THRESHOLD, Close < Open -> Long False, Short True
-        # Bar 3: Bearish but retention < DEFAULT_SHORT_THRESHOLD: Prior close 10. Open 10, High 12, Low 2, Close 5
-        #        Span = 10 - 2 = 8, Retention = (10 - 5) / 8 = 0.625 < DEFAULT_SHORT_THRESHOLD, Close < Open -> Long False, Short False
-        # Bar 4: Flat zero-span day: Prior close 5. Open 5, High 5, Low 5, Close 5 (Close == Open) -> Long False, Short False
-        'Open': [10.0, 10.0, 18.0, 10.0, 5.0],
-        'High': [15.0, 20.0, 18.0, 12.0, 5.0],
-        'Low': [9.0, 10.0, 8.0, 2.0, 5.0],
-        'Close': [10.0, 18.0, 10.0, 5.0, 5.0],
+        'Open': [100.0, 100.0, bar1_close_, bar2_close_, bar3_close_],
+        'High': [105.0, 120.0, bar1_close_, bar2_close_, bar3_close_],
+        'Low': [95.0, 100.0, bar1_close_ - 20.0, bar2_close_ - 20.0, bar3_close_],
+        'Close': [100.0, bar1_close_, bar2_close_, bar3_close_, bar3_close_],
         'Volume': [1000, 1000, 1000, 1000, 1000],
     })
     filter_ = PriceActionFilter()
@@ -105,6 +113,44 @@ def test_price_action_filter_directional_logic() -> None:
     assert not long_mask_[2] and short_mask_[2]
     assert not long_mask_[3] and not short_mask_[3]
     assert not long_mask_[4] and not short_mask_[4]
+
+
+def test_price_action_filter_custom_thresholds() -> None:
+    """
+    GIVEN PriceActionFilter initialized with explicit custom thresholds.
+    WHEN evaluating price bars against the custom thresholds.
+    THEN bars meeting the custom thresholds evaluate to True and below evaluate to False.
+    """
+    df_ = pl.DataFrame({
+        'Date': [
+            datetime.date(2020, 1, 1),
+            datetime.date(2020, 1, 2),
+            datetime.date(2020, 1, 3),
+        ],
+        # Bar 0: Benchmark session: Close 100
+        # Bar 1: Bullish candle: Prior close 100. Open 100, High 110 (span 10), Low 100, Close 103 (retention = 0.30)
+        # Bar 2: Bearish candle: Prior close 103. Open 103, High 103, Low 93 (span 10), Close 97 (retention = 0.60)
+        'Open': [100.0, 100.0, 103.0],
+        'High': [105.0, 110.0, 103.0],
+        'Low': [95.0, 100.0, 93.0],
+        'Close': [100.0, 103.0, 97.0],
+        'Volume': [1000, 1000, 1000],
+    })
+
+    filter_custom_ = PriceActionFilter(long_threshold=0.25, short_threshold=0.50)
+    assert filter_custom_.long_threshold == 0.25
+    assert filter_custom_.short_threshold == 0.50
+
+    long_mask_, short_mask_ = filter_custom_.get_masks(df_)
+    assert not long_mask_[0] and not short_mask_[0]
+    assert long_mask_[1] and not short_mask_[1]
+    assert not long_mask_[2] and short_mask_[2]
+
+    # Stricter thresholds: long_threshold=0.40, short_threshold=0.70 -> both fail
+    filter_strict_ = PriceActionFilter(long_threshold=0.40, short_threshold=0.70)
+    strict_long_, strict_short_ = filter_strict_.get_masks(df_)
+    assert not strict_long_[1]
+    assert not strict_short_[2]
 
 
 def test_price_action_filter_directional_gap_and_submerged_handling() -> None:
