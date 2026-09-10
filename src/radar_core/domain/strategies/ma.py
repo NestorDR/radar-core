@@ -21,8 +21,9 @@ from radar_core.helpers.constants import LONG, SHORT, TIMEFRAMES
 
 
 # In HPC (High Performance Computing), it is the best practice to decouple compute-intensive logic (the kernel)
-# from orchestration logic (the class). `_find_trades_sma` acts as a pure function: it accepts Numpy arrays and integers,
-# and returns NumPy arrays, without accessing or modifying the class state. Keeping it at the module level reinforces this separation.
+# from orchestration logic (the class). `_find_trades_sma` acts as a pure function:
+# it accepts Numpy arrays and integers and returns NumPy arrays, without accessing or modifying the class state.
+# Keeping it at the module level reinforces this separation.
 @njit(cache=True)
 def _find_trades_sma(
         values: np.ndarray,
@@ -72,7 +73,7 @@ def _find_trades_sma(
         current_sum_ += values[i_]
 
     # Calculate the first valid SMA at the end of the first valid window
-    # Example: if first_nan_bar_ is 14, due to a RSI(14), and period is 20, the first SMA is at index 33
+    # Example: if first_nan_bar_ is 14, due to an RSI(14), and period is 20, the first SMA is at index 33
     first_valid_sma_bar_ = first_nan_bar_ + period - 1
     previous_sma_ = current_sum_ / period
     previous_value_ = values[first_valid_sma_bar_]
@@ -160,7 +161,7 @@ class MovingAverage(StrategyABC):
             only_long_positions: bool,
             prices_df: pl.DataFrame,
             close_prices: np.ndarray,
-            percent_changes: np.ndarray,
+            is_input_eligible: np.ndarray | tuple[np.ndarray, np.ndarray] | None = None,
             verbosity_level: int = DEBUG,
     ) -> None:
         """
@@ -176,7 +177,7 @@ class MovingAverage(StrategyABC):
         :param prices_df: Dataframe at least with required columns
          [DateTime, {self.value_column_name}, PercentChange, BarNumber].
         :param close_prices: Close prices for the given symbol and timeframe.
-        :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
+        :param is_input_eligible: Optional boolean eligibility array or tuple of (long_mask, short_mask) for input bars.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
         """
@@ -249,7 +250,6 @@ class MovingAverage(StrategyABC):
                     input_bar_numbers_,
                     output_bar_numbers_,
                     close_prices,
-                    percent_changes,
                     prices_df,
                     current_indicators_,
                 )
@@ -260,7 +260,7 @@ class MovingAverage(StrategyABC):
                     # Save only positive ratios
                     positive_ratios_.append(ratios_)
 
-                # Check if MA just analyzed is a better indicator for positionings than the previous calculated ones.
+                # Check if MA just analyzed is a better indicator for positioning than the previous calculated ones.
                 best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
 
             if verbosity_level == DEBUG:

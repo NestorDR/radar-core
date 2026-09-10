@@ -140,12 +140,10 @@ def analyze(timeframe: int,
 
     # Extract vectors only once per timeframe to maximize performance
     close_prices_ = prices_df['Close'].to_numpy()
-    percent_changes_ = prices_df['PercentChange'].to_numpy()
 
     # Profitable SMAs identification
     if strategies.sma:
-        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, percent_changes_,
-                                verbosity_level)
+        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, None, verbosity_level)
 
     # Profitable RSI-based identification
     if strategies.rsi_sma or strategies.rsi_rc or strategies.rsi_2b:
@@ -153,8 +151,7 @@ def analyze(timeframe: int,
         prices_df = RSI(prices_df)
 
         if strategies.rsi_sma:
-            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
-                                        percent_changes_, verbosity_level)
+            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, None, verbosity_level)
 
         # Calculate the stop loss prices only once for the following strategies
         if strategies.rsi_2b or strategies.rsi_rc:
@@ -168,13 +165,13 @@ def analyze(timeframe: int,
 
             if strategies.rsi_2b:
                 strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
-                                           percent_changes_, is_input_eligible_, verbosity_level)
+                                           is_input_eligible_, verbosity_level)
             if strategies.rsi_rc:
                 strategies.rsi_rc.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
-                                           percent_changes_, is_input_eligible_, verbosity_level)
+                                           is_input_eligible_, verbosity_level)
 
     # Release memory
-    del close_prices_, percent_changes_
+    del close_prices_
 
 
 def process_symbol(symbol: str,

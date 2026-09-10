@@ -82,7 +82,7 @@ def test_analyze_injects_price_action_masks_when_configured(monkeypatch, tmp_pat
 
     assert mock_rsi_2b_.identify.called
     args_2b_ = mock_rsi_2b_.identify.call_args.args
-    masks_2b_ = args_2b_[6]
+    masks_2b_ = args_2b_[5]
     assert isinstance(masks_2b_, tuple)
     assert len(masks_2b_) == 2
     assert isinstance(masks_2b_[0], np.ndarray)
@@ -92,7 +92,7 @@ def test_analyze_injects_price_action_masks_when_configured(monkeypatch, tmp_pat
 
     assert mock_rsi_rc_.identify.called
     args_rc_ = mock_rsi_rc_.identify.call_args.args
-    masks_rc_ = args_rc_[6]
+    masks_rc_ = args_rc_[5]
     assert masks_rc_ is masks_2b_
 
 
@@ -124,10 +124,10 @@ def test_analyze_passes_none_when_filter_is_omitted(monkeypatch, tmp_path):
         )
 
     assert mock_rsi_2b_.identify.called
-    assert mock_rsi_2b_.identify.call_args.args[6] is None
+    assert mock_rsi_2b_.identify.call_args.args[5] is None
 
     assert mock_rsi_rc_.identify.called
-    assert mock_rsi_rc_.identify.call_args.args[6] is None
+    assert mock_rsi_rc_.identify.call_args.args[5] is None
 
 
 def test_analyze_passes_none_when_filter_is_none_string(monkeypatch, tmp_path):
@@ -158,8 +158,8 @@ def test_analyze_passes_none_when_filter_is_none_string(monkeypatch, tmp_path):
         )
 
     assert mock_rsi_2b_.identify.called
-    assert mock_rsi_2b_.identify.call_args.args[6] is None
+    assert mock_rsi_2b_.identify.call_args.args[5] is None
 
     assert mock_rsi_rc_.identify.called
-    assert mock_rsi_rc_.identify.call_args.args[6] is None
+    assert mock_rsi_rc_.identify.call_args.args[5] is None
 

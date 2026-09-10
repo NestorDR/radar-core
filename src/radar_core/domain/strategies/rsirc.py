@@ -37,8 +37,8 @@ OUTPUT: Final[int] = 2
 
 
 # In HPC (High Performance Computing), it is the best practice to decouple compute-intensive logic (the kernel)
-# from orchestration logic (the class). `_find_trades_rc` acts as a pure function: it accepts Numpy arrays and integers
-# and returns NumPy arrays, without accessing or modifying the class state.
+# from orchestration logic (the class). `_find_trades_rc` acts as a pure function:
+# it accepts Numpy arrays and integers and returns NumPy arrays, without accessing or modifying the class state.
 # Keeping it at the module level reinforces this separation.
 @njit(cache=True)
 def _find_trades_rc(
@@ -432,7 +432,6 @@ class RsiRollerCoaster(RsiStrategyABC):
             only_long_positions,
             prices_df: pl.DataFrame,
             close_prices: np.ndarray,
-            percent_changes: np.ndarray,
             verbosity_level: int = DEBUG,
     ) -> None:
         """
@@ -450,7 +449,6 @@ class RsiRollerCoaster(RsiStrategyABC):
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe with required columns [Date, Close, Volume, PercentChange], indexed by numbers.
         :param close_prices: Close prices for the given symbol and timeframe.
-        :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
         """
@@ -546,7 +544,6 @@ class RsiRollerCoaster(RsiStrategyABC):
                             input_bar_numbers_,
                             output_bar_numbers_,
                             close_prices,
-                            percent_changes,
                             prices_df,
                             current_indicators_,
                         )
@@ -593,7 +590,6 @@ class RsiRollerCoaster(RsiStrategyABC):
             only_long_positions: bool,
             prices_df: pl.DataFrame,
             close_prices: np.ndarray,
-            percent_changes: np.ndarray,
             is_input_eligible: np.ndarray | tuple[np.ndarray, np.ndarray] | None = None,
             verbosity_level: int = DEBUG,
     ) -> None:
@@ -610,7 +606,6 @@ class RsiRollerCoaster(RsiStrategyABC):
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe with required columns [Date, Close, Volume, PercentChange], indexed by numbers.
         :param close_prices: Close prices for the given symbol and timeframe.
-        :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
         :param is_input_eligible: Optional boolean eligibility array or tuple of (long_mask, short_mask) for input bars.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
@@ -702,7 +697,6 @@ class RsiRollerCoaster(RsiStrategyABC):
                     input_bar_numbers_,
                     output_bar_numbers_,
                     close_prices,
-                    percent_changes,
                     prices_df,
                     current_indicators_,
                 )

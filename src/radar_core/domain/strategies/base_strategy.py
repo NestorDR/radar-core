@@ -122,19 +122,18 @@ class StrategyABC(ABC):
             only_long_positions: bool,
             prices_df: pl.DataFrame,
             close_prices: np.ndarray,
-            percent_changes: np.ndarray,
+            is_input_eligible: np.ndarray | tuple[np.ndarray, np.ndarray] | None = None,
             verbosity_level: int = DEBUG,
     ) -> None:
         """
         Iterates a number of periods or levels to calculate a tech indicator and evaluate its profitability.
 
-        :param only_long_positions:
         :param symbol: Security symbol to analyze.
         :param timeframe: Timeframe indicator (1.Intraday, 2.Daily, 3.Weekly, 4.Monthly).
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe with required columns.
         :param close_prices: Close prices for the given symbol and timeframe.
-        :param percent_changes: Percent change of the close prices for the given symbol and timeframe.
+        :param is_input_eligible: Optional boolean eligibility array or tuple of (long_mask, short_mask) for input bars.
         :param verbosity_level: Importance level of messages.
         """
         pass
@@ -293,7 +292,6 @@ class StrategyABC(ABC):
             input_bar_numbers: np.ndarray,
             output_bar_numbers: np.ndarray,
             close_prices: np.ndarray,
-            percent_changes: np.ndarray,
             prices_df: pl.DataFrame,
             current_indicators: dict | None = None,
     ) -> Ratios | None:
@@ -311,7 +309,6 @@ class StrategyABC(ABC):
         :param input_bar_numbers: Array of bar numbers where trades were opened.
         :param output_bar_numbers: Array of bar numbers where trades were closed.
         :param close_prices: Array of Close prices extracted from the prices dataframe.
-        :param percent_changes: Array of PercentChange values extracted from the prices dataframe.
         :param prices_df: The dataframe with prices, indexed by bar numbers and containing the required column Date.
         :param current_indicators: Dictionary containing technical indicator values at the latest price bar.
 
@@ -338,8 +335,6 @@ class StrategyABC(ABC):
             - loss_probability: Percentage of negative/losing operations.
             - average_win: Average profit of the positive/winning operations.
             - average_loss: Average loss of the negative/losing operations.
-            - min_percentage_change_to_win: Minimum % change of input sessions for the positive/winning operations.
-            - max_percentage_change_to_win: Maximum % change of input sessions for the positive/winning operations.
             - total_sessions: Total number of sessions to which the strategy has been evaluated
             - winn_sessions: Number of sessions elapsed during positive/winning trades.
             - loss_sessions: Number of sessions elapsed during negative/losing trades.
@@ -354,9 +349,8 @@ class StrategyABC(ABC):
             return None
 
         # Prepare price arrays (vectorized slicing / fancy indexing)
-        # Extract input prices and percentages directly using the indices
+        # Extract input prices directly using the indices
         input_prices_ = close_prices[input_bar_numbers]
-        input_pct_changes_ = percent_changes[input_bar_numbers]
 
         # Handle output prices for open positions (Mark-to-Market - valuation of assets at current market prices)
         # If OutputBarNumber is future_bar_number (trade open), must be used the last available price.
@@ -388,15 +382,6 @@ class StrategyABC(ABC):
         winnings_ = np.sum(results_[winn_mask_]) if np.any(winn_mask_) else 0.0
         winn_trades_ = int(np.count_nonzero(winn_mask_))
         winning_sessions_ = np.sum(sessions_[winn_mask_]) if np.any(winn_mask_) else 0
-
-        # Min/Max Percentage Change (only on winning trades)
-        if winn_trades_ > 0:
-            winn_pcts_ = input_pct_changes_[winn_mask_]
-            min_percentage_change_to_win_ = np.min(winn_pcts_)
-            max_percentage_change_to_win_ = np.max(winn_pcts_)
-        else:
-            min_percentage_change_to_win_ = 0.0
-            max_percentage_change_to_win_ = 0.0
 
         # Losses aggregations using NumPy (sum of negative results)
         losses_ = np.sum(results_[loss_mask_]) if np.any(loss_mask_) else 0.0
@@ -469,9 +454,6 @@ class StrategyABC(ABC):
             loss_probability=loss_probability_,
             average_win=average_win_,
             average_loss=average_loss_,
-            # Filters
-            min_percentage_change_to_win=Decimal(min_percentage_change_to_win_).quantize(PRICE_PRECISION),
-            max_percentage_change_to_win=Decimal(max_percentage_change_to_win_).quantize(PRICE_PRECISION),
             # Sessions
             total_sessions=total_sessions_,
             winning_sessions=winning_sessions_,
@@ -531,9 +513,10 @@ class StrategyABC(ABC):
     # endregion Ratios
 
 
-# In HPC (High Performance Computing), it is best practice to decouple compute-intensive logic (the kernel)
-# from orchestration logic (the class). `_find_stop_loss_bars` acts as a pure function: it accepts NumPy arrays and integers,
-# and returns NumPy arrays, without accessing or modifying class state.
+# In HPC (High Performance Computing), it is the best practice to decouple compute-intensive logic (the kernel)
+# from orchestration logic (the class). `_find_stop_loss_bars` acts as a pure function:
+# it accepts NumPy arrays and integers and returns NumPy arrays, without accessing or modifying the class state.
+# Keeping it at the module level reinforces this separation.
 @njit(cache=True)
 def _find_stop_loss_bars(
         close_prices: np.ndarray,
@@ -556,7 +539,7 @@ def _find_stop_loss_bars(
     long_stop_bars_ = np.full(total_bars_, future_bar_number, dtype=np.int32)
     short_stop_bars_ = np.full(total_bars_, future_bar_number, dtype=np.int32)
 
-    # Iterate through each historical bar to evaluate potential stop-loss triggers for subsequent sessions
+    # Iterate through each historical bar to evaluate potential stop-loss triggers for the following sessions
     for i_ in range(total_bars_ - 1):
         target_long_ = long_stop_loss[i_]
         # Scan forward for the earliest future bar where close price breaches the long stop-loss level
@@ -588,7 +571,11 @@ class RsiStrategyABC(StrategyABC, ABC):
     # region Stop Loss
 
     @staticmethod
-    def identify_where_to_stop_loss(timeframe: int, prices_df: pl.DataFrame, close_prices: np.ndarray) -> pl.DataFrame:
+    def identify_where_to_stop_loss(
+            timeframe: int,
+            prices_df: pl.DataFrame,
+            close_prices: np.ndarray
+    ) -> pl.DataFrame:
         """
         Identifies and calculates where to stop losses for both long and short positions.
         The method calculates the stop-loss trigger levels and associates bars where these triggers occur.

@@ -39,8 +39,6 @@ class Ratios(BaseModel):
     loss_probability: float = 0.0
     average_win: float = 0.0
     average_loss: float = 0.0
-    min_percentage_change_to_win: Decimal | float = 0.0
-    max_percentage_change_to_win: Decimal | float = 0.0
     total_sessions: int = 0
     winning_sessions: int = 0
     losing_sessions: int = 0

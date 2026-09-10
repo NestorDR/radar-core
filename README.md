@@ -134,8 +134,7 @@ for symbol_, prices_df_ in prices_data_.items():
     # The analyzer orchestrates identify() and logging; here we just demonstrate the objects.
     prices_df_ = prices_df_.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias("BarNumber"))
     close_prices_ = prices_df_["Close"].to_numpy()
-    percent_changes_ = prices_df_["PercentChange"].to_numpy()
-    ma.identify(symbol_, DAILY, only_long_positions_, prices_df_, close_prices_, percent_changes_)
+    ma.identify(symbol_, DAILY, only_long_positions_, prices_df_, close_prices_)
 
     # See src/radar_core/analyzer.py for a full run.
 ```

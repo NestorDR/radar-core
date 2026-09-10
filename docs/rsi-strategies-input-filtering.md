@@ -151,7 +151,6 @@ if strategies.rsi_2b:
         only_long_positions,
         prices_df,
         close_prices_,
-        percent_changes_,
         is_input_eligible_,
         verbosity_level,
     )

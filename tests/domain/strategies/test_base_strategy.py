@@ -2,6 +2,7 @@
 
 # --- Python modules ---
 from datetime import date, datetime, timedelta, timezone
+import inspect
 import json
 from unittest.mock import patch
 
@@ -11,7 +12,7 @@ import polars as pl
 import pytest
 
 # --- App modules ---
-from radar_core.domain.strategies import MovingAverage
+from radar_core.domain.strategies import MovingAverage, RsiRollerCoaster, RsiTwoBands, StrategyABC
 from radar_core.domain.strategies.base_strategy import AnalysisContext, RsiStrategyABC, _find_stop_loss_bars
 from radar_core.helpers.constants import DAILY, SMA, WEEKLY
 from radar_core.infrastructure import PriceProvider
@@ -275,7 +276,6 @@ def test_perfile_performance_with_current_indicators() -> None:
         input_bars_,
         output_bars_,
         close_prices_,
-        percent_changes_,
         prices_df_,
         current_indicators_,
     )
@@ -325,10 +325,38 @@ def test_perfile_performance_without_current_indicators_fallback() -> None:
         input_bars_,
         output_bars_,
         close_prices_,
-        percent_changes_,
         prices_df_,
     )
 
     assert ratios_ is not None
     assert ratios_.current_indicators is None
+
+
+def test_strategy_identify_signatures_conform_to_lsp() -> None:
+    """
+    GIVEN StrategyABC and its concrete subclasses (MovingAverage, RsiTwoBands, RsiRollerCoaster).
+    WHEN their identify method signatures are inspected.
+    THEN all signatures match the base StrategyABC contract with identical parameter names and defaults.
+    """
+    base_sig_ = inspect.signature(StrategyABC.identify)
+    base_params_ = list(base_sig_.parameters.keys())
+    expected_params_ = [
+        'self',
+        'symbol',
+        'timeframe',
+        'only_long_positions',
+        'prices_df',
+        'close_prices',
+        'is_input_eligible',
+        'verbosity_level',
+    ]
+    assert base_params_ == expected_params_
+
+    for strategy_cls_ in (MovingAverage, RsiTwoBands, RsiRollerCoaster):
+        cls_sig_ = inspect.signature(strategy_cls_.identify)
+        cls_params_ = list(cls_sig_.parameters.keys())
+        assert cls_params_ == expected_params_, f'{strategy_cls_.__name__}.identify signature violates LSP'
+        assert cls_sig_.parameters['is_input_eligible'].default is None
+        assert cls_sig_.parameters['verbosity_level'].default == base_sig_.parameters['verbosity_level'].default
+
 
