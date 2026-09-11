@@ -5,7 +5,7 @@ cls
 uv self update
 
 ::Set python environment
-set ENV_FOLDER=%USERPROFILE%\repos\VirtualEnvironments\radar-3.13.11-uv-env
+set ENV_FOLDER=%USERPROFILE%\repos\VirtualEnvironments\radar-3.13.14-uv-env
 call %ENV_FOLDER%\Scripts\activate.bat
 
 uv pip uninstall talib
@@ -16,7 +16,7 @@ uv lock --upgrade
 :: Sync the virtual environment to the project's lock file (uv.lock)
 :: Use --group dev to include the dev dependencies
 :: Use --active to target the active environment
-uv sync --group dev --active
+uv sync --active --group dev 
 :: Im Pycharm: File → Reload from Disk (Ctrl+F5)
 ::             Python Interpreter → 🔄 (Refresh icon)
 
