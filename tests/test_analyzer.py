@@ -223,6 +223,10 @@ def test_analyzer_resolves_shortable_symbols_via_security_repository():
     THEN it resolves shortable symbols via SecurityRepository.get_shortable_symbols.
     """
     with (
+        patch('radar_core.analyzer.clean'),
+        patch('radar_core.analyzer.MovingAverage'),
+        patch('radar_core.analyzer.RsiRollerCoaster'),
+        patch('radar_core.analyzer.RsiTwoBands'),
         patch('radar_core.analyzer.SecurityRepository') as mock_repo_cls_,
         patch('radar_core.analyzer.PriceProvider') as mock_provider_cls_,
     ):
