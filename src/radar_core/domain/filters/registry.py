@@ -9,7 +9,7 @@ import polars as pl
 
 # --- App modules ---
 from radar_core.domain.filters.atr_volatility import AtrVolatilityFilter
-from radar_core.domain.filters.base import FilterABC
+from radar_core.domain.filters.base_filter import FilterABC
 from radar_core.domain.filters.price_action import PriceActionFilter
 from radar_core.domain.filters.sma_trend import SmaTrendFilter
 

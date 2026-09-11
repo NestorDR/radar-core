@@ -2,7 +2,7 @@
 
 # --- App modules ---
 from radar_core.domain.filters.atr_volatility import AtrVolatilityFilter as AtrVolatilityFilter
-from radar_core.domain.filters.base import FilterABC as FilterABC
+from radar_core.domain.filters.base_filter import FilterABC as FilterABC
 from radar_core.domain.filters.price_action import PriceActionFilter as PriceActionFilter
 from radar_core.domain.filters.registry import (
     FILTER_REGISTRY as FILTER_REGISTRY,

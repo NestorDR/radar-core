@@ -8,7 +8,7 @@ import numpy as np
 import polars as pl
 
 # --- App modules ---
-from radar_core.domain.filters.base import FilterABC
+from radar_core.domain.filters.base_filter import FilterABC
 
 DEFAULT_LONG_THRESHOLD: Final[float] = 0.10
 DEFAULT_SHORT_THRESHOLD: Final[float] = 0.95

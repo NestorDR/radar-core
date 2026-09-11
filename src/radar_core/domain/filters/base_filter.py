@@ -1,4 +1,4 @@
-# src/radar_core/domain/filters/base.py
+# src/radar_core/domain/filters/base_filter.py
 
 # --- Python modules ---
 from abc import ABC, abstractmethod

@@ -45,7 +45,7 @@ The input filtering subsystem introduces decoupled, vectorized trade entry filte
 
 All trade entry filters reside in `src/radar_core/domain/filters/` and subclass `FilterABC`.
 
-### 2.1 Base Abstraction (`base.py`)
+### 2.1 Base Abstraction (`base_filter.py`)
 The abstract base class defines the filter contract:
 
 ```python

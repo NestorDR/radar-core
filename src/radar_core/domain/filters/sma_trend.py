@@ -8,7 +8,7 @@ import numpy as np
 import polars as pl
 
 # --- App modules ---
-from radar_core.domain.filters.base import FilterABC
+from radar_core.domain.filters.base_filter import FilterABC
 
 DEFAULT_SMA_PERIOD: Final[int] = 200
 DEFAULT_SLOPE_PERIOD: Final[int] = 20

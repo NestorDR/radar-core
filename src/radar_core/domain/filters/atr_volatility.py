@@ -8,7 +8,7 @@ import numpy as np
 import polars as pl
 
 # --- App modules ---
-from radar_core.domain.filters.base import FilterABC
+from radar_core.domain.filters.base_filter import FilterABC
 from radar_core.domain.technical import ATR
 
 DEFAULT_ATR_PERIOD: Final[int] = 14
