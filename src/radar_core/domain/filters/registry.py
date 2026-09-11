@@ -41,7 +41,7 @@ def get_filter_masks(
     prices_df: pl.DataFrame,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """
-    Directly obtain Long and Short eligibility masks for a named filter or baseline.
+    Directly get Long and Short eligibility masks for a named filter or baseline.
 
     :param filter_name: Registered filter name, or None/'none'/'baseline' for unfiltered baseline.
     :param prices_df: A Polars DataFrame containing OHLCV price series.

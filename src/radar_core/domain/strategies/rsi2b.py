@@ -541,7 +541,7 @@ class RsiTwoBands(RsiStrategyABC):
         only_long_positions: bool,
         prices_df: pl.DataFrame,
         close_prices: np.ndarray,
-        is_input_eligible: np.ndarray | tuple[np.ndarray, np.ndarray] | None = None,
+        is_input_eligible: tuple[np.ndarray | None, np.ndarray | None] | None = None,
         verbosity_level: int = DEBUG,
     ) -> None:
         """
@@ -556,7 +556,7 @@ class RsiTwoBands(RsiStrategyABC):
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe with required columns [Date, Close, Volume, PercentChange], indexed by numbers.
         :param close_prices: Close prices for the given symbol and timeframe.
-        :param is_input_eligible: Optional boolean eligibility array or tuple of (long_mask, short_mask) for input bars.
+        :param is_input_eligible: Optional tuple of (long_mask, short_mask) eligibility arrays for input bars.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
         """
@@ -595,12 +595,10 @@ class RsiTwoBands(RsiStrategyABC):
             analysis_context_.is_long_position = is_long_position_
 
             stop_loss_bar_numbers_ = long_stops_ if is_long_position_ else short_stops_
-            if is_input_eligible is None:
-                eligible_mask_ = None
-            elif isinstance(is_input_eligible, tuple):
-                eligible_mask_ = is_input_eligible[0] if is_long_position_ else is_input_eligible[1]
-            else:
-                eligible_mask_ = is_input_eligible
+            eligible_mask_ = (
+                None if is_input_eligible is None
+                else (is_input_eligible[0] if is_long_position_ else is_input_eligible[1])
+            )
 
             if verbosity_level == DEBUG:
                 print('', end='\r')

@@ -138,11 +138,13 @@ Filters entries to trade strictly with the macro trend:
 2. Computes TA-Lib RSI once per timeframe across all symbols.
 3. Computes Mogalef Bands once per timeframe when RSI band strategies are active.
 4. Invokes `get_filter_masks(filter_name, prices_df)` once per timeframe.
-5. Injects `is_input_eligible=(long_mask, short_mask)` into `rsi_2b.identify` and `rsi_rc.identify`.
+5. Injects `is_input_eligible=(long_mask, short_mask)` (or `None` for unfiltered baseline) into `rsi_2b.identify` and `rsi_rc.identify`.
 
 ```python
 # analyzer.py timeframe loop snippet
-is_input_eligible_ = get_filter_masks(rsi_input_filter_, prices_df)
+filter_name_ = get_settings().rsi_input_filter
+long_mask_, short_mask_ = get_filter_masks(filter_name_, prices_df)
+is_input_eligible_ = (long_mask_, short_mask_) if long_mask_ is not None else None
 ...
 if strategies.rsi_2b:
     strategies.rsi_2b.identify(
@@ -156,7 +158,25 @@ if strategies.rsi_2b:
     )
 ```
 
-### 3.2 Numba JIT Screening Kernels (`rsi2b.py`, `rsirc.py`)
+### 3.2 Strategy Entry Point Contract (`identify`)
+Strategy `identify(...)` methods across `StrategyABC`, `RsiTwoBands`, `RsiRollerCoaster`, and `MovingAverage` type the entry eligibility parameter as:
+
+```python
+is_input_eligible: tuple[np.ndarray | None, np.ndarray | None] | None = None
+```
+
+Inside `RsiTwoBands.identify()` and `RsiRollerCoaster.identify()`, the eligibility mask for each position direction is selected via direct 2-way evaluation:
+
+```python
+eligible_mask_ = (
+    None if is_input_eligible is None
+    else (is_input_eligible[0] if is_long_position_ else is_input_eligible[1])
+)
+```
+
+The selected 1D array (`eligible_mask: np.ndarray | None`) is then dispatched to the decoupled Numba JIT screening and trade extraction kernels.
+
+### 3.3 Numba JIT Screening Kernels (`rsi2b.py`, `rsirc.py`)
 The screening kernels evaluate parameter grids entirely within JIT scalar registers:
 - `_grid_search_2b_fused`: Evaluates combinations of $(in, out)$.
 - `_grid_search_rc_fused`: Evaluates combinations of $(in, over, out)$.
@@ -171,7 +191,7 @@ if eligible_mask is not None and not eligible_mask[i_]:
 
 When `eligible_mask is None`, Numba compiles out the branch, ensuring identical performance to unfiltered execution.
 
-### 3.3 Multi-Trade Extraction Kernels
+### 3.4 Multi-Trade Extraction Kernels
 When extracting actual trade sequences for winning setups (`_find_trades_2b`, `_find_trades_rc`), the entry signal bar is checked:
 
 ```python
@@ -231,5 +251,5 @@ Comprehensive unit tests validate the filtering subsystem:
 ### 5.3 Quality & Linting Verification
 - Fully compliant with Python 3.13, Polars, and Numba JIT standards.
 - 100% clean check under `auto/lint.cmd` (Ruff).
-- All 145 unit tests pass cleanly under `auto/test.cmd`.
+- All 152 unit tests pass cleanly under `auto/test.cmd`.
 

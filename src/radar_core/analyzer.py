@@ -160,8 +160,7 @@ def analyze(timeframe: int,
 
             # Precompute input eligibility masks for RSI input filtering if configured
             filter_name_ = get_settings().rsi_input_filter
-            long_mask_, short_mask_ = get_filter_masks(filter_name_, prices_df)
-            is_input_eligible_ = (long_mask_, short_mask_) if long_mask_ is not None else None
+            is_input_eligible_ = get_filter_masks(filter_name_, prices_df)
 
             if strategies.rsi_2b:
                 strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,

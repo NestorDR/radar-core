@@ -55,8 +55,8 @@ class PriceActionFilter(FilterABC):
         :return: Tuple of (long_mask, short_mask) as 1D boolean NumPy arrays.
         """
         total_bars_ = prices_df.height
+        empty_mask_ = np.empty(0, dtype=np.bool_)
         if total_bars_ == 0:
-            empty_mask_ = np.empty(0, dtype=np.bool_)
             return empty_mask_, empty_mask_
 
         prior_close_expr_ = pl.col('Close').shift(1)
@@ -64,11 +64,11 @@ class PriceActionFilter(FilterABC):
         short_span_expr_ = (prior_close_expr_ - pl.col('Low')).alias('short_span')
 
         long_retention_expr_ = (
-            (pl.col('Close') - prior_close_expr_) / pl.col('long_span')
+                (pl.col('Close') - prior_close_expr_) / pl.col('long_span')
         ).alias('long_retention')
 
         short_retention_expr_ = (
-            (prior_close_expr_ - pl.col('Close')) / pl.col('short_span')
+                (prior_close_expr_ - pl.col('Close')) / pl.col('short_span')
         ).alias('short_retention')
 
         df_ = (
@@ -79,17 +79,17 @@ class PriceActionFilter(FilterABC):
         )
 
         long_condition_expr_ = (
-            (pl.col('long_span') > 0.0)
-            & (pl.col('Close') > pl.col('Open'))
-            & (pl.col('long_retention') >= self.long_threshold)
-            & pl.col('long_retention').is_not_null()
+                (pl.col('long_span') > 0.0)
+                & (pl.col('Close') > pl.col('Open'))
+                & (pl.col('long_retention') >= self.long_threshold)
+                & pl.col('long_retention').is_not_null()
         ).fill_null(False)
 
         short_condition_expr_ = (
-            (pl.col('short_span') > 0.0)
-            & (pl.col('Close') < pl.col('Open'))
-            & (pl.col('short_retention') >= self.short_threshold)
-            & pl.col('short_retention').is_not_null()
+                (pl.col('short_span') > 0.0)
+                & (pl.col('Close') < pl.col('Open'))
+                & (pl.col('short_retention') >= self.short_threshold)
+                & pl.col('short_retention').is_not_null()
         ).fill_null(False)
 
         long_mask_series_ = df_.select(long_condition_expr_.alias('long_eligible')).to_series()
