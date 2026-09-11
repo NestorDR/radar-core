@@ -3,6 +3,8 @@
 # --- Python modules ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG, ERROR, INFO, WARNING, getLogger
+# typing: provides runtime support for type hints
+from typing import Final
 
 # --- Third Party Libraries ---
 # yfinance: offers a threaded way to download market prices from Yahoo!Ⓡ Finance
@@ -20,10 +22,11 @@ from radar_core.infrastructure.crud import SecurityCrud
 # models: result of Object-Relational Mapping
 from radar_core.models import Securities
 
-logger_ = getLogger(__name__)
-
 # --- Integration constants.py ---
-YAHOO_ID = 1
+YAHOO_ID: Final[int] = 1
+NOT_FOUND: Final[str] = 'Not found'
+
+logger_ = getLogger(__name__)
 
 
 class SecurityRepository:
@@ -69,7 +72,7 @@ class SecurityRepository:
                 verbose(message_, DEBUG, self.verbosity_level)
 
                 ticker_info_ = yf.Ticker(symbol).info
-                company_name_ = ticker_info_.get('longName', 'Not found')
+                company_name_ = ticker_info_.get('longName', NOT_FOUND)
                 # business_summary_ = ticker_info_.get('longBusinessSummary', 'Not found')
 
             except Exception as e:
@@ -77,9 +80,9 @@ class SecurityRepository:
                 message_ = f'Error downloading information about {symbol} from Yahoo Finance.'
                 verbose(message_, ERROR, self.verbosity_level)
                 logger_.exception(message_, exc_info=e)
-                company_name_ = 'Not found'
+                company_name_ = NOT_FOUND
 
-            if company_name_ == 'Not found':
+            if company_name_ == NOT_FOUND:
                 message_ = f"Security {symbol} not found in Yahoo Finance."
                 verbose(message_, WARNING, self.verbosity_level)
                 logger_.warning(message_)
@@ -178,4 +181,3 @@ class SecurityRepository:
         :return: Set of shortable symbols.
         """
         return self.__security_crud.get_shortable_symbols(symbols)
-

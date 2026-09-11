@@ -84,9 +84,6 @@ class Settings:
         # Load YAML settings file
         config_ = self._read_yaml_file() or {}
         self.symbols: list[str] = config_.get('symbols', [])
-        raw_shortables_ = config_.get('shortables', [])
-        symbols_set_ = set(self.symbols)
-        self.shortables: list[str] = [s for s in raw_shortables_ if s in symbols_set_]
         self.undeletable_symbols: list[str] = config_.get('done', []) or []
         self.undeletable_symbols += self.symbols
         self.evaluable_strategies: list[str] = config_.get('evaluable_strategies', [])

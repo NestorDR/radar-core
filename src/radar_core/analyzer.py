@@ -40,7 +40,7 @@ from radar_core.helpers.constants import LOCAL_TIMEZONE, DAILY, WEEKLY, TIMEFRAM
 from radar_core.helpers.datetime_helper import to_weekly_timeframe
 from radar_core.helpers.log_helper import verbose
 # infrastructure: allows access to the own DB and/or integration with external prices providers
-from radar_core.infrastructure import PriceProvider, RatioRepository
+from radar_core.infrastructure import PriceProvider, RatioRepository, SecurityRepository
 # settings: has the configuration for the radar_core
 from radar_core.settings import get_settings
 
@@ -176,7 +176,7 @@ def analyze(timeframe: int,
 def process_symbol(symbol: str,
                    prices_df: pl.DataFrame,
                    strategies: EvaluableStrategies,
-                   shortable_symbols: list[str],
+                   shortable_symbols: set[str],
                    verbosity_level: int) -> str:
     """
     Worker function to analyze a single symbol.
@@ -186,7 +186,7 @@ def process_symbol(symbol: str,
     :param symbol: The symbol to analyze.
     :param prices_df: The price data for the symbol.
     :param strategies: The container with strategy instances.
-    :param shortable_symbols: A list of symbols that can be shorted.
+    :param shortable_symbols: A set of symbols that can be shorted.
     :param verbosity_level: The logging verbosity level.
 
     :return: A string containing the captured activity logs.
@@ -281,7 +281,8 @@ def analyzer(symbols: list[str] | None = None) -> int:
         # Get configured symbols to analyze
         if symbols is None:
             symbols = settings_.symbols
-        shortable_symbols_ = settings_.shortables
+        # Retrieve shortable symbols
+        shortable_symbols_ = SecurityRepository(verbosity_level_).get_shortable_symbols(symbols)
 
         if settings_.clean_unlisted and symbols:
             # Clean from the DB the ratios for symbols not listed in `settings.yml`
