@@ -20,6 +20,9 @@ def test_security_crud_get_by_symbol_existing(mock_connection_scope):
         'SPX',
         'S&P 500 Index',
         False,
+        False,
+        False,
+        False,
         True
     )
 
@@ -33,6 +36,11 @@ def test_security_crud_get_by_symbol_existing(mock_connection_scope):
     assert security_.id == 1
     assert security_.symbol == 'SPX'
     assert security_.description == 'S&P 500 Index'
+    assert security_.is_bear is False
+    assert security_.is_shortable is False
+    assert security_.is_crypto is False
+    assert security_.is_near_continuous is False
+    assert security_.store_locally is True
     read_scope_.assert_called_once_with(None)
     scope_.__exit__.assert_called_once_with(None, None, None)
 
@@ -65,7 +73,7 @@ def test_security_crud_get_by_symbol_reuses_connection_for_synonym(mock_connecti
     """
     connection_, cursor_, scope_ = mock_connection_scope
     cursor_.fetchone.side_effect = [
-        (1, 'SPX', 'S&P 500 Index', False, True),
+        (1, 'SPX', 'S&P 500 Index', False, False, False, False, True),
         (10, 1, 1, '^GSPC'),
     ]
 
@@ -214,6 +222,45 @@ def test_security_crud_add_security(mock_connection_scope):
         'TEST-STOCK',
         'Test Stock Description',
         False,
+        False,
+        False,
+        False,
         False
     )
+    scope_.__exit__.assert_called_once_with(None, None, None)
+
+
+def test_security_crud_get_shortable_symbols_empty():
+    """
+    GIVEN an empty list of symbols
+    WHEN get_shortable_symbols is called
+    THEN it returns an empty set without opening a read connection.
+    """
+    with patch(
+            'radar_core.infrastructure.crud.security_crud.read_connection_scope'
+    ) as read_scope_:
+        result_ = SecurityCrud.get_shortable_symbols([])
+
+    assert result_ == set()
+    read_scope_.assert_not_called()
+
+
+def test_security_crud_get_shortable_symbols_filters_correctly(mock_connection_scope):
+    """
+    GIVEN a list of symbols
+    WHEN get_shortable_symbols is called
+    THEN it returns a set of symbols where is_shortable is True.
+    """
+    _, cursor_, scope_ = mock_connection_scope
+    cursor_.fetchall.return_value = [('SPY',), ('QQQ',)]
+
+    with patch(
+            'radar_core.infrastructure.crud.security_crud.read_connection_scope',
+            return_value=scope_
+    ) as read_scope_:
+        result_ = SecurityCrud.get_shortable_symbols(['SPY', 'UNKNOWN', 'QQQ'])
+
+    assert result_ == {'SPY', 'QQQ'}
+    read_scope_.assert_called_once_with(None)
+    cursor_.execute.assert_called_once()
     scope_.__exit__.assert_called_once_with(None, None, None)

@@ -62,6 +62,7 @@ class SecurityRepository:
                 return security_
 
             # Does not exist, fetch info and create it
+            ticker_info_ = {}
             try:
                 message_ = f'Security {symbol} not found in DB. Downloading info from Yahoo Finance...'
                 logger_.info(message_)
@@ -84,11 +85,21 @@ class SecurityRepository:
                 logger_.warning(message_)
                 return None
 
+            # Approximate security classification flags
+            company_lower_ = company_name_.lower()
+            quote_type_ = (ticker_info_.get('quoteType') or '').upper()
+            is_bear_ = any(keyword in company_lower_ for keyword in ['bear', 'inverse', 'short'])
+            is_crypto_ = quote_type_ == 'CRYPTOCURRENCY' or 'bitcoin' in company_lower_ or symbol.endswith('-USD')
+            is_near_continuous_ = is_crypto_ or quote_type_ == 'FUTURE'
+
             # Add new security
             new_security_ = Securities(
                 symbol=symbol,
                 description=company_name_,
-                is_bear=any(keyword in company_name_.lower() for keyword in ['bear', 'inverse', 'short']))
+                is_bear=is_bear_,
+                is_shortable=False,
+                is_crypto=is_crypto_,
+                is_near_continuous=is_near_continuous_)
             self.__security_crud.add_security(new_security_)
 
             message_ = f'Added new security: {symbol} to the DB.'
@@ -157,3 +168,14 @@ class SecurityRepository:
             for symbol_ in symbols
             if symbol_ in ticker_map_
         }
+
+    def get_shortable_symbols(self, symbols: list[str]) -> set[str]:
+        """
+        Retrieves symbols that are eligible for short trading.
+
+        :param symbols: Security symbols to check.
+
+        :return: Set of shortable symbols.
+        """
+        return self.__security_crud.get_shortable_symbols(symbols)
+

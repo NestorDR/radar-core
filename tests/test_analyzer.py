@@ -96,11 +96,11 @@ def test_analyze_injects_price_action_masks_when_configured(monkeypatch, tmp_pat
     assert masks_rc_ is masks_2b_
 
 
-def test_analyze_passes_none_when_filter_is_omitted(monkeypatch, tmp_path):
+def test_analyze_passes_none_tuple_when_filter_is_omitted(monkeypatch, tmp_path):
     """
     GIVEN an analyzer execution where rsi_input_filter is omitted from YAML
     WHEN analyze is invoked for RSI strategies
-    THEN it forwards is_input_eligible=None for unfiltered baseline execution.
+    THEN it forwards is_input_eligible=(None, None) for unfiltered baseline execution.
     """
     custom_yaml_ = tmp_path / 'settings.yml'
     custom_yaml_.write_text('symbols:\n  - SPY\nevaluable_strategies:\n  - rsi_2b\n  - rsi_rc\n')
@@ -124,17 +124,17 @@ def test_analyze_passes_none_when_filter_is_omitted(monkeypatch, tmp_path):
         )
 
     assert mock_rsi_2b_.identify.called
-    assert mock_rsi_2b_.identify.call_args.args[5] is None
+    assert mock_rsi_2b_.identify.call_args.args[5] == (None, None)
 
     assert mock_rsi_rc_.identify.called
-    assert mock_rsi_rc_.identify.call_args.args[5] is None
+    assert mock_rsi_rc_.identify.call_args.args[5] == (None, None)
 
 
-def test_analyze_passes_none_when_filter_is_none_string(monkeypatch, tmp_path):
+def test_analyze_passes_none_tuple_when_filter_is_none_string(monkeypatch, tmp_path):
     """
     GIVEN an analyzer execution where rsi_input_filter is explicitly 'none'
     WHEN analyze is invoked for RSI strategies
-    THEN it forwards is_input_eligible=None for unfiltered baseline execution.
+    THEN it forwards is_input_eligible=(None, None) for unfiltered baseline execution.
     """
     custom_yaml_ = tmp_path / 'settings.yml'
     custom_yaml_.write_text("symbols:\n  - SPY\nevaluable_strategies:\n  - rsi_2b\n  - rsi_rc\nrsi_input_filter: 'none'\n")
@@ -158,8 +158,9 @@ def test_analyze_passes_none_when_filter_is_none_string(monkeypatch, tmp_path):
         )
 
     assert mock_rsi_2b_.identify.called
-    assert mock_rsi_2b_.identify.call_args.args[5] is None
+    assert mock_rsi_2b_.identify.call_args.args[5] == (None, None)
 
     assert mock_rsi_rc_.identify.called
-    assert mock_rsi_rc_.identify.call_args.args[5] is None
+    assert mock_rsi_rc_.identify.call_args.args[5] == (None, None)
+
 

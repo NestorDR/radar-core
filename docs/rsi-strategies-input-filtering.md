@@ -138,13 +138,12 @@ Filters entries to trade strictly with the macro trend:
 2. Computes TA-Lib RSI once per timeframe across all symbols.
 3. Computes Mogalef Bands once per timeframe when RSI band strategies are active.
 4. Invokes `get_filter_masks(filter_name, prices_df)` once per timeframe.
-5. Injects `is_input_eligible=(long_mask, short_mask)` (or `None` for unfiltered baseline) into `rsi_2b.identify` and `rsi_rc.identify`.
+5. Injects `is_input_eligible` directly into `rsi_2b.identify` and `rsi_rc.identify`.
 
 ```python
 # analyzer.py timeframe loop snippet
 filter_name_ = get_settings().rsi_input_filter
-long_mask_, short_mask_ = get_filter_masks(filter_name_, prices_df)
-is_input_eligible_ = (long_mask_, short_mask_) if long_mask_ is not None else None
+is_input_eligible_ = get_filter_masks(filter_name_, prices_df)
 ...
 if strategies.rsi_2b:
     strategies.rsi_2b.identify(
@@ -173,6 +172,8 @@ eligible_mask_ = (
     else (is_input_eligible[0] if is_long_position_ else is_input_eligible[1])
 )
 ```
+
+When baseline is configured or omitted, `get_filter_masks(...)` returns `(None, None)`; `eligible_mask_` evaluates directly to `None` without requiring conditional checks in the analyzer.
 
 The selected 1D array (`eligible_mask: np.ndarray | None`) is then dispatched to the decoupled Numba JIT screening and trade extraction kernels.
 
@@ -251,5 +252,5 @@ Comprehensive unit tests validate the filtering subsystem:
 ### 5.3 Quality & Linting Verification
 - Fully compliant with Python 3.13, Polars, and Numba JIT standards.
 - 100% clean check under `auto/lint.cmd` (Ruff).
-- All 152 unit tests pass cleanly under `auto/test.cmd`.
+- All 156 unit tests pass cleanly under `auto/test.cmd`.
 

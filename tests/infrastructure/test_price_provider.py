@@ -64,7 +64,51 @@ def test_get_or_create_security_returns_new_security():
         assert security_ is not None
         assert security_.symbol == 'NVDA'
         assert security_.description == 'NVIDIA Corporation'
+        assert security_.is_bear is False
+        assert security_.is_shortable is False
+        assert security_.is_crypto is False
+        assert security_.is_near_continuous is False
         mock_add_.assert_called_once()
+
+
+def test_get_or_create_security_derives_crypto_and_continuous():
+    """
+    GIVEN a cryptocurrency symbol missing from DB
+    WHEN _get_or_create_security is called
+    THEN it derives is_crypto and is_near_continuous as True.
+    """
+    repo_ = SecurityRepository()
+
+    with patch.object(repo_._SecurityRepository__security_crud, 'get_by_symbol', return_value=None), \
+            patch.object(repo_._SecurityRepository__security_crud, 'add_security') as mock_add_, \
+            patch('yfinance.Ticker') as mock_ticker_cls_:
+        mock_ticker_inst_ = MagicMock()
+        mock_ticker_inst_.info = {'longName': 'Bitcoin USD', 'quoteType': 'CRYPTOCURRENCY'}
+        mock_ticker_cls_.return_value = mock_ticker_inst_
+
+        security_ = repo_._get_or_create_security('BTC-USD')
+
+        assert security_ is not None
+        assert security_.symbol == 'BTC-USD'
+        assert security_.is_crypto is True
+        assert security_.is_near_continuous is True
+        assert security_.is_shortable is False
+        mock_add_.assert_called_once()
+
+
+def test_security_repository_get_shortable_symbols():
+    """
+    GIVEN a list of symbols
+    WHEN get_shortable_symbols is called on SecurityRepository
+    THEN it delegates to SecurityCrud.get_shortable_symbols.
+    """
+    repo_ = SecurityRepository()
+
+    with patch.object(repo_._SecurityRepository__security_crud, 'get_shortable_symbols', return_value={'SPY', 'QQQ'}) as mock_get_:
+        result_ = repo_.get_shortable_symbols(['SPY', 'QQQ', 'AAPL'])
+
+    assert result_ == {'SPY', 'QQQ'}
+    mock_get_.assert_called_once_with(['SPY', 'QQQ', 'AAPL'])
 
 
 def test_map_symbol_to_ticker_auto_creates_missing_symbols():

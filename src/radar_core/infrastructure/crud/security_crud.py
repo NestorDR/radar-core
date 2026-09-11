@@ -15,27 +15,38 @@ from radar_core.database import connection_scope, read_connection_scope
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import BaseCrud
 # models: result of Object-Relational Mapping
-from radar_core.models import Securities, Synonyms
+from radar_core.models import SECURITIES_COLUMNS, SECURITIES_PAYLOAD_COLUMNS, Securities, Synonyms
 
 # Module-level table identifier constants
 _SECURITIES_TABLE = Identifier(Securities.__tablename__)
 _SYNONYMS_TABLE = Identifier(Synonyms.__tablename__)
 
 # SQL statements
-_GET_SECURITY_BY_SYMBOL_SQL : Final[Composed] = SQL(
-    "SELECT id, symbol, description, is_bear, store_locally FROM ") + _SECURITIES_TABLE + SQL(
-    " WHERE symbol = %s")
+_GET_SECURITY_BY_SYMBOL_SQL: Final[Composed] = (
+    SQL("SELECT ") +
+    SQL(', ').join(map(Identifier, SECURITIES_COLUMNS)) +
+    SQL(" FROM ") + _SECURITIES_TABLE + SQL(" WHERE symbol = %s")
+)
 
-_GET_SYNONYM_SQL : Final[Composed] = SQL("SELECT id, provider_id, security_id, ticker FROM ") + _SYNONYMS_TABLE + SQL(
+_GET_SHORTABLE_SYMBOLS_SQL: Final[Composed] = SQL(
+    "SELECT symbol FROM "
+) + _SECURITIES_TABLE + SQL(" WHERE is_shortable = TRUE AND symbol = ANY (%s)")
+
+_GET_SYNONYM_SQL: Final[Composed] = SQL("SELECT id, provider_id, security_id, ticker FROM ") + _SYNONYMS_TABLE + SQL(
     " WHERE security_id = %s AND provider_id = %s")
 
-_GET_TICKERS_BY_SYMBOLS_SQL : Final[Composed] = SQL(
+_GET_TICKERS_BY_SYMBOLS_SQL: Final[Composed] = SQL(
     "SELECT security.symbol, COALESCE(synonym.ticker, security.symbol) AS ticker FROM ") + _SECURITIES_TABLE + SQL(
     " AS security LEFT JOIN ") + _SYNONYMS_TABLE + SQL(
     " AS synonym ON synonym.security_id = security.id AND synonym.provider_id = %s WHERE security.symbol = ANY (%s)")
 
-_ADD_SECURITY_SQL : Final[Composed] = SQL("INSERT INTO ") + _SECURITIES_TABLE + SQL(
-    " (symbol, description, is_bear, store_locally) VALUES (%s, %s, %s, %s) RETURNING id")
+_ADD_SECURITY_SQL: Final[Composed] = (
+    SQL("INSERT INTO ") + _SECURITIES_TABLE + SQL(" (") +
+    SQL(', ').join(map(Identifier, SECURITIES_PAYLOAD_COLUMNS)) +
+    SQL(") VALUES (") +
+    SQL(', ').join([SQL('%s')] * len(SECURITIES_PAYLOAD_COLUMNS)) +
+    SQL(") RETURNING id")
+)
 
 
 class SecurityCrud(BaseCrud):
@@ -63,13 +74,7 @@ class SecurityCrud(BaseCrud):
                 if not security_row_:
                     return None
 
-                security_ = Securities(
-                    id=security_row_[0],
-                    symbol=security_row_[1],
-                    description=security_row_[2],
-                    is_bear=security_row_[3],
-                    store_locally=security_row_[4]
-                )
+                security_ = Securities(**dict(zip(SECURITIES_COLUMNS, security_row_, strict=True)))
 
                 if provider_id:
                     synonym_ = self.get_synonym(security_.id, provider_id, conn=conn_)
@@ -142,6 +147,27 @@ class SecurityCrud(BaseCrud):
         }
 
     @staticmethod
+    def get_shortable_symbols(symbols: list[str],
+                              conn: Connection | None = None) -> set[str]:
+        """
+        Retrieves symbols that are eligible for short trading from the provided list.
+
+        :param symbols: Security symbols to check.
+        :param conn: Optional active autocommit read connection to reuse.
+
+        :return: Set of symbols where is_shortable is True.
+        """
+        if not symbols:
+            return set()
+
+        with read_connection_scope(conn) as conn_:
+            with conn_.cursor() as cur_:
+                cur_.execute(_GET_SHORTABLE_SYMBOLS_SQL, (symbols,))
+                rows_ = cur_.fetchall()
+
+        return {row_[0] for row_ in rows_ if row_ and row_[0]}
+
+    @staticmethod
     def add_security(security: Securities,
                      conn: Connection | None = None) -> None:
         """
@@ -150,12 +176,12 @@ class SecurityCrud(BaseCrud):
         :param security: A Securities model instance to persist.
         :param conn: Optional active Connection for transaction reuse.
         """
-        is_bear_ = security.is_bear if security.is_bear is not None else False
-        store_locally_ = security.store_locally if security.store_locally is not None else False
-
         with connection_scope(conn) as conn_:
             with conn_.cursor() as cur_:
-                cur_.execute(_ADD_SECURITY_SQL, (security.symbol, security.description, is_bear_, store_locally_))
+                cur_.execute(
+                    _ADD_SECURITY_SQL,
+                    tuple(getattr(security, col_) for col_ in SECURITIES_PAYLOAD_COLUMNS)
+                )
                 row_ = cur_.fetchone()
                 if row_:
                     security.id = row_[0]
