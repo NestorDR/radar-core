@@ -45,7 +45,7 @@ soupsieve==2.9.2
 ta-lib @ https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl
 ty==0.0.80
 typing-extensions==4.16.0
-tzdata==2026.3
+tzdata==2026.4
 urllib3==2.7.0
 virtualenv==21.7.9
 websockets==17.1

@@ -190,7 +190,7 @@ def _grid_search_rc_fused(
     """
     Fast JIT-compiled fused grid search kernel for RSI Rollercoaster.
     Scans the parameter grid (in_, over_, out_), simulates trades, evaluates PnL (Profit and Loss) in CPU registers,
-    and returns the best winning parameter triplet (in, over, out) for each evaluated input level.
+    and returns the best winning parameter triplet (in, over, out) achieving positive net profit and expected percentage for each evaluated input level.
 
     :param rsi_values: Array of RSI values.
     :param stop_loss_bar_numbers: Array of stop-loss bar numbers.
@@ -226,7 +226,7 @@ def _grid_search_rc_fused(
 
         # Initialize worst ratios
         best_net_profit_ = -np.inf
-        best_expected_value_ = -np.inf
+        best_expected_percentage_ = -np.inf
         best_over_ = -1
         best_out_ = -1
         found_valid_life_cycle_ = False  # Flag to track if a valid Rollecaster lifecycle is found
@@ -246,7 +246,9 @@ def _grid_search_rc_fused(
                 # (input, over[bought|sold] and output) with the current combination
                 last_bar_number_processed_ = -1
                 winnings_ = 0.0
+                winnings_percentage_ = 0.0
                 losses_ = 0.0
+                losses_percentage_ = 0.0
                 winn_trades_ = 0
                 loss_trades_ = 0
                 signals_ = 0
@@ -338,11 +340,14 @@ def _grid_search_rc_fused(
                     output_price_ = close_prices[output_bar_]
 
                     pnl_ = _calculate_trade_pnl(input_price_, output_price_, direction_, COMMISSION_PERCENT)
+                    return_percentage_ = pnl_ / input_price_
                     if pnl_ > 0.0:
                         winnings_ += pnl_
+                        winnings_percentage_ += return_percentage_
                         winn_trades_ += 1
                     else:
                         losses_ += pnl_
+                        losses_percentage_ += return_percentage_
                         loss_trades_ += 1
 
                     if signals_ == 0:
@@ -355,20 +360,30 @@ def _grid_search_rc_fused(
                         net_profit_,
                         win_probability_,
                         loss_probability_,
-                        average_win_,
-                        average_loss_,
-                        expected_value_,
+                        average_win_percentage_,
+                        average_loss_percentage_,
+                        expected_percentage_,
                     ) = _finalize_screening_metrics(
-                        signals_, first_input_price_, winnings_, winn_trades_, losses_, loss_trades_
+                        signals_,
+                        first_input_price_,
+                        winnings_,
+                        winn_trades_,
+                        losses_,
+                        loss_trades_,
+                        winnings_percentage_,
+                        losses_percentage_,
                     )
 
-                    if _is_profitable_candidate(net_profit_, expected_value_):
+                    if _is_profitable_candidate(net_profit_, expected_percentage_):
                         new_is_better_ = _is_better_candidate(
-                            net_profit_, expected_value_, best_net_profit_, best_expected_value_
+                            net_profit_,
+                            expected_percentage_,
+                            best_net_profit_,
+                            best_expected_percentage_,
                         )
                         if new_is_better_:
                             best_net_profit_ = net_profit_
-                            best_expected_value_ = expected_value_
+                            best_expected_percentage_ = expected_percentage_
                             best_over_ = over_
                             best_out_ = out_
                             found_valid_life_cycle_ = True
@@ -554,7 +569,7 @@ class RsiRollerCoaster(RsiStrategyABC):
                         #  than the previous calculated ones.
                         best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
 
-                if best_ratios_for_in_.net_profit > 0.0 and best_ratios_for_in_.expected_value > 0.0:
+                if best_ratios_for_in_.net_profit > 0.0 and best_ratios_for_in_.expected_percentage > 0.0:
                     # Save only positive ratios
                     positive_ratios_.append(best_ratios_for_in_)
 
@@ -701,7 +716,7 @@ class RsiRollerCoaster(RsiStrategyABC):
                 if not ratios_:
                     continue
 
-                if ratios_.net_profit > 0.0 and ratios_.expected_value > 0.0:
+                if ratios_.net_profit > 0.0 and ratios_.expected_percentage > 0.0:
                     # Save only positive ratios
                     positive_ratios_.append(ratios_)
 

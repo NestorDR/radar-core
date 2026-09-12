@@ -161,7 +161,7 @@ def _grid_search_2b_fused(
     """
     Fast JIT-compiled fused grid search kernel for RSI Two Bands.
     Scans the parameter grid (in_, out_), simulates trades, evaluates PnL (Profit and Loss) in CPU registers,
-    and returns winning parameter combinations (in_, out_) that achieve positive net profit and expected value.
+    and returns winning parameter combinations (in_, out_) that achieve positive net profit and expected percentage.
 
     :param rsi_values: Array of RSI values.
     :param stop_loss_bar_numbers: Array of precalculated stop-loss bar numbers.
@@ -197,7 +197,7 @@ def _grid_search_2b_fused(
 
         # Initialize worst ratios
         best_net_profit_ = -np.inf
-        best_expected_value_ = -np.inf
+        best_expected_percentage_ = -np.inf
         best_out_ = -1
 
         # Set a range of output levels to be analyzed based on pre-set input and overbought/oversold levels
@@ -215,7 +215,9 @@ def _grid_search_2b_fused(
             # (input and output) with the current combination
             last_bar_number_processed_ = -1
             winnings_ = 0.0
+            winnings_percentage_ = 0.0
             losses_ = 0.0
+            losses_percentage_ = 0.0
             winn_trades_ = 0
             loss_trades_ = 0
             signals_ = 0
@@ -286,11 +288,14 @@ def _grid_search_2b_fused(
                 output_price_ = close_prices[output_bar_]
 
                 pnl_ = _calculate_trade_pnl(input_price_, output_price_, direction_, COMMISSION_PERCENT)
+                return_percentage_ = pnl_ / input_price_
                 if pnl_ > 0.0:
                     winnings_ += pnl_
+                    winnings_percentage_ += return_percentage_
                     winn_trades_ += 1
                 else:
                     losses_ += pnl_
+                    losses_percentage_ += return_percentage_
                     loss_trades_ += 1
 
                 if signals_ == 0:
@@ -303,20 +308,30 @@ def _grid_search_2b_fused(
                     net_profit_,
                     win_probability_,
                     loss_probability_,
-                    average_win_,
-                    average_loss_,
-                    expected_value_,
+                    average_win_percentage_,
+                    average_loss_percentage_,
+                    expected_percentage_,
                 ) = _finalize_screening_metrics(
-                    signals_, first_input_price_, winnings_, winn_trades_, losses_, loss_trades_
+                    signals_,
+                    first_input_price_,
+                    winnings_,
+                    winn_trades_,
+                    losses_,
+                    loss_trades_,
+                    winnings_percentage_,
+                    losses_percentage_,
                 )
 
-                if _is_profitable_candidate(net_profit_, expected_value_):
+                if _is_profitable_candidate(net_profit_, expected_percentage_):
                     new_is_better_ = _is_better_candidate(
-                        net_profit_, expected_value_, best_net_profit_, best_expected_value_
+                        net_profit_,
+                        expected_percentage_,
+                        best_net_profit_,
+                        best_expected_percentage_,
                     )
                     if new_is_better_:
                         best_net_profit_ = net_profit_
-                        best_expected_value_ = expected_value_
+                        best_expected_percentage_ = expected_percentage_
                         best_out_ = out_
 
         if best_out_ != -1:
@@ -496,16 +511,16 @@ class RsiTwoBands(RsiStrategyABC):
                         ratios_for_1_level_ = ratios_
 
                 if best_ratios_for_in_.inputs != '':
-                    strategy_inputs = json.loads(str(best_ratios_for_in_.inputs))
-                    best_is_1_level_strategy_ = strategy_inputs['in'] == strategy_inputs['out']
+                    strategy_inputs_ = json.loads(str(best_ratios_for_in_.inputs))
+                    best_is_1_level_strategy_ = strategy_inputs_['in'] == strategy_inputs_['out']
                 else:
                     best_is_1_level_strategy_ = False
 
-                if best_ratios_for_in_.net_profit > 0.0 and best_ratios_for_in_.expected_value > 0.0 and not best_is_1_level_strategy_:
+                if best_ratios_for_in_.net_profit > 0.0 and best_ratios_for_in_.expected_percentage > 0.0 and not best_is_1_level_strategy_:
                     # Save only positive ratios
                     positive_ratios_.append(best_ratios_for_in_)
 
-                if ratios_for_1_level_.net_profit > 0.0 and ratios_for_1_level_.expected_value > 0.0:
+                if ratios_for_1_level_.net_profit > 0.0 and ratios_for_1_level_.expected_percentage > 0.0:
                     # Save only positive ratios for a particular strategy of only 1 level (input-output) analysis
                     positive_ratios_.append(ratios_for_1_level_)
 
@@ -648,7 +663,7 @@ class RsiTwoBands(RsiStrategyABC):
                     continue
 
                 # Save positive ratios
-                if ratios_.net_profit > 0.0 and ratios_.expected_value > 0.0:
+                if ratios_.net_profit > 0.0 and ratios_.expected_percentage > 0.0:
                     positive_ratios_.append(ratios_)
 
                 # Check if the best RSI 2B for this input level is a better indicator for positions

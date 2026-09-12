@@ -261,23 +261,28 @@ class StrategyABC(ABC):
 
         :return: An object Ratios to support the best strategy.
         """
-        return Ratios(inputs="", net_profit=-float("inf"), expected_value=-float("inf"), winnings=-float("inf"),
-                      losses=0)
+        return Ratios(
+            inputs='', 
+            net_profit=-float('inf'), 
+            expected_percentage=-float('inf'), 
+            winnings=-float('inf'),
+            losses=0
+        )
 
     @staticmethod
     def track_best_strategy(strategy_to_compare: Ratios, best_ratios: Ratios) -> Ratios:
         """
         Check if the ratios of the strategy to compare describe a better indicator for positioning than those
-         calculated previously, and thus keeps track of the best strategy based on net profit and expected value.
+         calculated previously, and thus keeps track of the best strategy based on net profit and expected percentage.
 
         :param strategy_to_compare: Strategy to compare with the best strategy.
-        :param best_ratios: Best strategy based on net profit and expected value.
+        :param best_ratios: Best strategy based on net profit and expected percentage.
 
         :return: A tuple with the best strategies after comparison.
         """
 
         new_is_better_ = strategy_to_compare.net_profit > best_ratios.net_profit or (
-                strategy_to_compare.net_profit == best_ratios.net_profit and strategy_to_compare.expected_value > best_ratios.expected_value
+                strategy_to_compare.net_profit == best_ratios.net_profit and strategy_to_compare.expected_percentage > best_ratios.expected_percentage
         )
         return strategy_to_compare if new_is_better_ else best_ratios
 
@@ -329,12 +334,12 @@ class StrategyABC(ABC):
             - losses: Sum of losses (money) supported through the strategy.
             - net_profit: Percentage of net profit obtained following the input and output signals
                           Formula: (winnings_ - losses_) / initial_price_.
-            - expected_value: Mathematical expectation of the strategy
-                              Formula: (win_probability_ * average_win_) + (loss_probability_ * average_loss_).
+            - expected_percentage: Mathematical expectation of percentage trade returns
+                                   Formula: (win_probability_ * average_win_percentage_) + (loss_probability_ * average_loss_percentage_).
             - win_probability: Percentage of positive/winning operations.
             - loss_probability: Percentage of negative/losing operations.
-            - average_win: Average profit of the positive/winning operations.
-            - average_loss: Average loss of the negative/losing operations.
+            - average_win_percentage: Average percentage profit of the positive/winning operations.
+            - average_loss_percentage: Average percentage loss of the negative/losing operations.
             - total_sessions: Total number of sessions to which the strategy has been evaluated
             - winn_sessions: Number of sessions elapsed during positive/winning trades.
             - loss_sessions: Number of sessions elapsed during negative/losing trades.
@@ -368,6 +373,10 @@ class StrategyABC(ABC):
         results_ = (output_prices_ - input_prices_) * position_type_ - COMMISSION_PERCENT * (
                 input_prices_ + output_prices_)
 
+        # Vectorized calculation of percentage returns per trade.
+        # Formula: Trade Result / Input Price
+        returns_percentage_ = results_ / input_prices_
+
         # Calculate session durations using vectorized element-wise subtraction,
         #  leveraging SIMD (Single Instruction, Multiple Data)
         sessions_ = output_bar_numbers - input_bar_numbers
@@ -379,20 +388,36 @@ class StrategyABC(ABC):
         loss_mask_ = ~winn_mask_
 
         # Winning aggregations using NumPy
-        winnings_ = np.sum(results_[winn_mask_]) if np.any(winn_mask_) else 0.0
+        winnings_ = float(np.sum(results_[winn_mask_])) if np.any(winn_mask_) else 0.0
+        winnings_percentage_ = float(np.sum(returns_percentage_[winn_mask_])) if np.any(winn_mask_) else 0.0
         winn_trades_ = int(np.count_nonzero(winn_mask_))
-        winning_sessions_ = np.sum(sessions_[winn_mask_]) if np.any(winn_mask_) else 0
+        winning_sessions_ = int(np.sum(sessions_[winn_mask_])) if np.any(winn_mask_) else 0
 
         # Losses aggregations using NumPy (sum of negative results)
-        losses_ = np.sum(results_[loss_mask_]) if np.any(loss_mask_) else 0.0
+        losses_ = float(np.sum(results_[loss_mask_])) if np.any(loss_mask_) else 0.0
+        losses_percentage_ = float(np.sum(returns_percentage_[loss_mask_])) if np.any(loss_mask_) else 0.0
         loss_trades_ = int(np.count_nonzero(loss_mask_))
-        losing_sessions_ = np.sum(sessions_[loss_mask_]) if np.any(loss_mask_) else 0
+        losing_sessions_ = int(np.sum(sessions_[loss_mask_])) if np.any(loss_mask_) else 0
 
         # Calculate ratios for the strategy
         first_input_price_ = max(float(input_prices_[0]), 0.00001)
 
-        net_profit_, expected_value_, win_probability_, loss_probability_, average_win_, average_loss_ = self.compute_key_ratios(
-            signals_, first_input_price_, winnings_, winn_trades_, losses_, loss_trades_
+        (
+            net_profit_,
+            expected_percentage_,
+            win_probability_,
+            loss_probability_,
+            average_win_percentage_,
+            average_loss_percentage_,
+        ) = self.compute_key_ratios(
+            signals_,
+            first_input_price_,
+            winnings_,
+            winn_trades_,
+            losses_,
+            loss_trades_,
+            winnings_percentage_,
+            losses_percentage_,
         )
 
         total_sessions_ = analysis_context.last_bar_number + 1
@@ -449,11 +474,11 @@ class StrategyABC(ABC):
             # saved_record_.profit_factor = winnings_ / losses_
             # Ratios
             net_profit=net_profit_,
-            expected_value=expected_value_,
+            expected_percentage=expected_percentage_,
             win_probability=win_probability_,
             loss_probability=loss_probability_,
-            average_win=average_win_,
-            average_loss=average_loss_,
+            average_win_percentage=average_win_percentage_,
+            average_loss_percentage=average_loss_percentage_,
             # Sessions
             total_sessions=total_sessions_,
             winning_sessions=winning_sessions_,
@@ -471,44 +496,57 @@ class StrategyABC(ABC):
 
     @staticmethod
     def compute_key_ratios(
-            signals_: int,
-            first_input_price_: float,
-            winnings_: float,
-            winn_trades_: int,
-            losses_: float,
-            loss_trades_: int
+            signals: int,
+            first_input_price: float,
+            winnings: float,
+            winning_trades: int,
+            losses: float,
+            losing_trades: int,
+            winnings_percentage: float,
+            losses_percentage: float,
     ) -> tuple[float, float, float, float, float, float]:
         """
         Calculates key ratios of a strategy to evaluate its trade performance.
 
-        :param signals_: Number of trade signals identified by the strategy.
-        :param first_input_price_: Price of the security when the 1º input signal was identified.
-        :param winnings_: Sum of profits (money) generated by the strategy.
-        :param winn_trades_: Number of positive/winning trades.
-        :param losses_: Sum of losses (money) supported through the strategy.
-        :param loss_trades_: Number of negative/losing trades.
+        :param signals: Number of trade signals identified by the strategy.
+        :param first_input_price: Price of the security when the 1º input signal was identified.
+        :param winnings: Sum of profits (money) generated by the strategy.
+        :param winning_trades: Number of positive/winning trades.
+        :param losses: Sum of losses (money) supported through the strategy.
+        :param losing_trades: Number of negative/losing trades.
+        :param winnings_percentage: Sum of percentage returns of positive trades.
+        :param losses_percentage: Sum of percentage returns of losing trades.
 
         :return: A tuple containing the following calculated metrics:
                  - net_profit_: Percentage of net profit obtained following the input and output signals
-                                Formula: (winnings_ - losses_) / initial_price_.
-                 - expected_value_: Mathematical expectation of the strategy
-                                    Formula: (win_probability_ * average_win_) + (loss_probability_ * average_loss_).
+                                Formula: (winnings + losses) / first_input_price.
+                 - expected_percentage_: Mathematical expectation of percentage trade returns
+                                         Formula: (win_probability_ * average_win_percentage_) + (loss_probability_ * average_loss_percentage_).
                  - win_probability_: Percentage of positive/winning trades.
                  - loss_probability_: Percentage of negative/losing trades.
-                 - average_win_: Average profit of the positive/winning trades.
-                 - average_loss_: Average loss of the negative/losing trades.
+                 - average_win_percentage_: Average percentage profit of the positive/winning trades.
+                 - average_loss_percentage_: Average percentage loss of the negative/losing trades.
         """
         # Calculate the net profit; it is the profitability of the strategy, which can also be expressed as a percentage
         #  of initial capital.
-        net_profit_ = (winnings_ + losses_) / first_input_price_
+        net_profit_ = (winnings + losses) / first_input_price
 
-        # Calculate mathematical expectation of the strategy
-        win_probability_ = 0.0 if signals_ <= 0 else winn_trades_ / signals_
-        average_win_ = 0.0 if winn_trades_ <= 0 else winnings_ / winn_trades_
-        loss_probability_ = 0.0 if signals_ <= 0 else loss_trades_ / signals_
-        average_loss_ = 0.0 if loss_trades_ <= 0 else losses_ / loss_trades_
-        expected_value_ = win_probability_ * average_win_ + loss_probability_ * average_loss_
-        return net_profit_, expected_value_, win_probability_, loss_probability_, average_win_, average_loss_
+        # Calculate mathematical expectation of the strategy in percentage terms
+        win_probability_ = 0.0 if signals <= 0 else winning_trades / signals
+        average_win_percentage_ = 0.0 if winning_trades <= 0 else winnings_percentage / winning_trades
+        loss_probability_ = 0.0 if signals <= 0 else losing_trades / signals
+        average_loss_percentage_ = 0.0 if losing_trades <= 0 else losses_percentage / losing_trades
+        expected_percentage_ = (
+            win_probability_ * average_win_percentage_ + loss_probability_ * average_loss_percentage_
+        )
+        return (
+            net_profit_,
+            expected_percentage_,
+            win_probability_,
+            loss_probability_,
+            average_win_percentage_,
+            average_loss_percentage_,
+        )
 
     # endregion Ratios
 

@@ -124,37 +124,37 @@ def _calculate_trade_pnl(
 
 
 @njit(cache=True, inline='always')
-def _is_profitable_candidate(net_profit: float, expected_value: float) -> bool:
+def _is_profitable_candidate(net_profit: float, expected_percentage: float) -> bool:
     """
     Check the profitability criteria used by fused screening kernels.
 
     :param net_profit: Candidate net-profit ratio.
-    :param expected_value: Candidate expected value.
+    :param expected_percentage: Candidate expected percentage.
 
     :return: True when both profitability criteria are strictly positive.
     """
-    return net_profit > 0.0 and expected_value > 0.0
+    return net_profit > 0.0 and expected_percentage > 0.0
 
 
 @njit(cache=True, inline='always')
 def _is_better_candidate(
     net_profit: float,
-    expected_value: float,
+    expected_percentage: float,
     best_net_profit: float,
-    best_expected_value: float,
+    best_expected_percentage: float,
 ) -> bool:
     """
     Compare a candidate using the project's ranking order.
 
     :param net_profit: Candidate net-profit ratio.
-    :param expected_value: Candidate expected value.
+    :param expected_percentage: Candidate expected percentage.
     :param best_net_profit: Best net-profit ratio found so far.
-    :param best_expected_value: Best expected value found so far.
+    :param best_expected_percentage: Best expected percentage found so far.
 
     :return: True when the candidate outranks the current best candidate.
     """
     return net_profit > best_net_profit or (
-        net_profit == best_net_profit and expected_value > best_expected_value
+        net_profit == best_net_profit and expected_percentage > best_expected_percentage
     )
 
 
@@ -166,18 +166,22 @@ def _finalize_screening_metrics(
     winning_trades: int,
     losses: float,
     losing_trades: int,
+    winnings_percentage: float,
+    losses_percentage: float,
 ) -> tuple[float, float, float, float, float, float]:
     """
     Finalize scalar performance metrics for a screened candidate.
 
     :param signals: Number of trades identified for the candidate.
     :param first_input_price: Price used to normalize net profit.
-    :param winnings: Sum of positive trade results.
+    :param winnings: Sum of positive nominal trade results.
     :param winning_trades: Number of positive trade results.
-    :param losses: Sum of non-positive trade results.
+    :param losses: Sum of non-positive nominal trade results.
     :param losing_trades: Number of non-positive trade results.
+    :param winnings_percentage: Sum of positive trade return percentages.
+    :param losses_percentage: Sum of non-positive trade return percentages.
 
-    :return: Net profit, win probability, loss probability, average win, average loss, and expected value.
+    :return: Net profit, win probability, loss probability, average win percentage, average loss percentage, and expected percentage.
     """
     if signals <= 0:
         return 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
@@ -185,11 +189,18 @@ def _finalize_screening_metrics(
     net_profit_ = (winnings + losses) / first_input_price
     win_probability_ = winning_trades / signals
     loss_probability_ = losing_trades / signals
-    average_win_ = winnings / winning_trades if winning_trades > 0 else 0.0
-    average_loss_ = losses / losing_trades if losing_trades > 0 else 0.0
-    expected_value_ = win_probability_ * average_win_ + loss_probability_ * average_loss_
+    average_win_percentage_ = winnings_percentage / winning_trades if winning_trades > 0 else 0.0
+    average_loss_percentage_ = losses_percentage / losing_trades if losing_trades > 0 else 0.0
+    expected_percentage_ = win_probability_ * average_win_percentage_ + loss_probability_ * average_loss_percentage_
 
-    return net_profit_, win_probability_, loss_probability_, average_win_, average_loss_, expected_value_
+    return (
+        net_profit_,
+        win_probability_,
+        loss_probability_,
+        average_win_percentage_,
+        average_loss_percentage_,
+        expected_percentage_,
+    )
 
 
 @njit(cache=True, inline='always')

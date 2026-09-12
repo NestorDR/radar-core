@@ -34,11 +34,11 @@ class Ratios(BaseModel):
     winnings: float = 0.0
     losses: float = 0.0
     net_profit: float = 0.0
-    expected_value: float = 0.0
+    expected_percentage: float = 0.0
     win_probability: float = 0.0
     loss_probability: float = 0.0
-    average_win: float = 0.0
-    average_loss: float = 0.0
+    average_win_percentage: float = 0.0
+    average_loss_percentage: float = 0.0
     total_sessions: int = 0
     winning_sessions: int = 0
     losing_sessions: int = 0

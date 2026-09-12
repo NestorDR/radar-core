@@ -220,7 +220,7 @@ rsi_input_filter: 'price_action'
 ### 4.2 Database Persistence (`positive_ratios`)
 Strategy outputs are persisted transactionally via `RatioRepository`:
 - For each evaluated input level $in$, strategies track the best setup (`best_ratios_for_in_`).
-- If `net_profit > 0` and `expected_value > 0`, the record is added to `positive_ratios_` and batch-upserted to the PostgreSQL `ratios` table.
+- If `net_profit > 0` and `expected_percentage > 0`, the record is added to `positive_ratios_` and batch-upserted to the PostgreSQL `ratios` table.
 - The `public.ratios_dashboard` database view computes BI fields, including:
   - `"Gain Prob"`: Strategy win rate ($WinTrades / Signals$).
   - `"Profit vs Change"`: Alpha over asset buy-and-hold:

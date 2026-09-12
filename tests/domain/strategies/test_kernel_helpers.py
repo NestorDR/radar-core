@@ -50,7 +50,7 @@ def test_scalar_screening_helpers_match_strategy_formulas() -> None:
     """
     GIVEN scalar trade aggregates and candidate metrics.
     WHEN shared screening helpers are evaluated.
-    THEN PnL, ratios, profitability, ranking, and mark-to-market results match the existing formulas.
+    THEN PnL, ratios, profitability, ranking, and mark-to-market results match the expected percentage formulas.
     """
     pnl_ = _calculate_trade_pnl(100.0, 110.0, 1.0, 0.01)
     assert pnl_ == 7.9
@@ -59,19 +59,19 @@ def test_scalar_screening_helpers_match_strategy_formulas() -> None:
         net_profit_,
         win_probability_,
         loss_probability_,
-        average_win_,
-        average_loss_,
-        expected_value_,
-    ) = _finalize_screening_metrics(2, 100.0, 10.0, 1, -2.0, 1)
+        average_win_percentage_,
+        average_loss_percentage_,
+        expected_percentage_,
+    ) = _finalize_screening_metrics(2, 100.0, 10.0, 1, -2.0, 1, 0.10, -0.02)
 
     assert net_profit_ == 0.08
     assert win_probability_ == 0.5
     assert loss_probability_ == 0.5
-    assert average_win_ == 10.0
-    assert average_loss_ == -2.0
-    assert expected_value_ == 4.0
-    assert _is_profitable_candidate(net_profit_, expected_value_) is True
-    assert _is_better_candidate(0.08, 4.0, 0.07, 5.0) is True
-    assert _is_better_candidate(0.08, 4.0, 0.08, 4.0) is False
+    assert average_win_percentage_ == 0.10
+    assert average_loss_percentage_ == -0.02
+    assert expected_percentage_ == 0.04
+    assert _is_profitable_candidate(net_profit_, expected_percentage_) is True
+    assert _is_better_candidate(0.08, 0.04, 0.07, 0.05) is True
+    assert _is_better_candidate(0.08, 0.04, 0.08, 0.04) is False
     assert _mark_to_market_bar(2, 3) == 2
     assert _mark_to_market_bar(3, 3) == 2
