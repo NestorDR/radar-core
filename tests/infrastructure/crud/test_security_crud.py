@@ -264,3 +264,40 @@ def test_security_crud_get_shortable_symbols_filters_correctly(mock_connection_s
     read_scope_.assert_called_once_with(None)
     cursor_.execute.assert_called_once()
     scope_.__exit__.assert_called_once_with(None, None, None)
+
+
+def test_security_crud_get_bear_symbols_empty():
+    """
+    GIVEN an empty list of symbols
+    WHEN get_bear_symbols is called
+    THEN it returns an empty set without opening a read connection.
+    """
+    with patch(
+            'radar_core.infrastructure.crud.security_crud.read_connection_scope'
+    ) as read_scope_:
+        result_ = SecurityCrud.get_bear_symbols([])
+
+    assert result_ == set()
+    read_scope_.assert_not_called()
+
+
+def test_security_crud_get_bear_symbols_filters_correctly(mock_connection_scope):
+    """
+    GIVEN a list of symbols
+    WHEN get_bear_symbols is called
+    THEN it returns a set of symbols where is_bear is True.
+    """
+    _, cursor_, scope_ = mock_connection_scope
+    cursor_.fetchall.return_value = [('SQQQ',), ('SOXS',)]
+
+    with patch(
+            'radar_core.infrastructure.crud.security_crud.read_connection_scope',
+            return_value=scope_
+    ) as read_scope_:
+        result_ = SecurityCrud.get_bear_symbols(['SQQQ', 'SPY', 'SOXS'])
+
+    assert result_ == {'SQQQ', 'SOXS'}
+    read_scope_.assert_called_once_with(None)
+    cursor_.execute.assert_called_once()
+    scope_.__exit__.assert_called_once_with(None, None, None)
+

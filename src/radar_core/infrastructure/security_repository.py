@@ -181,3 +181,13 @@ class SecurityRepository:
         :return: Set of shortable symbols.
         """
         return self.__security_crud.get_shortable_symbols(symbols)
+
+    def get_bear_symbols(self, symbols: list[str]) -> set[str]:
+        """
+        Retrieves symbols that are classified as inverse ETFs (bear assets).
+
+        :param symbols: Security symbols to check.
+
+        :return: Set of bear symbols.
+        """
+        return self.__security_crud.get_bear_symbols(symbols)

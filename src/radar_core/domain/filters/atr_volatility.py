@@ -51,11 +51,16 @@ class AtrVolatilityFilter(FilterABC):
         """
         return 'atr_volatility'
 
-    def get_masks(self, prices_df: pl.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    def get_masks(
+        self,
+        prices_df: pl.DataFrame,
+        is_bear: bool,
+    ) -> tuple[np.ndarray | None, np.ndarray | None]:
         """
         Compute the volatility regime eligibility mask for Long and Short setups.
 
         :param prices_df: A Polars DataFrame containing High, Low, and Close columns.
+        :param is_bear: Whether the security is an inverse ETF (bear asset).
         
         :return: Tuple of (long_mask, short_mask) as 1D boolean NumPy arrays.
         """

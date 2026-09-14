@@ -78,6 +78,7 @@ def test_analyze_injects_price_action_masks_when_configured(monkeypatch, tmp_pat
             only_long_positions=False,
             prices_df=prices_df_,
             strategies=strategies_,
+            is_bear=False,
         )
 
     assert mock_rsi_2b_.identify.called
@@ -85,15 +86,31 @@ def test_analyze_injects_price_action_masks_when_configured(monkeypatch, tmp_pat
     masks_2b_ = args_2b_[5]
     assert isinstance(masks_2b_, tuple)
     assert len(masks_2b_) == 2
-    assert isinstance(masks_2b_[0], np.ndarray)
+    assert masks_2b_[0] is None
     assert isinstance(masks_2b_[1], np.ndarray)
-    assert len(masks_2b_[0]) == 60
     assert len(masks_2b_[1]) == 60
 
     assert mock_rsi_rc_.identify.called
     args_rc_ = mock_rsi_rc_.identify.call_args.args
     masks_rc_ = args_rc_[5]
     assert masks_rc_ is masks_2b_
+
+    # Verify inverse ETF / bear asset (is_bear=True): Long is ndarray, Short is None
+    analyze(
+        timeframe=DAILY,
+        symbol='SQQQ',
+        only_long_positions=False,
+        prices_df=prices_df_,
+        strategies=strategies_,
+        is_bear=True,
+    )
+    args_2b_bear_ = mock_rsi_2b_.identify.call_args.args
+    masks_2b_bear_ = args_2b_bear_[5]
+    assert isinstance(masks_2b_bear_, tuple)
+    assert len(masks_2b_bear_) == 2
+    assert isinstance(masks_2b_bear_[0], np.ndarray)
+    assert len(masks_2b_bear_[0]) == 60
+    assert masks_2b_bear_[1] is None
 
 
 def test_analyze_passes_none_tuple_when_filter_is_omitted(monkeypatch, tmp_path):
@@ -121,6 +138,7 @@ def test_analyze_passes_none_tuple_when_filter_is_omitted(monkeypatch, tmp_path)
             only_long_positions=False,
             prices_df=prices_df_,
             strategies=strategies_,
+            is_bear=False,
         )
 
     assert mock_rsi_2b_.identify.called
@@ -155,6 +173,7 @@ def test_analyze_passes_none_tuple_when_filter_is_none_string(monkeypatch, tmp_p
             only_long_positions=False,
             prices_df=prices_df_,
             strategies=strategies_,
+            is_bear=False,
         )
 
     assert mock_rsi_2b_.identify.called
@@ -181,6 +200,7 @@ def test_process_symbol_evaluates_short_positions_when_shortable():
             prices_df=prices_df_,
             strategies=strategies_,
             shortable_symbols=shortable_set_,
+            bear_symbols=set(),
             verbosity_level=20,
         )
 
@@ -207,6 +227,7 @@ def test_process_symbol_restricts_to_long_only_when_not_shortable():
             prices_df=prices_df_,
             strategies=strategies_,
             shortable_symbols=shortable_set_,
+            bear_symbols=set(),
             verbosity_level=20,
         )
 
@@ -216,11 +237,51 @@ def test_process_symbol_restricts_to_long_only_when_not_shortable():
     assert daily_call_args_[2] is True
 
 
-def test_analyzer_resolves_shortable_symbols_via_security_repository():
+def test_process_symbol_propagates_is_bear_flag():
+    """
+    GIVEN symbols in and not in the bear_symbols set
+    WHEN process_symbol is called to evaluate strategies
+    THEN analyze is invoked with the corresponding is_bear flag.
+    """
+    mock_strategy_ = MagicMock()
+    strategies_ = EvaluableStrategies(sma=mock_strategy_)
+    prices_df_ = _make_sample_prices_df(bar_count=60)
+    bear_set_ = {'SQQQ', 'SOXS'}
+
+    with patch('radar_core.analyzer.analyze') as mock_analyze_:
+        process_symbol(
+            symbol='SQQQ',
+            prices_df=prices_df_,
+            strategies=strategies_,
+            shortable_symbols=set(),
+            verbosity_level=20,
+            bear_symbols=bear_set_,
+        )
+
+    assert mock_analyze_.called
+    daily_kwargs_ = mock_analyze_.call_args_list[0].kwargs
+    assert daily_kwargs_.get('is_bear') is True
+
+    with patch('radar_core.analyzer.analyze') as mock_analyze_:
+        process_symbol(
+            symbol='SPY',
+            prices_df=prices_df_,
+            strategies=strategies_,
+            shortable_symbols=set(),
+            verbosity_level=20,
+            bear_symbols=bear_set_,
+        )
+
+    assert mock_analyze_.called
+    daily_kwargs_ = mock_analyze_.call_args_list[0].kwargs
+    assert daily_kwargs_.get('is_bear') is False
+
+
+def test_analyzer_resolves_shortable_and_bear_symbols_via_security_repository():
     """
     GIVEN an analyzer invocation with symbols
     WHEN analyzer is called
-    THEN it resolves shortable symbols via SecurityRepository.get_shortable_symbols.
+    THEN it resolves shortable and bear symbols via SecurityRepository.
     """
     with (
         patch('radar_core.analyzer.clean'),
@@ -232,6 +293,7 @@ def test_analyzer_resolves_shortable_symbols_via_security_repository():
     ):
         mock_repo_ = MagicMock()
         mock_repo_.get_shortable_symbols.return_value = {'SPY'}
+        mock_repo_.get_bear_symbols.return_value = set()
         mock_repo_cls_.return_value = mock_repo_
 
         mock_provider_ = MagicMock()
@@ -243,6 +305,7 @@ def test_analyzer_resolves_shortable_symbols_via_security_repository():
     assert exit_code_ == 0
     mock_repo_cls_.assert_called_once()
     mock_repo_.get_shortable_symbols.assert_called_once_with(['SPY'])
+    mock_repo_.get_bear_symbols.assert_called_once_with(['SPY'])
 
 
 

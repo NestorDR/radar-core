@@ -32,6 +32,10 @@ _GET_SHORTABLE_SYMBOLS_SQL: Final[Composed] = SQL(
     "SELECT symbol FROM "
 ) + _SECURITIES_TABLE + SQL(" WHERE is_shortable = TRUE AND symbol = ANY (%s)")
 
+_GET_BEAR_SYMBOLS_SQL: Final[Composed] = SQL(
+    "SELECT symbol FROM "
+) + _SECURITIES_TABLE + SQL(" WHERE is_bear = TRUE AND symbol = ANY (%s)")
+
 _GET_SYNONYM_SQL: Final[Composed] = SQL("SELECT id, provider_id, security_id, ticker FROM ") + _SYNONYMS_TABLE + SQL(
     " WHERE security_id = %s AND provider_id = %s")
 
@@ -163,6 +167,27 @@ class SecurityCrud(BaseCrud):
         with read_connection_scope(conn) as conn_:
             with conn_.cursor() as cur_:
                 cur_.execute(_GET_SHORTABLE_SYMBOLS_SQL, (symbols,))
+                rows_ = cur_.fetchall()
+
+        return {row_[0] for row_ in rows_ if row_ and row_[0]}
+
+    @staticmethod
+    def get_bear_symbols(symbols: list[str],
+                         conn: Connection | None = None) -> set[str]:
+        """
+        Retrieves symbols that are classified as inverse ETFs (bear assets) from the provided list.
+
+        :param symbols: Security symbols to check.
+        :param conn: Optional active autocommit read connection to reuse.
+
+        :return: Set of symbols where is_bear is True.
+        """
+        if not symbols:
+            return set()
+
+        with read_connection_scope(conn) as conn_:
+            with conn_.cursor() as cur_:
+                cur_.execute(_GET_BEAR_SYMBOLS_SQL, (symbols,))
                 rows_ = cur_.fetchall()
 
         return {row_[0] for row_ in rows_ if row_ and row_[0]}

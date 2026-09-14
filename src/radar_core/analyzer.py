@@ -115,6 +115,7 @@ def analyze(timeframe: int,
             only_long_positions: bool,
             prices_df: pl.DataFrame,
             strategies: EvaluableStrategies,
+            is_bear: bool,
             verbosity_level: int = DEBUG) -> None:
     """
     Analyze the prices dataframe for the specified timeframe.
@@ -124,6 +125,7 @@ def analyze(timeframe: int,
     :param only_long_positions: True if only long positions are evaluated, otherwise False.
     :param prices_df: Dataframe with prices to process.
     :param strategies: Pre-instantiated strategies container.
+    :param is_bear: Whether the security is an inverse ETF (bear asset).
     :param verbosity_level: Minimum importance level of messages reporting the progress of the process
     """
 
@@ -160,7 +162,7 @@ def analyze(timeframe: int,
 
             # Precompute input eligibility masks for RSI input filtering if configured
             filter_name_ = get_settings().rsi_input_filter
-            is_input_eligible_ = get_filter_masks(filter_name_, prices_df)
+            is_input_eligible_ = get_filter_masks(filter_name_, prices_df, is_bear)
 
             if strategies.rsi_2b:
                 strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
@@ -177,7 +179,8 @@ def process_symbol(symbol: str,
                    prices_df: pl.DataFrame,
                    strategies: EvaluableStrategies,
                    shortable_symbols: set[str],
-                   verbosity_level: int) -> str:
+                   bear_symbols: set[str],
+                   verbosity_level: int = DEBUG) -> str:
     """
     Worker function to analyze a single symbol.
     - If verbosity is DEBUG: Prints directly to stdout (Live Mode) for diagnosing hangs/crashes.
@@ -187,6 +190,7 @@ def process_symbol(symbol: str,
     :param prices_df: The price data for the symbol.
     :param strategies: The container with strategy instances.
     :param shortable_symbols: A set of symbols that can be shorted.
+    :param bear_symbols: A set of symbols that are inverse ETFs (bear assets).
     :param verbosity_level: The logging verbosity level.
 
     :return: A string containing the captured activity logs.
@@ -194,6 +198,7 @@ def process_symbol(symbol: str,
     symbol_started_at_ = time.monotonic()
     symbol_ = symbol.upper()
     only_long_positions_ = symbol_ not in shortable_symbols
+    is_bear_ = symbol_ in bear_symbols
 
     # Log inside the child process (always goes to file/console depending on config, before buffering starts)
     message_ = datetime.now(LOCAL_TIMEZONE).strftime(f'[{symbol}]: Analysis started at %Y-%m-%d %H:%M:%S...')
@@ -218,12 +223,12 @@ def process_symbol(symbol: str,
         try:
             # Strategy Analysis
             if valid_prices(DAILY, symbol_, prices_df, verbosity_level):
-                analyze(DAILY, symbol_, only_long_positions_, prices_df, strategies, verbosity_level)
+                analyze(DAILY, symbol_, only_long_positions_, prices_df, strategies, is_bear=is_bear_, verbosity_level=verbosity_level)
 
                 # Prepare weekly prices dataframe
                 prices_df_ = to_weekly_timeframe(prices_df)
                 if valid_prices(WEEKLY, symbol_, prices_df_, verbosity_level):
-                    analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies, verbosity_level)
+                    analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies, is_bear=is_bear_, verbosity_level=verbosity_level)
 
             symbol_elapsed_ = time.monotonic() - symbol_started_at_
             message_ = f'[{symbol_}]: Analysis completed in {symbol_elapsed_:.1f} seconds'
@@ -281,8 +286,10 @@ def analyzer(symbols: list[str] | None = None) -> int:
         # Get configured symbols to analyze
         if symbols is None:
             symbols = settings_.symbols
-        # Retrieve shortable symbols
-        shortable_symbols_ = SecurityRepository(verbosity_level_).get_shortable_symbols(symbols)
+        # Retrieve shortable and bear symbols
+        security_repo_ = SecurityRepository(verbosity_level_)
+        shortable_symbols_ = security_repo_.get_shortable_symbols(symbols)
+        bear_symbols_ = security_repo_.get_bear_symbols(symbols)
 
         if settings_.clean_unlisted and symbols:
             # Clean from the DB the ratios for symbols not listed in `settings.yml`
@@ -363,7 +370,7 @@ def analyzer(symbols: list[str] | None = None) -> int:
 
                         # Submit the task to the Executor Pool
                         future_ = executor_.submit(
-                            process_symbol, symbol_, prices_df_, strategies_, shortable_symbols_, verbosity_level_
+                            process_symbol, symbol_, prices_df_, strategies_, shortable_symbols_, bear_symbols_, verbosity_level_
                         )
                         futures_.append(future_)
 
