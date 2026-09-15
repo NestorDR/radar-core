@@ -74,23 +74,23 @@ def test_filter_abc_contract_with_dummy_filter() -> None:
 
 def test_price_action_filter_directional_logic() -> None:
     """
-    GIVEN candles with known prior closes, directional spans, and close locations.
+    GIVEN candles with known previous closes, directional spans, and close locations.
     WHEN PriceActionFilter evaluates the bars with default thresholds.
     THEN for regular assets (is_bear=False), Long is None (zero-allocation baseline) and bearish bars
          with downward retention >= DEFAULT_SHORT_THRESHOLD are Short eligible.
          For bear assets (is_bear=True), bullish bars with upward retention >= DEFAULT_BEAR_LONG_THRESHOLD
          are Long eligible and Short is None (zero-allocation baseline).
     """
-    # Bar 0: Benchmark setup session (Prior close is null -> ineligible)
-    # Bar 1: Bullish confirmation: Prior close 100. Open 100, Low 100, High 120
+    # Bar 0: Benchmark setup session (previous close is null -> ineligible)
+    # Bar 1: Bullish confirmation: previous close 100. Open 100, Low 100, High 120
     #        Upward span = 20. Close retains 90% (>= DEFAULT_BEAR_LONG_THRESHOLD 0.85) of span -> Bear Long True
     bar1_close_ = 100.0 + 20.0 * 0.90
 
-    # Bar 2: Bearish confirmation: Prior close bar1_close_. Open bar1_close_, High bar1_close_, Low bar1_close_ - 20
+    # Bar 2: Bearish confirmation: previous close bar1_close_. Open bar1_close_, High bar1_close_, Low bar1_close_ - 20
     #        Downward span = 20. Close retains DEFAULT_SHORT_THRESHOLD of the span -> Regular Short True
     bar2_close_ = bar1_close_ - 20.0 * min(1.0, max(DEFAULT_SHORT_THRESHOLD, 0.05))
 
-    # Bar 3: Bearish failure: Prior close bar2_close_. Open bar2_close_, High bar2_close_, Low bar2_close_ - 20
+    # Bar 3: Bearish failure: previous close bar2_close_. Open bar2_close_, High bar2_close_, Low bar2_close_ - 20
     #        Downward span = 20. Close retains DEFAULT_SHORT_THRESHOLD * 0.5 (< DEFAULT_SHORT_THRESHOLD) -> Short False
     bar3_close_ = bar2_close_ - 20.0 * (DEFAULT_SHORT_THRESHOLD * 0.5)
 
@@ -142,8 +142,8 @@ def test_price_action_filter_custom_thresholds() -> None:
             datetime.date(2020, 1, 3),
         ],
         # Bar 0: Benchmark session: Close 100
-        # Bar 1: Bullish candle: Prior close 100. Open 100, High 110 (span 10), Low 100, Close 103 (retention = 0.30)
-        # Bar 2: Bearish candle: Prior close 103. Open 103, High 103, Low 93 (span 10), Close 97 (retention = 0.60)
+        # Bar 1: Bullish candle: previous close 100. Open 100, High 110 (span 10), Low 100, Close 103 (retention = 0.30)
+        # Bar 2: Bearish candle: previous close 103. Open 103, High 103, Low 93 (span 10), Close 97 (retention = 0.60)
         'Open': [100.0, 100.0, 103.0],
         'High': [105.0, 110.0, 103.0],
         'Low': [95.0, 100.0, 93.0],
@@ -185,14 +185,14 @@ def test_price_action_filter_directional_gap_and_submerged_handling() -> None:
     GIVEN candles where an opening gap down occurs and produces an intraday bounce.
     WHEN PriceActionFilter evaluates the series for an inverse ETF (is_bear=True).
     THEN directional retention rejects the submerged session (High <= Close_prev) as Long ineligible,
-         while a subsequent breakout session penetrating above prior close is confirmed.
+         while a subsequent breakout session penetrating above previous close is confirmed.
     """
     df_ = pl.DataFrame({
         'Date': [datetime.date(2020, 1, 1), datetime.date(2020, 1, 2), datetime.date(2020, 1, 3)],
         # Bar 0: Benchmark session: High 105, Low 95, Close 100
         # Bar 1: Submerged gap down with green candle: Open 80, High 85, Low 75, Close 82 (Close > Open)
         #        Long span = 85 - 100 = -15 <= 0 -> Long False!
-        # Bar 2: Bullish recovery penetrating prior close: Prior close 82. Open 83, Low 82, High 92, Close 90
+        # Bar 2: Bullish recovery penetrating previous close: previous close 82. Open 83, Low 82, High 92, Close 90
         #        Long span = 92 - 82 = 10, Retention = (90 - 82) / 10 = 0.80 >= 0.75 -> Long True!
         'Open': [98.0, 80.0, 83.0],
         'High': [105.0, 85.0, 92.0],
@@ -207,21 +207,21 @@ def test_price_action_filter_directional_gap_and_submerged_handling() -> None:
 
     # Bar 0 is unanchored -> False
     assert not long_mask_[0]
-    # Bar 1 is submerged below prior close -> Long False
+    # Bar 1 is submerged below previous close -> Long False
     assert not long_mask_[1]
-    # Bar 2 breaks above prior close and retains 80% of upside span -> Long True
+    # Bar 2 breaks above previous close and retains 80% of upside span -> Long True
     assert long_mask_[2]
 
 
 def test_price_action_filter_initial_bar_fallback() -> None:
     """
-    GIVEN a single price bar where prior close is null.
+    GIVEN a single price bar where previous close is null.
     WHEN PriceActionFilter evaluates the bar.
     THEN unanchored directional spans safely evaluate to False without raising null or index errors.
     """
     df_ = pl.DataFrame({
         'Date': [datetime.date(2020, 1, 1)],
-        # Bar 0: Bullish bar: Open 10, High 20, Low 10, Close 18 (prior close is null)
+        # Bar 0: Bullish bar: Open 10, High 20, Low 10, Close 18 (previous close is null)
         'Open': [10.0],
         'High': [20.0],
         'Low': [10.0],

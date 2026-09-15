@@ -86,8 +86,8 @@ class SmaTrendFilter(FilterABC):
                 & pl.col('sma_slope').is_not_null()
         ).fill_null(False)
 
-        long_mask_series_ = df_.select(long_condition_expr_.alias('long_eligible')).to_series()
-        short_mask_series_ = df_.select(short_condition_expr_.alias('short_eligible')).to_series()
+        long_mask_series_ = df_.select(long_condition_expr_.alias('Long_eligible')).to_series()
+        short_mask_series_ = df_.select(short_condition_expr_.alias('Short_eligible')).to_series()
 
         long_mask_ = long_mask_series_.to_numpy().astype(np.bool_)
         short_mask_ = short_mask_series_.to_numpy().astype(np.bool_)
