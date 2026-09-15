@@ -602,9 +602,25 @@ class RsiStrategyABC(StrategyABC, ABC):
     It encapsulates common RSI-specific methods.
     """
 
-    def __init__(self, strategy_acronym: str, verbosity_level: int = DEBUG, period: int = 14):
+    def __init__(
+        self,
+        strategy_acronym: str,
+        dwell_bars: int,
+        verbosity_level: int = DEBUG,
+    ):
+        """
+        :param strategy_acronym: Strategy acronym to be analyzed.
+        :param dwell_bars: Minimum bars required below/above input level (1 for baseline t-1, 2 for t-2 persistence).
+        :param verbosity_level: Minimum importance level of messages reporting the progress of the process for all
+         methods of the class.
+
+        :raises ValueError: If dwell_bars is not in (1, 2).
+        """
+        if dwell_bars not in (1, 2):
+            raise ValueError(f'dwell_bars must be 1 or 2, got {dwell_bars}')
         super().__init__(strategy_acronym, verbosity_level)
-        self.period = period  # Common RSI period, used by RSI strategies
+        self.dwell_bars = dwell_bars
+        self.period = 14  # Common RSI period, used by RSI strategies
 
     # region Stop Loss
 

@@ -228,7 +228,7 @@ RSI moves above 70 → crosses below 70 → short position
 
 The Two Bands strategy tries to capture a complete RSI swing between two selected levels. The input crossing indicates that the initial recovery or decline has begun. The output crossing indicates that the expected swing has ended.
 
-Compared with the RSI SMA strategy, Two Bands uses absolute RSI zones rather than RSI's position relative to its own average. It can therefore distinguish a recovery from a low RSI area from a general momentum change.
+Compared with the RSI SMA strategy, Two Bands uses absolute RSI zones rather than RSI's position relative to its own average. It can therefore distinguish a recovery from a low RSI area from a general momentum change. On the daily timeframe, Two Bands incorporates 3-bar Daily Dwell Persistence ($RSI_{t-2} \le \text{in} \land RSI_{t-1} \le \text{in} \land RSI_t > \text{in}$ for Longs), requiring the indicator to dwell beyond the extreme threshold across two consecutive preceding bars to eliminate 1-bar noise flickers before confirming an entry (see [Daily Dwell Persistence Guide](rsi_two_bands_daily_dwell_persistence.md)). Weekly evaluations preserve the standard 2-bar baseline to prevent multi-day candle lag.
 
 ### 5.5 Stop-loss protection
 

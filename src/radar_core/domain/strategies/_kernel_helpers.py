@@ -56,6 +56,40 @@ def _crosses_input(
 
 
 @njit(cache=True, inline='always')
+def _crosses_input_persistent(
+    prior_value: float,
+    previous_value: float,
+    current_value: float,
+    previous_threshold: float,
+    current_threshold: float,
+    is_long_position: bool,
+) -> bool:
+    """
+    Determine whether a value crosses into a position with 2-bar lag persistence.
+
+    :param prior_value: Value two bars prior (t-2).
+    :param previous_value: Value on the preceding bar (t-1).
+    :param current_value: Value on the current bar (t).
+    :param previous_threshold: Threshold on the preceding bars.
+    :param current_threshold: Threshold on the current bar.
+    :param is_long_position: Whether the position is long.
+    :return: True when the persistent long or short entry crossing occurs.
+    """
+    if is_long_position:
+        return (
+            prior_value <= previous_threshold
+            and previous_value <= previous_threshold
+            and current_value > current_threshold
+        )
+
+    return (
+        prior_value >= previous_threshold
+        and previous_value >= previous_threshold
+        and current_value < current_threshold
+    )
+
+
+@njit(cache=True, inline='always')
 def _crosses_output(
     previous_value: float,
     current_value: float,

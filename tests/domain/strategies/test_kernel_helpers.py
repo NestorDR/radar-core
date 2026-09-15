@@ -3,6 +3,7 @@
 from radar_core.domain.strategies._kernel_helpers import (
     _calculate_trade_pnl,
     _crosses_input,
+    _crosses_input_persistent,
     _crosses_output,
     _crosses_over_level,
     _finalize_screening_metrics,
@@ -22,6 +23,29 @@ def test_crosses_input_preserves_long_short_boundaries() -> None:
     assert _crosses_input(60.0, 60.1, 60.0, 60.0, True) is True
     assert _crosses_input(60.0, 59.9, 60.0, 60.0, False) is True
     assert _crosses_input(60.0, 60.0, 60.0, 60.0, False) is False
+
+
+def test_crosses_input_persistent_preserves_boundaries() -> None:
+    """
+    GIVEN values at t-2, t-1, and t around an entry threshold.
+    WHEN the persistent entry predicate is evaluated for long and short positions.
+    THEN 1-bar flickers are rejected and 2-bar dwell periods are required.
+    """
+    # Long positions: prior <= in_ AND previous <= in_ AND current > in_
+    assert _crosses_input_persistent(60.0, 60.0, 60.1, 60.0, 60.0, True) is True
+    assert _crosses_input_persistent(55.0, 58.0, 62.0, 60.0, 60.0, True) is True
+    # 1-bar flicker rejected (prior was above threshold)
+    assert _crosses_input_persistent(60.1, 59.9, 60.1, 60.0, 60.0, True) is False
+    # Equality boundaries
+    assert _crosses_input_persistent(60.0, 60.0, 60.0, 60.0, 60.0, True) is False
+
+    # Short positions: prior >= in_ AND previous >= in_ AND current < in_
+    assert _crosses_input_persistent(60.0, 60.0, 59.9, 60.0, 60.0, False) is True
+    assert _crosses_input_persistent(65.0, 62.0, 58.0, 60.0, 60.0, False) is True
+    # 1-bar flicker rejected (prior was below threshold)
+    assert _crosses_input_persistent(59.9, 60.1, 59.9, 60.0, 60.0, False) is False
+    # Equality boundaries
+    assert _crosses_input_persistent(60.0, 60.0, 60.0, 60.0, 60.0, False) is False
 
 
 def test_crosses_output_supports_dynamic_thresholds() -> None:
