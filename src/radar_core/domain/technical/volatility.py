@@ -97,70 +97,95 @@ def MogalefBands(  # noqa: N802
         period_reg: int = 3,
         period_dev: int = 7,
         multiplier: float = 2.0,
+        log_scale: bool = True,
 ) -> pl.DataFrame:
     """
     Calculates standard Mogalef Bands (stepped volatility corridor bands)
      and adds them as new columns to a Polars DataFrame.
 
     Typical Weighted Price (CP): (Open + High + Low + 2 * Close) / 5
-    Linear Regression: TA-Lib linear regression of CP over period_reg
-    Standard Deviation: TA-Lib standard deviation of the linear regression line over period_dev
-    Stepped Bands: Bands hold horizontal levels until the linear regression line breaks
-     outside the corridor [Lower Band, Upper Band].
+    When log_scale is True (default), calculation operates in natural logarithmic space:
+     - Log Typical Price: ln(CP)
+     - Linear Regression: TA-Lib linear regression of ln(CP) over period_reg
+     - Standard Deviation: TA-Lib standard deviation of the log linear regression line over period_dev
+     - Stepped Corridor: Stepped levels hold until breakout in log space, then exponentiated back (exp)
+     This scale-invariant formulation guarantees strictly positive lower bands (MogalefLower > 0)
+     and prevents frozen corridors on high-volatility or decaying inverse ETFs.
+    When log_scale is False, calculation is performed directly in linear price space.
 
     :param prices_df: Historical prices. It must include at least ['Open', 'High', 'Low', 'Close'].
     :param period_reg: Lookback period for the linear regression line. Must be >= 1.
     :param period_dev: Lookback period for standard deviation of the regression line. Must be >= 1.
     :param multiplier: Non-negative standard-deviation multiplier for upper and lower bands.
+    :param log_scale: If True (default), calculates bands in logarithmic space to prevent negative bands.
 
     :return: The input DataFrame with 'MogalefUpper' and 'MogalefLower' columns added.
 
     :raises ValueError: If an OHLC column is missing, either lookback period is < 1, or multiplier is negative.
     """
     # Validate required columns exist
-    required_cols_ = ["Open", "High", "Low", "Close"]
+    required_cols_ = ['Open', 'High', 'Low', 'Close']
     if not all(col_ in prices_df.columns for col_ in required_cols_):
         missing_ = [
             col_ for col_ in required_cols_ if col_ not in prices_df.columns
         ]
-        raise ValueError(f"Missing required columns: {missing_}")
+        raise ValueError(f'Missing required columns: {missing_}')
 
     # Validate parameters
     if period_reg < 1 or period_dev < 1:
-        raise ValueError("Lookback periods must be greater than or equal to 1.")
+        raise ValueError('Lookback periods must be greater than or equal to 1.')
     if multiplier < 0:
-        raise ValueError("Multiplier must be non-negative.")
+        raise ValueError('Multiplier must be non-negative.')
 
     # Short series guard: if DataFrame height is 0, return empty columns
     if prices_df.height == 0:
         return prices_df.with_columns(
             [
-                pl.Series("MogalefUpper", [], dtype=pl.Float64),
-                pl.Series("MogalefLower", [], dtype=pl.Float64),
+                pl.Series('MogalefUpper', [], dtype=pl.Float64),
+                pl.Series('MogalefLower', [], dtype=pl.Float64),
             ]
         )
 
     # Calculate Weighted Typical Price (Eric Lefort's classic formula): (Open + High + Low + 2 * Close) / 5
-    open_prices_ = prices_df["Open"].to_numpy().astype(np.float64)
-    high_prices_ = prices_df["High"].to_numpy().astype(np.float64)
-    low_prices_ = prices_df["Low"].to_numpy().astype(np.float64)
-    close_prices_ = prices_df["Close"].to_numpy().astype(np.float64)
+    open_prices_ = prices_df['Open'].to_numpy().astype(np.float64)
+    high_prices_ = prices_df['High'].to_numpy().astype(np.float64)
+    low_prices_ = prices_df['Low'].to_numpy().astype(np.float64)
+    close_prices_ = prices_df['Close'].to_numpy().astype(np.float64)
 
     typical_price_ = (open_prices_ + high_prices_ + low_prices_ + 2.0 * close_prices_) / 5.0
 
-    # Calculate Linear Regression for Central Equilibrium Line
-    linear_regression_ = talib.LINEARREG(typical_price_, period_reg)
+    if log_scale:
+        # Guard against non-positive prices before natural logarithmic transformation
+        valid_mask_ = typical_price_ > 0.0
+        log_typical_price_ = np.full_like(typical_price_, np.nan)
+        np.log(typical_price_, out=log_typical_price_, where=valid_mask_)
 
-    # Standard Deviation of the Linear Regression Line
-    std_deviation_ = talib.STDDEV(linear_regression_, period_dev, nbdev=1.0)
+        # Calculate Linear Regression for Central Equilibrium Line in log space
+        linear_regression_ = talib.LINEARREG(log_typical_price_, period_reg)
 
-    # Calculate stepped bands in the array-only JIT kernel.
-    upper_band_, lower_band_ = _compute_stepped_mogalef_bands(linear_regression_, std_deviation_, multiplier)
+        # Standard Deviation of the Linear Regression Line in log space
+        std_deviation_ = talib.STDDEV(linear_regression_, period_dev, nbdev=1.0)
 
-    # 5. Add columns with null-filled NaNs
+        # Calculate stepped bands in the array-only JIT kernel
+        upper_log_, lower_log_ = _compute_stepped_mogalef_bands(linear_regression_, std_deviation_, multiplier)
+
+        # Exponentiate stepped bands back to price space
+        upper_band_ = np.exp(upper_log_)
+        lower_band_ = np.exp(lower_log_)
+    else:
+        # Calculate Linear Regression for Central Equilibrium Line in linear price space
+        linear_regression_ = talib.LINEARREG(typical_price_, period_reg)
+
+        # Standard Deviation of the Linear Regression Line in linear price space
+        std_deviation_ = talib.STDDEV(linear_regression_, period_dev, nbdev=1.0)
+
+        # Calculate stepped bands in the array-only JIT kernel
+        upper_band_, lower_band_ = _compute_stepped_mogalef_bands(linear_regression_, std_deviation_, multiplier)
+
+    # Add columns with null-filled NaNs
     return prices_df.with_columns(
         [
-            pl.Series("MogalefUpper", upper_band_).fill_nan(value=None),
-            pl.Series("MogalefLower", lower_band_).fill_nan(value=None),
+            pl.Series('MogalefUpper', upper_band_).fill_nan(value=None),
+            pl.Series('MogalefLower', lower_band_).fill_nan(value=None),
         ]
     )

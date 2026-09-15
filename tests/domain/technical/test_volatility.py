@@ -53,9 +53,10 @@ def test_mogalef_bands_default_output_contract_and_warmup() -> None:
     assert result_df_.height == 10
     assert 'MogalefCentral' not in result_df_.columns
 
-    expected_bands_ = [None] * 8 + [10.0, 10.0]
-    assert result_df_['MogalefUpper'].to_list() == expected_bands_
-    assert result_df_['MogalefLower'].to_list() == expected_bands_
+    assert result_df_['MogalefUpper'][:8].is_null().all()
+    assert result_df_['MogalefLower'][:8].is_null().all()
+    np.testing.assert_allclose(result_df_['MogalefUpper'][8:].to_numpy(), [10.0, 10.0])
+    np.testing.assert_allclose(result_df_['MogalefLower'][8:].to_numpy(), [10.0, 10.0])
 
 
 def test_legacy_mogalef_bands_function_is_removed() -> None:
@@ -71,7 +72,7 @@ def test_mogalef_bands_stepped_levels_hold_and_reset() -> None:
     """
     GIVEN a price series whose regression enters, remains within, and exits a corridor.
     WHEN MogalefBands is executed with short lookback periods.
-    THEN levels hold inside the corridor and reset after a breakout.
+    THEN levels hold inside the corridor and reset after a breakout for both log and linear scales.
     """
     values_ = np.array([10.0, 10.0, 14.0, 15.0, 20.0])
     prices_df_ = pl.DataFrame({
@@ -81,12 +82,19 @@ def test_mogalef_bands_stepped_levels_hold_and_reset() -> None:
         'Close': values_,
     })
 
-    result_df_ = MogalefBands(prices_df_, period_reg=2, period_dev=2, multiplier=1.0)
+    # 1. Linear scale (log_scale=False)
+    result_lin_df_ = MogalefBands(prices_df_, period_reg=2, period_dev=2, multiplier=1.0, log_scale=False)
+    expected_upper_lin_ = np.array([np.nan, np.nan, 16.0, 16.0, 22.5])
+    expected_lower_lin_ = np.array([np.nan, np.nan, 12.0, 12.0, 17.5])
+    np.testing.assert_allclose(result_lin_df_['MogalefUpper'].to_numpy(), expected_upper_lin_, equal_nan=True)
+    np.testing.assert_allclose(result_lin_df_['MogalefLower'].to_numpy(), expected_lower_lin_, equal_nan=True)
 
-    expected_upper_ = np.array([np.nan, np.nan, 16.0, 16.0, 22.5])
-    expected_lower_ = np.array([np.nan, np.nan, 12.0, 12.0, 17.5])
-    np.testing.assert_allclose(result_df_['MogalefUpper'].to_numpy(), expected_upper_, equal_nan=True)
-    np.testing.assert_allclose(result_df_['MogalefLower'].to_numpy(), expected_lower_, equal_nan=True)
+    # 2. Logarithmic scale (default log_scale=True)
+    result_log_df_ = MogalefBands(prices_df_, period_reg=2, period_dev=2, multiplier=1.0)
+    expected_upper_log_ = np.array([np.nan, np.nan, 16.565023, 16.565023, 23.094011])
+    expected_lower_log_ = np.array([np.nan, np.nan, 11.832160, 11.832160, 17.320508])
+    np.testing.assert_allclose(result_log_df_['MogalefUpper'].to_numpy(), expected_upper_log_, rtol=1e-4, equal_nan=True)
+    np.testing.assert_allclose(result_log_df_['MogalefLower'].to_numpy(), expected_lower_log_, rtol=1e-4, equal_nan=True)
 
 
 def test_mogalef_bands_custom_parameters() -> None:
@@ -103,12 +111,43 @@ def test_mogalef_bands_custom_parameters() -> None:
         'Close': values_,
     })
 
-    result_df_ = MogalefBands(prices_df_, period_reg=2, period_dev=2, multiplier=2.0)
+    result_df_ = MogalefBands(prices_df_, period_reg=2, period_dev=2, multiplier=2.0, log_scale=False)
 
     expected_upper_ = np.array([np.nan, np.nan, 18.0, 18.0, 25.0])
     expected_lower_ = np.array([np.nan, np.nan, 10.0, 10.0, 15.0])
     np.testing.assert_allclose(result_df_['MogalefUpper'].to_numpy(), expected_upper_, equal_nan=True)
     np.testing.assert_allclose(result_df_['MogalefLower'].to_numpy(), expected_lower_, equal_nan=True)
+
+
+def test_mogalef_bands_high_volatility_decay_prevents_negative_lower() -> None:
+    """
+    GIVEN a price series experiencing a steep collapse from 1000 down to 10.
+    WHEN MogalefBands is executed under linear vs logarithmic scale.
+    THEN linear mode produces a negative lower band and stays frozen,
+    WHILE logarithmic mode guarantees strictly positive lower band and active corridor stepping.
+    """
+    values_ = np.array([1000.0, 900.0, 800.0, 600.0, 400.0, 300.0, 200.0, 150.0, 100.0, 80.0, 50.0, 30.0, 20.0, 15.0, 10.0])
+    prices_df_ = pl.DataFrame({
+        'Open': values_,
+        'High': values_,
+        'Low': values_,
+        'Close': values_,
+    })
+
+    # Linear calculation produces negative lower band that stays permanently frozen
+    linear_df_ = MogalefBands(prices_df_, period_reg=3, period_dev=5, multiplier=1.5, log_scale=False)
+    linear_lower_ = linear_df_['MogalefLower'].to_numpy()
+    assert np.nanmin(linear_lower_) < 0.0
+    # Linear lower band remains completely flat/frozen once negative
+    valid_linear_ = linear_df_['MogalefLower'].drop_nulls().to_numpy()
+    assert (valid_linear_ == valid_linear_[0]).all()
+
+    # Logarithmic calculation guarantees strictly positive lower band and active corridor stepping
+    log_df_ = MogalefBands(prices_df_, period_reg=3, period_dev=5, multiplier=1.5, log_scale=True)
+    valid_log_lower_ = log_df_['MogalefLower'].drop_nulls().to_numpy()
+    assert (valid_log_lower_ > 0.0).all()
+    # Corridor steps down dynamically as prices decline
+    assert valid_log_lower_[-1] < valid_log_lower_[0]
 
 
 def test_mogalef_bands_missing_columns() -> None:

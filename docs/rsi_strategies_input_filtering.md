@@ -76,9 +76,9 @@ class FilterABC(ABC):
 - **`get_filter_masks(filter_name: str | None, prices_df: pl.DataFrame, is_bear: bool)`**: Factory method that handles baseline queries (`None`, `''`, `'none'`, `'baseline'`) by returning `(None, None)` without array allocation, forwarding `is_bear` to the filter instance.
 
 ### 2.3 Price Action Filter with Directional Retention Ratio (`price_action.py`)
-Evaluates candle confirmation against **Directional Retention Ratios** relative to the prior close anchor ($Close_{t-1}$), calibrated with **Market Asymmetry**:
+Evaluates candle confirmation against **Directional Retention Ratios** relative to the previous close anchor ($Close_{t-1}$), calibrated with **Market Asymmetry**:
 
-In technical analysis, relative to the prior close anchor $Close_{t-1}$:
+In technical analysis, relative to the previous close anchor $Close_{t-1}$:
 
 - $High_t - Close_{t-1}$ is the Upside True Range ($UTR_t$) (maximum upward excursion/buying reach).
 - $Close_{t-1} - Low_t$ is the Downside True Range ($DTR_t$) (maximum downward excursion/selling reach).
@@ -337,7 +337,7 @@ Comprehensive unit tests validate the filtering subsystem:
   - Validates asymmetric directional retention calculations for standard vs. inverse ETF instruments.
   - Confirms standard assets (`is_bear=False`): Long entries evaluate to `None` (unfiltered, zero-allocation baseline), Short entries require $Close < Open$, positive downward span, and $\ge 0.95$ downward retention.
   - Confirms inverse ETFs (`is_bear=True`): Long entries require $Close > Open$, positive upward span, and $\ge 0.85$ upward retention, while Short entries evaluate to `None` (unfiltered).
-  - Rejects submerged sessions where price fails to penetrate or hold territory relative to prior close.
+  - Rejects submerged sessions where price fails to penetrate or hold territory relative to previous close.
   - Validates unanchored bar 0 safely evaluates to `False`.
   - Validates flat-line zero directional spans evaluate to `False`.
 - **ATR Volatility Regime**: Validates percentile bounds and history length requirements.
