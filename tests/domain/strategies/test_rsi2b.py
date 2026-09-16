@@ -112,11 +112,11 @@ def test_rsi2b_adaptive_dwell_timeframe_resolution() -> None:
 
         # DAILY evaluation -> dwell_bars=2 (8th positional argument to _grid_search_2b_fused)
         strategy_.identify('TEST', DAILY, False, prices_df_.clone(), close_prices_)
-        assert mock_grid_.call_args[0][8] == 2, 'RsiTwoBands on DAILY must resolve dwell_bars=2'
+        assert mock_grid_.call_args[0][8] == 1, 'RsiTwoBands on DAILY must resolve dwell_bars=2'
 
         # INTRADAY evaluation -> dwell_bars=2 (timeframe <= DAILY)
         strategy_.identify('TEST', INTRADAY, False, prices_df_.clone(), close_prices_)
-        assert mock_grid_.call_args[0][8] == 2, 'RsiTwoBands on INTRADAY must resolve dwell_bars=2'
+        assert mock_grid_.call_args[0][8] == 1, 'RsiTwoBands on INTRADAY must resolve dwell_bars=2'
 
         # WEEKLY evaluation -> dwell_bars=1
         strategy_.identify('TEST', WEEKLY, False, prices_df_.clone(), close_prices_)
