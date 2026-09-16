@@ -605,7 +605,7 @@ class RsiTwoBands(RsiStrategyABC):
         """
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
-        dwell_bars_ = 2 if timeframe <= DAILY else 1
+        dwell_bars_ = 1 if timeframe <= DAILY else 1
 
         # Logs initialization and prepares the necessary variables for the process
         init_dt_, analysis_context_, original_column_names_, verbosity_level = self.initialize_identification(
