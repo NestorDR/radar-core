@@ -122,6 +122,7 @@ class StrategyABC(ABC):
             only_long_positions: bool,
             prices_df: pl.DataFrame,
             close_prices: np.ndarray,
+            win_probability_threshold: float,
             is_input_eligible: tuple[np.ndarray | None, np.ndarray | None] | None = None,
             verbosity_level: int = DEBUG,
     ) -> None:
@@ -133,6 +134,7 @@ class StrategyABC(ABC):
         :param only_long_positions: True if only long positions are evaluated, otherwise False.
         :param prices_df: Dataframe with required columns.
         :param close_prices: Close prices for the given symbol and timeframe.
+        :param win_probability_threshold: Minimum winning probability threshold for a strategy to be persisted.
         :param is_input_eligible: Optional tuple of (long_mask, short_mask) eligibility arrays for input bars.
         :param verbosity_level: Importance level of messages.
         """
@@ -265,6 +267,7 @@ class StrategyABC(ABC):
             inputs='',
             net_profit=-float('inf'),
             expected_percentage=-float('inf'),
+            win_probability=-float('inf'),
             winnings=-float('inf'),
             losses=0
         )

@@ -2,7 +2,7 @@
 
 Radar Core is a Python application that evaluates four complementary, pattern-based strategies ([SMA](https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/moving-average-trading-strategies#price_crossovers), SMA applied to the RSI, [RSI Two Bands](https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/relative-strength-index-rsi#overbought_and_oversold_rsi_levels-1), and [RSI Rollercoaster](https://www.tecnicasdetrading.com/2011/09/tecnica-de-trading-rsi-rollercoaster.html)) on daily and weekly data to identify historical opportunities in price trends and momentum.
 
-The strategies progress from simple price or RSI moving-average crossovers to increasingly selective RSI movements between defined levels, with Rollercoaster requiring an intermediate extreme. Positions normally close on strategy-defined reversal or output crossings; RSI Two Bands and the initial phase of RSI Rollercoaster can also close on Mogalef-based price stop-losses. If neither condition occurs before the end of the analysis period, the position is valued at the final available bar. Only configurations with strictly positive net [profit](https://estrategiastrading.com/profit-factor/) and [expected](https://estrategiastrading.com/calcular-la-esperanza-matematica-del-sistema-de-trading/) percentage return, after strategy-specific candidate screening, are persisted. These results remain subject to false signals, changing market conditions, and historical overfitting.
+The strategies progress from simple price or RSI moving-average crossovers to increasingly selective RSI movements between defined levels, with Rollercoaster requiring an intermediate extreme. Positions normally close on strategy-defined reversal or output crossings; RSI Two Bands and the initial phase of RSI Rollercoaster can also close on Mogalef-based price stop-losses. If neither condition occurs before the end of the analysis period, the position is valued at the final available bar. Only configurations with strictly positive net [profit](https://estrategiastrading.com/profit-factor/), positive [expected](https://estrategiastrading.com/calcular-la-esperanza-matematica-del-sistema-de-trading/) percentage return, and win probability exceeding the configured threshold, after strategy-specific candidate screening, are persisted. These results remain subject to false signals, changing market conditions, and historical overfitting.
 
 For details, see the [Strategy Implementation Overview](docs/strategy_implementation_overview.md) and [Trade Performance Percentage Ratios Architecture](docs/trade_performance_percentage_ratios.md).
 
@@ -133,13 +133,14 @@ prices_data_ = PriceProvider(long_term=False).get_prices(symbols_, now_)
 # Configure analyzer
 ma = MovingAverage(SMA, value_column_name="Close", ma_column_name="Sma")
 only_long_positions_ = False
+win_probability_threshold_ = 0.5
 
 # Iterate over symbols
 for symbol_, prices_df_ in prices_data_.items():
     # The analyzer orchestrates identify() and logging; here we just demonstrate the objects.
     prices_df_ = prices_df_.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias("BarNumber"))
     close_prices_ = prices_df_["Close"].to_numpy()
-    ma.identify(symbol_, DAILY, only_long_positions_, prices_df_, close_prices_)
+    ma.identify(symbol_, DAILY, only_long_positions_, prices_df_, close_prices_, win_probability_threshold_)
 
     # See src/radar_core/analyzer.py for a full run.
 ```
@@ -171,7 +172,7 @@ Analysis executed from 2025-12-22 09:58:52 to 2025-12-22 09:58:59 - Elapsed time
 Note: Actual output will vary based on a symbol list, dates, and verbosity. Output blocks per symbol are buffered atomically above DEBUG verbosity; DEBUG output is streamed live.
 
 ## Configuration
-Project settings are managed by the `Settings` class, implemented as a process-local lazy singleton accessed via `get_settings()` (or `Settings()`). You can configure the application via the `src/radar_core/settings.yml` file for financial strategies and using **Environment Variables** for infrastructure-oriented settings (logging, concurrency, database connection, etc.). The singleton reads and parses both sources once during initial construction, providing a centralized snapshot (`Settings.db_conn_kwargs`, log configuration, strategy filters, and symbol lists) across all modules. The `evaluable_strategies` list accepts `sma`, `rsi_sma`, `rsi_rc`, and `rsi_2b`. The optional `rsi_input_filter` setting configures trade entry confirmation filtering for RSI band strategies (`'price_action'`, `'atr_volatility'`, `'sma_trend'`, or `'none'` / omitted for unfiltered baseline execution). Shortable eligibility and bear asset classification are resolved from the database.
+Project settings are managed by the `Settings` class, implemented as a process-local lazy singleton accessed via `get_settings()` (or `Settings()`). You can configure the application via the `src/radar_core/settings.yml` file for financial strategies and using **Environment Variables** for infrastructure-oriented settings (logging, concurrency, database connection, etc.). The singleton reads and parses both sources once during initial construction, providing a centralized snapshot (`Settings.db_conn_kwargs`, log configuration, strategy filters, and symbol lists) across all modules. The `evaluable_strategies` list accepts `sma`, `rsi_sma`, `rsi_rc`, and `rsi_2b`. The optional `rsi_input_filter` setting configures trade entry confirmation filtering for RSI band strategies (`'price_action'`, `'atr_volatility'`, `'sma_trend'`, or `'none'` / omitted for unfiltered baseline execution). The `win_probability_threshold` setting defines the minimum winning probability threshold (default `0.5`) required for any evaluated strategy setup to be persisted into the database. Shortable eligibility and bear asset classification are resolved from the database.
 
 ### Key Environment Variables
 

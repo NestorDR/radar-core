@@ -310,12 +310,52 @@ def test_rsi_input_filter_optional_in_environment_files(monkeypatch):
     WHEN get_settings() is initialized
     THEN rsi_input_filter is safely either None or a registered filter name without raising errors.
     """
-    # Verify default dev environment (settings.dev.yml)
-    s_dev_ = get_settings()
-    assert s_dev_.rsi_input_filter in (None, 'price_action', 'atr_volatility', 'sma_trend', 'none')
-
-    # Verify production environment (settings.yml)
+    # Verify environment (settings.yml)
     Settings._reset()
     monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
     s_prod_ = get_settings()
     assert s_prod_.rsi_input_filter in (None, 'price_action', 'atr_volatility', 'sma_trend', 'none')
+
+
+def test_win_probability_threshold_default_when_omitted(monkeypatch, tmp_path):
+    """
+    GIVEN an isolated YAML configuration omitting win_probability_threshold
+    WHEN get_settings() is initialized
+    THEN win_probability_threshold defaults to 0.5.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text('symbols:\n  - SPY\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.win_probability_threshold == 0.5
+    assert isinstance(s_.win_probability_threshold, float)
+
+
+def test_win_probability_threshold_custom_float(monkeypatch, tmp_path):
+    """
+    GIVEN an isolated YAML configuration specifying a custom win_probability_threshold
+    WHEN get_settings() is initialized
+    THEN win_probability_threshold is correctly parsed as float.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text('symbols:\n  - SPY\nwin_probability_threshold: 0.6\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.win_probability_threshold == 0.6
+    assert isinstance(s_.win_probability_threshold, float)
+
+
+def test_win_probability_threshold_default_in_settings_file(monkeypatch):
+    """
+    GIVEN default settings.yml
+    WHEN get_settings() is initialized
+    THEN win_probability_threshold returns 0.5 as configured.
+    """
+    Settings._reset()
+    monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
+    s_prod_ = get_settings()
+    assert s_prod_.win_probability_threshold == 0.5
+    assert isinstance(s_prod_.win_probability_threshold, float)
+

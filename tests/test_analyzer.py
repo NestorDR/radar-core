@@ -83,7 +83,8 @@ def test_analyze_injects_price_action_masks_when_configured(monkeypatch, tmp_pat
 
     assert mock_rsi_2b_.identify.called
     args_2b_ = mock_rsi_2b_.identify.call_args.args
-    masks_2b_ = args_2b_[5]
+    assert args_2b_[5] == 0.5
+    masks_2b_ = args_2b_[6]
     assert isinstance(masks_2b_, tuple)
     assert len(masks_2b_) == 2
     assert masks_2b_[0] is None
@@ -92,7 +93,8 @@ def test_analyze_injects_price_action_masks_when_configured(monkeypatch, tmp_pat
 
     assert mock_rsi_rc_.identify.called
     args_rc_ = mock_rsi_rc_.identify.call_args.args
-    masks_rc_ = args_rc_[5]
+    assert args_rc_[5] == 0.5
+    masks_rc_ = args_rc_[6]
     assert masks_rc_ is masks_2b_
 
     # Verify inverse ETF / bear asset (is_bear=True): Long is ndarray, Short is None
@@ -105,7 +107,8 @@ def test_analyze_injects_price_action_masks_when_configured(monkeypatch, tmp_pat
         is_bear=True,
     )
     args_2b_bear_ = mock_rsi_2b_.identify.call_args.args
-    masks_2b_bear_ = args_2b_bear_[5]
+    assert args_2b_bear_[5] == 0.5
+    masks_2b_bear_ = args_2b_bear_[6]
     assert isinstance(masks_2b_bear_, tuple)
     assert len(masks_2b_bear_) == 2
     assert isinstance(masks_2b_bear_[0], np.ndarray)
@@ -142,10 +145,12 @@ def test_analyze_passes_none_tuple_when_filter_is_omitted(monkeypatch, tmp_path)
         )
 
     assert mock_rsi_2b_.identify.called
-    assert mock_rsi_2b_.identify.call_args.args[5] == (None, None)
+    assert mock_rsi_2b_.identify.call_args.args[5] == 0.5
+    assert mock_rsi_2b_.identify.call_args.args[6] == (None, None)
 
     assert mock_rsi_rc_.identify.called
-    assert mock_rsi_rc_.identify.call_args.args[5] == (None, None)
+    assert mock_rsi_rc_.identify.call_args.args[5] == 0.5
+    assert mock_rsi_rc_.identify.call_args.args[6] == (None, None)
 
 
 def test_analyze_passes_none_tuple_when_filter_is_none_string(monkeypatch, tmp_path):
@@ -177,10 +182,13 @@ def test_analyze_passes_none_tuple_when_filter_is_none_string(monkeypatch, tmp_p
         )
 
     assert mock_rsi_2b_.identify.called
-    assert mock_rsi_2b_.identify.call_args.args[5] == (None, None)
+    assert mock_rsi_2b_.identify.call_args.args[5] == 0.5
+    assert mock_rsi_2b_.identify.call_args.args[6] == (None, None)
 
     assert mock_rsi_rc_.identify.called
-    assert mock_rsi_rc_.identify.call_args.args[5] == (None, None)
+    assert mock_rsi_rc_.identify.call_args.args[5] == 0.5
+    assert mock_rsi_rc_.identify.call_args.args[6] == (None, None)
+
 
 
 def test_process_symbol_evaluates_short_positions_when_shortable():

@@ -170,8 +170,8 @@ def test_rsirc_identify_execution() -> None:
     strategy_.persist_ratios = mock_persist_
 
     with patch('radar_core.domain.strategies.rsirc._grid_search_rc_fused', return_value=np.empty((0, 3))) as mock_grid_:
-        strategy_.identify('TEST', DAILY, False, prices_df_.clone(), close_prices_)
+        strategy_.identify('TEST', DAILY, False, prices_df_.clone(), close_prices_, 0.5)
         assert mock_grid_.called
 
-        strategy_.identify('TEST', WEEKLY, True, prices_df_.clone(), close_prices_)
+        strategy_.identify('TEST', WEEKLY, True, prices_df_.clone(), close_prices_, 0.5)
         assert mock_grid_.called

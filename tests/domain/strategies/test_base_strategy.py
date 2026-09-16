@@ -347,6 +347,7 @@ def test_strategy_identify_signatures_conform_to_lsp() -> None:
         'only_long_positions',
         'prices_df',
         'close_prices',
+        'win_probability_threshold',
         'is_input_eligible',
         'verbosity_level',
     ]

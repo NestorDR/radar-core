@@ -115,13 +115,14 @@ def test_moving_average_identify_sma_daily_execution(real_spy_prices: pl.DataFra
     mock_persist_ = MagicMock(return_value=1)
     strategy_.persist_ratios = mock_persist_
 
-    strategy_.identify('SPY', DAILY, False, df_, close_prices_)
+    strategy_.identify('SPY', DAILY, False, df_, close_prices_, 0.0)
 
     assert mock_persist_.called
     positive_ratios_ = mock_persist_.call_args[0][0]
     analysis_context_ = mock_persist_.call_args[0][1]
 
     assert len(positive_ratios_) > 0
+    assert all(r_.win_probability > 0.0 for r_ in positive_ratios_)
     assert analysis_context_.best_long.inputs != ''
 
 
@@ -143,11 +144,34 @@ def test_moving_average_identify_rsi_sma_weekly_execution(real_spy_prices: pl.Da
     mock_persist_ = MagicMock(return_value=1)
     strategy_.persist_ratios = mock_persist_
 
-    strategy_.identify('SPY', WEEKLY, False, weekly_df_, close_prices_)
+    strategy_.identify('SPY', WEEKLY, False, weekly_df_, close_prices_, 0.0)
 
     assert mock_persist_.called
     positive_ratios_ = mock_persist_.call_args[0][0]
     analysis_context_ = mock_persist_.call_args[0][1]
 
     assert len(positive_ratios_) > 0
+    assert all(r_.win_probability > 0.0 for r_ in positive_ratios_)
     assert analysis_context_.best_long.inputs != ''
+
+
+def test_moving_average_identify_filters_by_win_probability_threshold(real_spy_prices: pl.DataFrame) -> None:
+    """
+    GIVEN real SPY daily price data.
+    WHEN MovingAverage.identify is executed with win_probability_threshold=0.5.
+    THEN setups with win_probability <= 0.5 are filtered out.
+    """
+    df_ = real_spy_prices.clone()
+    close_prices_ = df_['Close'].to_numpy()
+
+    strategy_ = MovingAverage(SMA, 'Close', 'Sma', min_period=8, max_period=50)
+    mock_persist_ = MagicMock(return_value=1)
+    strategy_.persist_ratios = mock_persist_
+
+    strategy_.identify('SPY', DAILY, False, df_, close_prices_, 0.5)
+
+    assert mock_persist_.called
+    positive_ratios_ = mock_persist_.call_args[0][0]
+    assert all(r_.win_probability > 0.5 for r_ in positive_ratios_)
+
+

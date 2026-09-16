@@ -143,9 +143,13 @@ def analyze(timeframe: int,
     # Extract vectors only once per timeframe to maximize performance
     close_prices_ = prices_df['Close'].to_numpy()
 
+    # Get minimum winning probability threshold for a strategy to be persisted into the database
+    win_probability_threshold_ = get_settings().win_probability_threshold
+
     # Profitable SMAs identification
     if strategies.sma:
-        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, None, verbosity_level)
+        strategies.sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
+                                win_probability_threshold_, None, verbosity_level)
 
     # Profitable RSI-based identification
     if strategies.rsi_sma or strategies.rsi_rc or strategies.rsi_2b:
@@ -153,7 +157,8 @@ def analyze(timeframe: int,
         prices_df = RSI(prices_df)
 
         if strategies.rsi_sma:
-            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_, None, verbosity_level)
+            strategies.rsi_sma.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
+                                        win_probability_threshold_, None, verbosity_level)
 
         # Calculate the stop loss prices only once for the following strategies
         if strategies.rsi_2b or strategies.rsi_rc:
@@ -166,10 +171,10 @@ def analyze(timeframe: int,
 
             if strategies.rsi_2b:
                 strategies.rsi_2b.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
-                                           is_input_eligible_, verbosity_level)
+                                           win_probability_threshold_, is_input_eligible_, verbosity_level)
             if strategies.rsi_rc:
                 strategies.rsi_rc.identify(symbol, timeframe, only_long_positions, prices_df, close_prices_,
-                                           is_input_eligible_, verbosity_level)
+                                           win_probability_threshold_, is_input_eligible_, verbosity_level)
 
     # Release memory
     del close_prices_
@@ -370,7 +375,8 @@ def analyzer(symbols: list[str] | None = None) -> int:
 
                         # Submit the task to the Executor Pool
                         future_ = executor_.submit(
-                            process_symbol, symbol_, prices_df_, strategies_, shortable_symbols_, bear_symbols_, verbosity_level_
+                            process_symbol, symbol_, prices_df_, strategies_, shortable_symbols_, bear_symbols_,
+                            verbosity_level_
                         )
                         futures_.append(future_)
 

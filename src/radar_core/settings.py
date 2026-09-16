@@ -89,6 +89,7 @@ class Settings:
         self.evaluable_strategies: list[str] = config_.get('evaluable_strategies', [])
         raw_filter_ = config_.get('rsi_input_filter')
         self.rsi_input_filter: str | None = raw_filter_.strip() if isinstance(raw_filter_, str) else raw_filter_
+        self.win_probability_threshold: float = float(config_.get('win_probability_threshold', 0.5))
 
     @classmethod
     def _reset(cls) -> None:

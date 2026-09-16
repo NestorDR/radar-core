@@ -161,6 +161,7 @@ class MovingAverage(StrategyABC):
             only_long_positions: bool,
             prices_df: pl.DataFrame,
             close_prices: np.ndarray,
+            win_probability_threshold: float,
             is_input_eligible: tuple[np.ndarray | None, np.ndarray | None] | None = None,
             verbosity_level: int = DEBUG,
     ) -> None:
@@ -177,6 +178,7 @@ class MovingAverage(StrategyABC):
         :param prices_df: Dataframe at least with required columns
          [DateTime, {self.value_column_name}, PercentChange, BarNumber].
         :param close_prices: Close prices for the given symbol and timeframe.
+        :param win_probability_threshold: Minimum winning probability threshold for a strategy to be persisted.
         :param is_input_eligible: Optional tuple of (long_mask, short_mask) eligibility arrays for input bars.
         :param verbosity_level: Importance level of messages reporting the progress of the process for this method,
          it will be taken into account only if it is greater than the level of detail specified for the entire class.
@@ -256,7 +258,9 @@ class MovingAverage(StrategyABC):
                 if not ratios_:
                     continue
 
-                if ratios_.net_profit > 0.0 and ratios_.expected_percentage > 0.0:
+                if (ratios_.net_profit > 0.0 
+                        and ratios_.expected_percentage > 0.0 
+                        and ratios_.win_probability > win_probability_threshold):
                     # Save only positive ratios
                     positive_ratios_.append(ratios_)
 

@@ -1,17 +1,89 @@
 # settings.yml
+done:
 symbols:
-  - 'BTC-USD'
-  - 'GOLD'
-  - 'IWM'
+  - 'SPY'     # Most important
   - 'QQQ'
+  - 'RSP'
   - 'SOXX'
-  - 'SPY'
   - 'XBI'
-  - 'XLE'
-  - 'XLF'
-evaluable_strategies:  # Use attribute name in `class Strategies`, module `evaluable_strategies.py`
+  - 'GDX'
+  - 'IWM'
+  - 'VFLO'
+  - 'TQQQ'    # 2x3x ETFs
+  - 'TECL'
+  - 'SOXL'
+  - 'LABU'
+  - 'SPXL'
+  - 'NUGT'
+  - 'TNA'
+  - 'SQQQ'
+  - 'SOXS'
+  - 'LABD'
+  - 'SPXS'
+  - 'TZA'
+  - 'DUST'
+  - 'MAGS'    # Magnificent
+  - 'MAGX'    # 2x Long MAGS
+  - 'AAPL'
+  - 'AMZN'
+  - 'AVGO'
+  - 'GOOGL'
+  - 'META'
+  - 'MSFT'
+  - 'NFLX'
+  - 'NVDA'
+  - 'TSLA'
+  - 'TSM'
+  - 'DRAM'    # Memory ETF
+  - 'ROM'     # 2x Technology ~ TECL
+  - 'REW'
+  - 'BTC-USD' # Crypto
+  - 'BITX'    # 2x Long
+  - 'SBIT'    # 2x Short
+  - 'WGMI'
+  - 'DBC'     # Commodities
+  - 'PDBC'
+  - 'GOLD'    # Gold & Silver
+  - 'GLD'
+  - 'UGL'
+  - 'GLL'
+  - 'SILVER'
+  - 'SLV'
+  - 'AGQ'
+  - 'ZSL'
+  - 'XLE'     # Energy
+  - 'ERX'
+  - 'ERY'
+  - 'USOIL'
+  - 'USO'
+  - 'UNG'
+  - 'XLF'     # Banks
+  - 'FAS'
+  - 'FAZ'
+  - 'REET'    # REIT - Real Estate Investment Trust
+  - 'FXI'     # China
+  - 'YINN'
+  - 'BABA'
+  - 'EWH'     # Hong Kong
+  - 'EEM'     # Emerging
+  - 'EDC'
+  - 'EDZ'
+  - 'VGK'     # Europe
+  - 'ADBE'    # Following
+  - 'MELI'
+  - 'ORCL'
+  - 'DIA'     # Down Jones
+  - 'UDOW'
+  - 'SDOW'
+  - 'TLT'     # Bonds
+  - 'TMF'
+  - 'TTT'
+  - 'SVXY'    # VIX
+  - 'UVXY'
+evaluable_strategies: # Use attribute name of the `class Strategies`, module `evaluable_strategies.py`
   - sma       # Profitable SMA
   - rsi_sma   # Profitable RSI(14) SMA
   - rsi_rc    # Profitable RSI(14) RC
   - rsi_2b    # Profitable RSI(14) 2B
 rsi_input_filter: 'price_action'  # options: 'none', 'price_action', 'atr_volatility', 'sma_trend'
+win_probability_threshold: 0.5  # Minimum winning probability threshold for a strategy to be persisted into the database
