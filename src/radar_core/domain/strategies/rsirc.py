@@ -573,7 +573,7 @@ class RsiRollerCoaster(RsiStrategyABC):
 
                 if (best_ratios_for_in_.net_profit > 0.0 
                         and best_ratios_for_in_.expected_percentage > 0.0 
-                        and best_ratios_for_in_.win_probability > win_probability_threshold):
+                        and best_ratios_for_in_.win_probability >= win_probability_threshold):
                     # Save only positive ratios
                     positive_ratios_.append(best_ratios_for_in_)
 
@@ -724,7 +724,7 @@ class RsiRollerCoaster(RsiStrategyABC):
 
                 if (ratios_.net_profit > 0.0
                         and ratios_.expected_percentage > 0.0
-                        and ratios_.win_probability > win_probability_threshold):
+                        and ratios_.win_probability >= win_probability_threshold):
                     # Save only positive ratios
                     positive_ratios_.append(ratios_)
 

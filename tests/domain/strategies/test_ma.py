@@ -159,7 +159,7 @@ def test_moving_average_identify_filters_by_win_probability_threshold(real_spy_p
     """
     GIVEN real SPY daily price data.
     WHEN MovingAverage.identify is executed with win_probability_threshold=0.5.
-    THEN setups with win_probability <= 0.5 are filtered out.
+    THEN setups with win_probability < 0.5 are filtered out.
     """
     df_ = real_spy_prices.clone()
     close_prices_ = df_['Close'].to_numpy()
@@ -172,6 +172,6 @@ def test_moving_average_identify_filters_by_win_probability_threshold(real_spy_p
 
     assert mock_persist_.called
     positive_ratios_ = mock_persist_.call_args[0][0]
-    assert all(r_.win_probability > 0.5 for r_ in positive_ratios_)
+    assert all(r_.win_probability >= 0.5 for r_ in positive_ratios_)
 
 

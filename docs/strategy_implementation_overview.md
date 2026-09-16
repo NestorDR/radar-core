@@ -407,7 +407,7 @@ The user-facing ideas above are implemented using three layers:
 
 1. Price data and technical indicators are prepared in Polars DataFrames.
 2. High-volume signal and lifecycle calculations run on NumPy arrays through Numba-compiled functions.
-3. Python orchestration profiles the trades, creates `Ratios` results, and persists positive configurations satisfying `net_profit > 0.0`, `expected_percentage > 0.0`, and `win_probability > win_probability_threshold` (set via `settings.yml`, default 0.5).
+3. Python orchestration profiles the trades, creates `Ratios` results, and persists positive configurations satisfying `net_profit > 0.0`, `expected_percentage > 0.0`, and `win_probability >= win_probability_threshold` (set via `settings.yml`, default 0.5).
 
 The main implementation components are:
 

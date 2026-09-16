@@ -13,7 +13,7 @@ from radar_core.domain.strategies.rsirc import RsiRollerCoaster, _find_trades_rc
 from radar_core.helpers.constants import DAILY, WEEKLY
 from radar_core.infrastructure.crud import StrategyCrud
 from radar_core.infrastructure.ratio_repository import RatioRepository
-from radar_core.models import Strategies
+from radar_core.models import Ratios, Strategies
 
 
 @pytest.fixture(autouse=True)
@@ -175,3 +175,59 @@ def test_rsirc_identify_execution() -> None:
 
         strategy_.identify('TEST', WEEKLY, True, prices_df_.clone(), close_prices_, 0.5)
         assert mock_grid_.called
+
+
+def test_rsirc_identify_filters_by_win_probability_threshold() -> None:
+    """
+    GIVEN RsiRollerCoaster strategy with candidates having win_probability below, at, and above threshold.
+    WHEN identify() is executed with win_probability_threshold=0.5.
+    THEN setups with win_probability < 0.5 are filtered out, while setups with win_probability >= 0.5 are persisted.
+    """
+    strategy_ = RsiRollerCoaster()
+
+    total_bars_ = 30
+    dates_ = pl.date_range(
+        start=pl.date(2025, 1, 1),
+        end=pl.date(2025, 1, 30),
+        interval='1d',
+        eager=True,
+    )
+    prices_df_ = pl.DataFrame({
+        'Date': dates_,
+        'Open': np.full(total_bars_, 100.0),
+        'High': np.full(total_bars_, 105.0),
+        'Low': np.full(total_bars_, 95.0),
+        'Close': np.full(total_bars_, 100.0),
+        'Volume': np.full(total_bars_, 1000.0),
+        'PercentChange': np.zeros(total_bars_),
+        'BarNumber': np.arange(total_bars_, dtype=np.int32),
+        'Rsi': np.full(total_bars_, 50.0),
+        'MogalefUpper': np.full(total_bars_, 110.0),
+        'MogalefLower': np.full(total_bars_, 90.0),
+        'BarNumberForLongStop': np.full(total_bars_, total_bars_, dtype=np.int32),
+        'BarNumberForShortStop': np.full(total_bars_, total_bars_, dtype=np.int32),
+    })
+    close_prices_ = prices_df_['Close'].to_numpy()
+
+    mock_candidates_ = np.array([[20, 60, 70], [25, 60, 70], [30, 60, 70]], dtype=np.int32)
+    mock_trades_ = (np.array([1], dtype=np.int32), np.array([2], dtype=np.int32))
+    ratios_list_ = [
+        Ratios(net_profit=10.0, expected_percentage=1.0, win_probability=0.49),
+        Ratios(net_profit=10.0, expected_percentage=1.0, win_probability=0.50),
+        Ratios(net_profit=10.0, expected_percentage=1.0, win_probability=0.51),
+    ]
+
+    mock_persist_ = MagicMock(return_value=1)
+    strategy_.persist_ratios = mock_persist_
+
+    with patch('radar_core.domain.strategies.rsirc._grid_search_rc_fused', return_value=mock_candidates_), \
+         patch('radar_core.domain.strategies.rsirc._find_trades_rc', return_value=mock_trades_), \
+         patch.object(strategy_, 'perfile_performance', side_effect=ratios_list_):
+        strategy_.identify('TEST', DAILY, True, prices_df_, close_prices_, 0.5)
+
+    assert mock_persist_.called
+    persisted_ratios_ = mock_persist_.call_args[0][0]
+    assert len(persisted_ratios_) == 2
+    assert all(r_.win_probability >= 0.5 for r_ in persisted_ratios_)
+    assert [r_.win_probability for r_ in persisted_ratios_] == [0.50, 0.51]
+
