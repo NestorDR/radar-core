@@ -259,8 +259,9 @@ def test_process_symbol_propagates_is_bear_flag():
         )
 
     assert mock_analyze_.called
-    daily_kwargs_ = mock_analyze_.call_args_list[0].kwargs
-    assert daily_kwargs_.get('is_bear') is True
+    daily_call_ = mock_analyze_.call_args_list[0]
+    is_bear_arg_ = daily_call_.kwargs.get('is_bear', daily_call_.args[5] if len(daily_call_.args) > 5 else None)
+    assert is_bear_arg_ is True
 
     with patch('radar_core.analyzer.analyze') as mock_analyze_:
         process_symbol(
@@ -273,8 +274,9 @@ def test_process_symbol_propagates_is_bear_flag():
         )
 
     assert mock_analyze_.called
-    daily_kwargs_ = mock_analyze_.call_args_list[0].kwargs
-    assert daily_kwargs_.get('is_bear') is False
+    daily_call_ = mock_analyze_.call_args_list[0]
+    is_bear_arg_ = daily_call_.kwargs.get('is_bear', daily_call_.args[5] if len(daily_call_.args) > 5 else None)
+    assert is_bear_arg_ is False
 
 
 def test_analyzer_resolves_shortable_and_bear_symbols_via_security_repository():
