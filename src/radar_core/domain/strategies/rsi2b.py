@@ -48,8 +48,8 @@ def _find_trades_2b(
         stop_loss_bar_numbers: np.ndarray,
         in_: int, out_: int,
         is_long_position: bool,
-        future_bar_number:
-        int, dwell_bars: int = 1,
+        future_bar_number: int,
+        dwell_bars: int,
         is_input_eligible: np.ndarray | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -66,7 +66,12 @@ def _find_trades_2b(
     :param is_input_eligible: Optional 1D boolean array indicating whether each bar is eligible to input.
 
     :return: Tuple of numpy arrays with the input and output bar numbers for each trade.
+
+    :raises ValueError: If dwell_bars is not in (1, 2).
     """
+    if dwell_bars not in (1, 2):
+        raise ValueError(f'dwell_bars must be 1 or 2, got {dwell_bars}')
+
     total_bars_ = len(rsi_values)
 
     # Pre-allocated buffers
@@ -79,9 +84,8 @@ def _find_trades_2b(
     trade_count_ = 0
     last_bar_number_processed_ = -1
 
-    start_bar_ = max(1, dwell_bars)
     # Loop through the time series
-    for bar_number_ in range(start_bar_, total_bars_):
+    for bar_number_ in range(dwell_bars, total_bars_):
         if bar_number_ <= last_bar_number_processed_:
             continue
 
@@ -165,7 +169,7 @@ def _grid_search_2b_fused(
         step: int,
         is_long_position: bool,
         future_bar_number: int,
-        dwell_bars: int = 1,
+        dwell_bars: int,
         is_input_eligible: np.ndarray | None = None
 ) -> np.ndarray:
     """
@@ -185,7 +189,12 @@ def _grid_search_2b_fused(
     :param is_input_eligible: Optional 1D boolean array indicating whether each bar is eligible to input.
 
     :return: 2D NumPy array of shape (K, 2) containing [in_, out_] for winning candidates.
+
+    :raises ValueError: If dwell_bars is not in (1, 2).
     """
+    if dwell_bars not in (1, 2):
+        raise ValueError(f'dwell_bars must be 1 or 2, got {dwell_bars}')
+
     total_bars_ = len(rsi_values)
     direction_ = 1.0 if is_long_position else -1.0
     out_step_ = -step
@@ -234,8 +243,7 @@ def _grid_search_2b_fused(
             signals_ = 0
             first_input_price_ = 1.0
 
-            start_bar_ = max(1, dwell_bars)
-            for bar_number_ in range(start_bar_, total_bars_):
+            for bar_number_ in range(dwell_bars, total_bars_):
                 if bar_number_ <= last_bar_number_processed_:
                     continue
 
@@ -391,17 +399,12 @@ class RsiTwoBands(RsiStrategyABC):
     Visit https://www.tecnicasdetrading.com/2011/09/tecnica-de-trading-rsi-rollercoaster.html
     """
 
-    def __init__(self, dwell_bars: int = 2, verbosity_level: int = DEBUG):
+    def __init__(self, verbosity_level: int = DEBUG):
         """
-        :param dwell_bars: Minimum bars required below/above input level (1 for baseline t-1, 2 for t-2 persistence).
-         Defaults to 2 (adaptive daily 3-bar dwell persistence).
         :param verbosity_level: Minimum importance level of messages reporting the progress of the process for all
          methods of the class.
-         Message levels to be reported: 0-discard messages, 1-report important messages, 2-report details.
-
-        :raises ValueError: If dwell_bars is not in (1, 2).
         """
-        super().__init__(RSI_2B, dwell_bars, verbosity_level)
+        super().__init__(RSI_2B, verbosity_level)
 
     def identify_old(
             self,
@@ -502,9 +505,11 @@ class RsiTwoBands(RsiStrategyABC):
 
                     # Evaluate the life cycle for the RSI Two Bands strategy
                     # (input and output) with the current combination
-                    input_bar_numbers_, output_bar_numbers_ = _find_trades_2b(rsi_values_, stop_loss_bar_numbers_, in_,
-                                                                              out_, is_long_position_,
-                                                                              future_bar_number_)
+                    dwell_bars_ = 1
+                    input_bar_numbers_, output_bar_numbers_ = _find_trades_2b(
+                        rsi_values_, stop_loss_bar_numbers_, in_, out_, is_long_position_,
+                        future_bar_number_, dwell_bars_
+                    )
 
                     # If no trades identified, skip
                     if len(input_bar_numbers_) == 0:
@@ -600,7 +605,7 @@ class RsiTwoBands(RsiStrategyABC):
         """
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
-        dwell_bars_ = self.dwell_bars if timeframe == DAILY else 1
+        dwell_bars_ = 2 if timeframe <= DAILY else 1
 
         # Logs initialization and prepares the necessary variables for the process
         init_dt_, analysis_context_, original_column_names_, verbosity_level = self.initialize_identification(
@@ -647,9 +652,10 @@ class RsiTwoBands(RsiStrategyABC):
                     f'Evaluating profitability {TIMEFRAMES[timeframe]} of RSI({self.period}) Two Bands (fused) for {symbol}...',
                     end='')
 
-            best_candidates_ = _grid_search_2b_fused(rsi_values_, stop_loss_bar_numbers_, close_prices, from_in_,
-                                                     to_in_, step_, is_long_position_, future_bar_number_, dwell_bars_,
-                                                     eligible_mask_)
+            best_candidates_ = _grid_search_2b_fused(
+                rsi_values_, stop_loss_bar_numbers_, close_prices, from_in_, to_in_, step_,
+                is_long_position_, future_bar_number_, dwell_bars_, eligible_mask_
+            )
 
             # Materialize complete Ratios objects only for surviving best candidates/combinations
             for i_ in range(len(best_candidates_)):
@@ -659,9 +665,10 @@ class RsiTwoBands(RsiStrategyABC):
 
                 # Reconstruct the trade lifecycle using the existing JIT kernel.
                 # (input and output) with the current candidate/combination.
-                input_bar_numbers_, output_bar_numbers_ = _find_trades_2b(rsi_values_, stop_loss_bar_numbers_, in_,
-                                                                          out_, is_long_position_, future_bar_number_,
-                                                                          dwell_bars_, eligible_mask_)
+                input_bar_numbers_, output_bar_numbers_ = _find_trades_2b(
+                    rsi_values_, stop_loss_bar_numbers_, in_, out_,
+                    is_long_position_, future_bar_number_, dwell_bars_, eligible_mask_
+                )
                 # If no trades identified, skip
                 if len(input_bar_numbers_) == 0:
                     continue

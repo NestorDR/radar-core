@@ -223,12 +223,12 @@ def process_symbol(symbol: str,
         try:
             # Strategy Analysis
             if valid_prices(DAILY, symbol_, prices_df, verbosity_level):
-                analyze(DAILY, symbol_, only_long_positions_, prices_df, strategies, is_bear=is_bear_, verbosity_level=verbosity_level)
+                analyze(DAILY, symbol_, only_long_positions_, prices_df, strategies, is_bear_, verbosity_level)
 
                 # Prepare weekly prices dataframe
                 prices_df_ = to_weekly_timeframe(prices_df)
                 if valid_prices(WEEKLY, symbol_, prices_df_, verbosity_level):
-                    analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies, is_bear=is_bear_, verbosity_level=verbosity_level)
+                    analyze(WEEKLY, symbol_, only_long_positions_, prices_df_, strategies, is_bear_, verbosity_level)
 
             symbol_elapsed_ = time.monotonic() - symbol_started_at_
             message_ = f'[{symbol_}]: Analysis completed in {symbol_elapsed_:.1f} seconds'

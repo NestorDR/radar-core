@@ -350,31 +350,17 @@ The intermediate level makes Rollercoaster more selective than Two Bands. It can
 
 The trade-off is that many initial inputs may never reach the intermediate level. The strategy may therefore produce fewer trades and may enter a position that remains open for a long time while waiting for the expected stages to occur.
 
-## 7. How the Strategies Differ
+## 7. Comparative Synthesis and Trade-offs
 
-### 7.1 The reference used for the signal
+### 7.1 Structural Progression
+As introduced in [Section 2](#2-the-four-ideas-at-a-glance), the four strategies represent a structural progression across two dimensions:
+- **Reference Basis**: Moving from absolute price trend references (SMA) to relative momentum smoothing (RSI SMA), bounded oscillator corridors (RSI Two Bands), and staged multi-threshold cycles (RSI Rollercoaster).
+- **Execution Criteria**: Transitioning from single-crossover entries and exits to multi-stage confirmations and dynamic price stop-loss corridors.
 
-```text
-SMA       watches price against an average price
-RSI SMA   watches RSI against its average RSI
-RSI 2B    watches RSI move between two absolute levels
-RSI RC    watches RSI complete a three-stage movement
-```
+### 7.2 Selectivity and Opportunity Cost
+The SMA and RSI SMA strategies trigger an entry immediately upon a single crossover. Two Bands requires the indicator to complete a defined swing between opposing levels (incorporating 3-bar daily dwell persistence on daily frames to eliminate 1-bar noise flickers). Rollercoaster enforces the strictest condition by requiring an intermediate extreme before confirming the reversal.
 
-### 7.2 The type of market behavior each one seeks
-
-| Strategy | Intended behavior |
-|---|---|
-| SMA | A change from below to above, or above to below, a price trend reference |
-| RSI SMA | A change in short-term momentum |
-| RSI Two Bands | A directional RSI swing between an input and output zone |
-| RSI Rollercoaster | A larger, confirmed RSI cycle with an intermediate extreme |
-
-### 7.3 Selectivity and timing
-
-The SMA and RSI SMA strategies can produce an input as soon as a crossing occurs. Two Bands requires the input and output levels to describe a meaningful RSI swing. Rollercoaster adds another required stage and is consequently more selective.
-
-Greater selectivity does not automatically mean better performance. It may improve the quality of accepted trades, but it can also reduce the number of opportunities and make results less statistically reliable.
+Greater selectivity sharpens signal quality and reduces false entries during whipsaws, but carries a tangible trade-off: fewer generated trades, reduced statistical sample sizes, and longer exposure durations while waiting for staged exits to resolve.
 
 ## 8. How Radar Core Compares the Strategies
 

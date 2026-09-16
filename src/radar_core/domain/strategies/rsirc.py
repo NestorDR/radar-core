@@ -20,7 +20,6 @@ from radar_core.domain.strategies.base_strategy import RsiStrategyABC
 from radar_core.domain.strategies._kernel_helpers import (
     _calculate_trade_pnl,
     _crosses_input,
-    _crosses_input_persistent,
     _crosses_output,
     _crosses_over_level,
     _finalize_screening_metrics,
@@ -50,7 +49,6 @@ def _find_trades_rc(
         out_: int,
         is_long_position: bool,
         future_bar_number: int,
-        dwell_bars: int = 1,
         is_input_eligible: np.ndarray | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
     """
@@ -64,7 +62,6 @@ def _find_trades_rc(
     :param out_: Output level for the strategy.
     :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
     :param future_bar_number: The number of a price bar that will be available in the future.
-    :param dwell_bars: Minimum bars required below/above input level (1 for baseline t-1, 2 for t-2 persistence).
     :param is_input_eligible: Optional 1D boolean array indicating whether each bar is eligible to input.
 
     :return: Tuple of numpy arrays with the input and output bar numbers for each trade.
@@ -81,24 +78,18 @@ def _find_trades_rc(
     trade_count_ = 0
     last_bar_number_processed_ = -1
 
-    start_bar_ = max(1, dwell_bars)
     # Loop through the time series
-    for bar_number_ in range(start_bar_, total_bars_):
+    for bar_number_ in range(1, total_bars_):
         if bar_number_ <= last_bar_number_processed_:
             continue
 
         # 1. Check input signal: RSI cross over (Long) or cross under (Short) the input level (in_)
         previous_rsi_ = rsi_values[bar_number_ - 1]
         rsi_ = rsi_values[bar_number_]
-        # Long.: RSI > in_ AND Previous <= in_ (AND Prior <= in_ if dwell_bars == 2)
-        # Short: RSI < in_ AND Previous >= in_ (AND Prior >= in_ if dwell_bars == 2)
-        if dwell_bars == 2:
-            prior_rsi_ = rsi_values[bar_number_ - 2]
-            if not _crosses_input_persistent(prior_rsi_, previous_rsi_, rsi_, in_, in_, is_long_position):
-                continue
-        else:
-            if not _crosses_input(previous_rsi_, rsi_, in_, in_, is_long_position):
-                continue
+        # Long.: RSI > in_ AND Previous <= in_
+        # Short: RSI < in_ AND Previous >= in_
+        if not _crosses_input(previous_rsi_, rsi_, in_, in_, is_long_position):
+            continue
         if is_input_eligible is not None and not is_input_eligible[bar_number_]:
             continue
 
@@ -194,7 +185,6 @@ def _grid_search_rc_fused(
         step: int,
         is_long_position: bool,
         future_bar_number: int,
-        dwell_bars: int = 1,
         is_input_eligible: np.ndarray | None = None
 ) -> np.ndarray:
     """
@@ -212,7 +202,6 @@ def _grid_search_rc_fused(
     :param step: Step size for input and over levels.
     :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
     :param future_bar_number: The number of a price bar that will be available in the future.
-    :param dwell_bars: Minimum bars required below/above input level (1 for baseline t-1, 2 for t-2 persistence).
     :param is_input_eligible: Optional 1D boolean array indicating whether each bar is eligible to input.
 
     :return: 2D numpy array of shape (K, 3) with [in, over, out] parameters for surviving winning setups.
@@ -265,23 +254,17 @@ def _grid_search_rc_fused(
                 signals_ = 0
                 first_input_price_ = 0.0
 
-                start_bar_ = max(1, dwell_bars)
-                for bar_number_ in range(start_bar_, total_bars_):
+                for bar_number_ in range(1, total_bars_):
                     if bar_number_ <= last_bar_number_processed_:
                         continue
 
                     # 1. Check input signal: RSI cross over (Long) or cross under (Short) the input level (in_)
                     previous_rsi_ = rsi_values[bar_number_ - 1]
                     rsi_ = rsi_values[bar_number_]
-                    # Long.: RSI > in_ AND Previous <= in_ (AND Prior <= in_ if dwell_bars == 2)
-                    # Short: RSI < in_ AND Previous >= in_ (AND Prior >= in_ if dwell_bars == 2)
-                    if dwell_bars == 2:
-                        prior_rsi_ = rsi_values[bar_number_ - 2]
-                        if not _crosses_input_persistent(prior_rsi_, previous_rsi_, rsi_, in_, in_, is_long_position):
-                            continue
-                    else:
-                        if not _crosses_input(previous_rsi_, rsi_, in_, in_, is_long_position):
-                            continue
+                    # Long.: RSI > in_ AND Previous <= in_
+                    # Short: RSI < in_ AND Previous >= in_
+                    if not _crosses_input(previous_rsi_, rsi_, in_, in_, is_long_position):
+                        continue
                     if is_input_eligible is not None and not is_input_eligible[bar_number_]:
                         continue
 
@@ -450,16 +433,12 @@ class RsiRollerCoaster(RsiStrategyABC):
     Visit https://www.tecnicasdetrading.com/2011/09/tecnica-de-trading-rsi-rollercoaster.html
     """
 
-    def __init__(self, dwell_bars: int = 1, verbosity_level: int = DEBUG):
+    def __init__(self, verbosity_level: int = DEBUG):
         """
-        :param dwell_bars: Minimum bars required below/above input level (1 for baseline t-1, 2 for t-2 persistence).
         :param verbosity_level: Minimum importance level of messages reporting the progress of the process for all
          methods of the class.
-         Message levels to be reported: 0-discard messages, 1-report important messages, 2-report details.
-
-        :raises ValueError: If dwell_bars is not in (1, 2).
         """
-        super().__init__(RSI_RC, dwell_bars, verbosity_level)
+        super().__init__(RSI_RC, verbosity_level)
 
     def identify_old(
             self,
@@ -563,9 +542,9 @@ class RsiRollerCoaster(RsiStrategyABC):
                     for out_ in range(from_out_, to_out_, -step_):
                         # Evaluate the lifecycle for the RSI Rollercoaster strategy
                         # (input, over[bought|sold] and output) with the current combination
-                        input_bar_numbers_, output_bar_numbers_ = _find_trades_rc(rsi_values_, stop_loss_bar_numbers_,
-                                                                                  in_, over_, out_, is_long_position_,
-                                                                                  future_bar_number_)
+                        input_bar_numbers_, output_bar_numbers_ = _find_trades_rc(
+                            rsi_values_, stop_loss_bar_numbers_, in_, over_, out_, is_long_position_, future_bar_number_
+                        )
                         # If no trades identified, skip
                         if len(input_bar_numbers_) == 0:
                             continue
@@ -698,9 +677,11 @@ class RsiRollerCoaster(RsiStrategyABC):
                 )
 
             # Fast in-register JIT grid screening across all parameter combinations
-            best_candidates_ = _grid_search_rc_fused(rsi_values_, stop_loss_bar_numbers_, close_prices, from_in_,
-                                                     to_in_, from_over_, to_over_, step_, is_long_position_,
-                                                     future_bar_number_, self.dwell_bars, eligible_mask_)
+            best_candidates_ = _grid_search_rc_fused(
+                rsi_values_, stop_loss_bar_numbers_, close_prices,
+                from_in_, to_in_, from_over_, to_over_, step_, is_long_position_, future_bar_number_,
+                eligible_mask_
+            )
 
             # Materialize complete Ratios objects only for surviving best candidates/combinations
             for i_ in range(len(best_candidates_)):
@@ -711,10 +692,10 @@ class RsiRollerCoaster(RsiStrategyABC):
 
                 # Reconstruct the trade lifecycle using the existing JIT kernel.
                 # (input, over[bought|sold] and output) with the current candidate/combination.
-                input_bar_numbers_, output_bar_numbers_ = _find_trades_rc(rsi_values_, stop_loss_bar_numbers_, in_,
-                                                                          over_, out_, is_long_position_,
-                                                                          future_bar_number_, self.dwell_bars,
-                                                                          eligible_mask_)
+                input_bar_numbers_, output_bar_numbers_ = _find_trades_rc(
+                    rsi_values_, stop_loss_bar_numbers_, in_, over_, out_, is_long_position_, future_bar_number_,
+                    eligible_mask_
+                )
                 # If no trades identified, skip
                 if len(input_bar_numbers_) == 0:
                     continue

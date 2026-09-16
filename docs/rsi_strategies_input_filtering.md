@@ -253,20 +253,8 @@ When `eligible_mask is None`, Numba compiles out the branch, ensuring identical 
 
 In High-Performance Computing (HPC) and Python/Numba systems, **"zero-allocation baseline"** refers to executing unfiltered code paths without allocating heap memory or introducing array lookups into the CPU execution loop.
 
-#### The Naive Alternative vs. The Zero-Allocation Implementation
-If an unfiltered direction (e.g. Long positions on standard equities) were implemented naively, the system would allocate a dummy boolean array of `True`:
-
-```python
-# Naive approach: allocates memory just to denote "unfiltered / eligible"
-long_mask = np.ones(total_bars, dtype=np.bool_)
-```
-
-This naive pattern introduces two severe performance penalties:
-1. **Heap Allocation Churn**: For every symbol and timeframe, the system allocates memory buffers, executes array assignments, and manages garbage collection overhead.
-2. **CPU Cache & Memory Indexing Overhead**: Inside Numba JIT screening kernels ([`_grid_search_2b_fused`](file:///c:/Development/Repos/local-radar/radar-core/src/radar_core/domain/strategies/rsi2b.py) and [`_grid_search_rc_fused`](file:///c:/Development/Repos/local-radar/radar-core/src/radar_core/domain/strategies/rsirc.py)), high-dimensional parameter grids evaluate between **1,800 and 55,000 combinations**. If an array is passed, the CPU must fetch `mask[bar_index]` from memory or L1 cache on every potential crossover across tens of thousands of parameter passes.
-
-`radar-core` resolves this by using **`None` as a first-class bypass sentinel**:
-- When a filter is set to `'none'`, `'baseline'`, `''`, or `None`, [`get_filter_masks`](file:///c:/Development/Repos/local-radar/radar-core/src/radar_core/domain/filters/registry.py) returns `(None, None)` directly: 0 bytes allocated, 0 computations performed.
+Rather than allocating a dummy array of `True` (`np.ones(...)`), which would cause heap churn and unnecessary memory lookups across 1,800 to 55,000 parameter combinations, `radar-core` uses **`None` as a first-class bypass sentinel**:
+- When a filter is set to `'none'`, `'baseline'`, `''`, or `None`, [`get_filter_masks`](/src/radar_core/domain/filters/registry.py) returns `(None, None)` directly: 0 bytes allocated, 0 computations performed.
 - Under asymmetric filtering, the unfiltered direction returns `None` (e.g., `(None, short_mask)` for normal assets, or `(long_mask, None)` for bear assets).
 - Inside the Numba JIT inner loop:
   ```python
@@ -291,12 +279,7 @@ This naive pattern introduces two severe performance penalties:
 Whenever an asset direction is unfiltered, `None` is passed directly into the Numba grid search and trade extraction kernels, preserving maximum compute throughput.
 
 ### 3.5 Multi-Trade Extraction Kernels
-When extracting actual trade sequences for winning setups (`_find_trades_2b`, `_find_trades_rc`), the entry signal bar is checked:
-
-```python
-if eligible_mask is not None and not eligible_mask[i_]:
-    continue
-```
+When extracting actual trade sequences for winning setups (`_find_trades_2b`, `_find_trades_rc`), the entry signal bar evaluates the identical eligibility condition before trade entry.
 
 Buffers are pre-allocated using `maximum_trades_ = total_bars_ // 2 + 1` with `np.empty(maximum_trades_, dtype=np.int32)` and sliced views `[:trade_count_]` are returned to eliminate dynamic memory allocations.
 

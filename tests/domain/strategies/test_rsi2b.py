@@ -9,9 +9,8 @@ import polars as pl
 import pytest
 
 # --- App modules ---
-from radar_core.domain.strategies.rsi2b import RsiTwoBands, _find_trades_2b
-from radar_core.domain.strategies.rsirc import RsiRollerCoaster
-from radar_core.helpers.constants import DAILY, WEEKLY
+from radar_core.domain.strategies.rsi2b import RsiTwoBands, _find_trades_2b, _get_out_range, _grid_search_2b_fused
+from radar_core.helpers.constants import DAILY, INTRADAY, WEEKLY
 from radar_core.infrastructure.crud import StrategyCrud
 from radar_core.infrastructure.ratio_repository import RatioRepository
 from radar_core.models import Strategies
@@ -77,12 +76,11 @@ def test_find_trades_2b_boundary_safety() -> None:
 
 def test_rsi2b_adaptive_dwell_timeframe_resolution() -> None:
     """
-    GIVEN RsiTwoBands with default dwell_bars=2 vs explicit override.
+    GIVEN an RsiTwoBands strategy instance.
     WHEN identify() is executed on DAILY vs WEEKLY timeframes.
-    THEN default adaptively resolves dwell_bars=2 on DAILY and dwell_bars=1 on WEEKLY.
+    THEN it adaptively resolves dwell_bars=2 on DAILY (and INTRADAY) and dwell_bars=1 on WEEKLY.
     """
-    strategy_default_ = RsiTwoBands()
-    assert strategy_default_.dwell_bars == 2
+    strategy_ = RsiTwoBands()
 
     # Synthetic DataFrame
     total_bars_ = 30
@@ -110,44 +108,59 @@ def test_rsi2b_adaptive_dwell_timeframe_resolution() -> None:
     close_prices_ = prices_df_['Close'].to_numpy()
 
     with patch('radar_core.domain.strategies.rsi2b._grid_search_2b_fused', return_value=np.empty((0, 2))) as mock_grid_:
-        strategy_default_.persist_ratios = MagicMock()
+        strategy_.persist_ratios = MagicMock()
 
-        # DAILY evaluation -> dwell_bars=2
-        strategy_default_.identify('TEST', DAILY, False, prices_df_.clone(), close_prices_)
-        assert mock_grid_.call_args[0][8] == 2, 'Default RsiTwoBands on DAILY must resolve dwell_bars=2'
+        # DAILY evaluation -> dwell_bars=2 (8th positional argument to _grid_search_2b_fused)
+        strategy_.identify('TEST', DAILY, False, prices_df_.clone(), close_prices_)
+        assert mock_grid_.call_args[0][8] == 2, 'RsiTwoBands on DAILY must resolve dwell_bars=2'
+
+        # INTRADAY evaluation -> dwell_bars=2 (timeframe <= DAILY)
+        strategy_.identify('TEST', INTRADAY, False, prices_df_.clone(), close_prices_)
+        assert mock_grid_.call_args[0][8] == 2, 'RsiTwoBands on INTRADAY must resolve dwell_bars=2'
 
         # WEEKLY evaluation -> dwell_bars=1
-        strategy_default_.identify('TEST', WEEKLY, False, prices_df_.clone(), close_prices_)
-        assert mock_grid_.call_args[0][8] == 1, 'Default RsiTwoBands on WEEKLY must resolve dwell_bars=1'
-
-        # Explicit override dwell_bars=1 on DAILY
-        strategy_explicit_ = RsiTwoBands(dwell_bars=1)
-        strategy_explicit_.persist_ratios = MagicMock()
-        strategy_explicit_.identify('TEST', DAILY, False, prices_df_.clone(), close_prices_)
-        assert mock_grid_.call_args[0][8] == 1, 'Explicit RsiTwoBands(dwell_bars=1) must preserve dwell_bars=1 on DAILY'
+        strategy_.identify('TEST', WEEKLY, False, prices_df_.clone(), close_prices_)
+        assert mock_grid_.call_args[0][8] == 1, 'RsiTwoBands on WEEKLY must resolve dwell_bars=1'
 
 
-def test_rsi_strategies_dwell_bars_validation() -> None:
+def test_find_trades_2b_dwell_bars_validation() -> None:
     """
-    GIVEN an unsupported dwell_bars parameter value (< 1 or > 2, or None).
-    WHEN RsiTwoBands or RsiRollerCoaster is instantiated.
-    THEN ValueError is raised.
+    GIVEN unsupported dwell_bars parameter values (< 1 or > 2).
+    WHEN _find_trades_2b or _grid_search_2b_fused is invoked.
+    THEN ValueError is raised by the JIT kernels.
     """
+    rsi_values_ = np.array([50.0, 60.0, 70.0], dtype=np.float64)
+    stop_loss_bars_ = np.full(len(rsi_values_), 3, dtype=np.int32)
+    close_prices_ = np.array([100.0, 101.0, 102.0], dtype=np.float64)
+
+    # _find_trades_2b validation
     with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        RsiTwoBands(dwell_bars=3)
+        _find_trades_2b(rsi_values_, stop_loss_bars_, in_=40, out_=70, is_long_position=True,
+                        future_bar_number=3, dwell_bars=0)
 
     with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        RsiTwoBands(dwell_bars=0)
+        _find_trades_2b(rsi_values_, stop_loss_bars_, in_=40, out_=70, is_long_position=True,
+                        future_bar_number=3, dwell_bars=3)
+
+    # _grid_search_2b_fused validation
+    with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
+        _grid_search_2b_fused(rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, dwell_bars=0)
 
     with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        RsiTwoBands(dwell_bars=None)  # type: ignore[arg-type]
+        _grid_search_2b_fused(rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, dwell_bars=3)
 
-    with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        RsiRollerCoaster(dwell_bars=3)
 
-    with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        RsiRollerCoaster(dwell_bars=0)
+def test_get_out_range_rsi2b() -> None:
+    """
+    GIVEN Long and Short positions with different input levels.
+    WHEN _get_out_range is called.
+    THEN appropriate (from_out, to_out) bounds are returned.
+    """
+    # Long: from_out is 84 if in_ < 84 else in_, to_out is in_
+    assert _get_out_range(True, 30) == (84, 30)
+    assert _get_out_range(True, 85) == (85, 85)
 
-    with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        RsiRollerCoaster(dwell_bars=None)  # type: ignore[arg-type]
+    # Short: from_out is 16 if in_ > 16 else in_, to_out is in_
+    assert _get_out_range(False, 70) == (16, 70)
+    assert _get_out_range(False, 10) == (10, 10)
 
