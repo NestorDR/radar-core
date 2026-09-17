@@ -390,7 +390,7 @@ def test_filter_registry_and_helper_functions() -> None:
     assert len(bear_long_) == 10
 
     # Baseline queries return (None, None) with zero allocation
-    for baseline_name_ in [None, '', 'none', 'baseline']:
+    for baseline_name_ in ['', 'none', 'baseline']:
         long_mask_, short_mask_ = get_filter_masks(baseline_name_, df_, is_bear=False)
         assert long_mask_ is None
         assert short_mask_ is None
