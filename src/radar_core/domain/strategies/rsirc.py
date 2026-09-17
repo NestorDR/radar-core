@@ -508,8 +508,6 @@ class RsiRollerCoaster(RsiStrategyABC):
         positive_ratios_ = []
 
         for position_type_, from_in_, to_in_, from_over_, to_over_, step_ in contexts_:
-            # Initialize bad strategy to be evaluated and to get better RSI-RCs
-            best_ratios_ = self.initialize_bad_strategy()
             is_long_position_ = position_type_ == LONG
             analysis_context_.is_long_position = is_long_position_
 
@@ -582,21 +580,8 @@ class RsiRollerCoaster(RsiStrategyABC):
                     # Save only positive ratios
                     positive_ratios_.append(best_ratios_for_in_)
 
-                # Check if the best RSI RC for this input level is a better indicator for positions
-                # than the previously calculated input levels.
-                if (best_ratios_for_in_.net_profit > 0.0
-                        and best_ratios_for_in_.expected_percentage > 0.0
-                        and best_ratios_for_in_.win_probability >= win_probability_threshold):
-                    best_ratios_ = self.track_best_strategy(best_ratios_for_in_, best_ratios_)
-
             if verbosity_level == DEBUG:
                 print('', end='\r')
-
-            # Gather the best strategies
-            if analysis_context_.is_long_position:
-                analysis_context_.best_long = best_ratios_  # Best Long strategies
-            else:
-                analysis_context_.best_short = best_ratios_  # Best Short strategies
 
         # Perform atomic batch upsert for all positive ratios identified and remove remaining flagged rows atomically.
         self.persist_ratios(positive_ratios_, analysis_context_)
@@ -672,8 +657,6 @@ class RsiRollerCoaster(RsiStrategyABC):
         positive_ratios_ = []
 
         for position_type_, from_in_, to_in_, from_over_, to_over_, step_ in contexts_:
-            # Initialize bad strategy to be evaluated and to get better RSI-RCs
-            best_ratios_ = self.initialize_bad_strategy()
             is_long_position_ = position_type_ == LONG
             analysis_context_.is_long_position = is_long_position_
 
@@ -736,18 +719,8 @@ class RsiRollerCoaster(RsiStrategyABC):
                     # Save only positive ratios
                     positive_ratios_.append(ratios_)
 
-                    # Check if RSI RC just analyzed for this input level, is a better indicator for positioning
-                    #  than the previous calculated ones.
-                    best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
-
             if verbosity_level == DEBUG:
                 print('', end='\r')
-
-            # Gather the best strategies
-            if analysis_context_.is_long_position:
-                analysis_context_.best_long = best_ratios_
-            else:
-                analysis_context_.best_short = best_ratios_
 
         # Perform atomic batch upsert for all positive ratios identified and remove remaining flagged rows atomically.
         self.persist_ratios(positive_ratios_, analysis_context_)

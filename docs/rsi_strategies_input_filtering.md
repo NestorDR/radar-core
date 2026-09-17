@@ -212,6 +212,7 @@ if strategies.rsi_2b:
         only_long_positions,
         prices_df,
         close_prices_,
+        win_probability_threshold_,
         is_input_eligible_,
         verbosity_level,
     )

@@ -211,8 +211,6 @@ class MovingAverage(StrategyABC):
         positive_ratios_ = []
 
         for position_type_ in position_types_:
-            # Initialize bad strategy to be evaluated and to get better MAs
-            best_ratios_ = self.initialize_bad_strategy()
             is_long_position_ = position_type_ == LONG
             analysis_context_.is_long_position = is_long_position_
 
@@ -264,17 +262,8 @@ class MovingAverage(StrategyABC):
                     # Save only positive ratios
                     positive_ratios_.append(ratios_)
 
-                    # Check if MA just analyzed is a better indicator for positioning than the previous calculated ones.
-                    best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
-
             if verbosity_level == DEBUG:
                 print('', end='\r')
-
-            # Gather the best strategies
-            if analysis_context_.is_long_position:
-                analysis_context_.best_long = best_ratios_  # Best Long strategies
-            else:
-                analysis_context_.best_short = best_ratios_  # Best Short strategies
 
         # Perform atomic batch upsert for all positive ratios identified and remove remaining flagged rows atomically.
         self.persist_ratios(positive_ratios_, analysis_context_)

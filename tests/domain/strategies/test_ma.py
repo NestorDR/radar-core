@@ -106,7 +106,7 @@ def test_moving_average_identify_sma_daily_execution(real_spy_prices: pl.DataFra
     """
     GIVEN real SPY daily price data.
     WHEN MovingAverage.identify is executed for SMA with pre-allocated buffers.
-    THEN positive ratios are persisted and best_long strategy is correctly tracked.
+    THEN positive ratios are persisted.
     """
     df_ = real_spy_prices.clone()
     close_prices_ = df_['Close'].to_numpy()
@@ -119,11 +119,9 @@ def test_moving_average_identify_sma_daily_execution(real_spy_prices: pl.DataFra
 
     assert mock_persist_.called
     positive_ratios_ = mock_persist_.call_args[0][0]
-    analysis_context_ = mock_persist_.call_args[0][1]
 
     assert len(positive_ratios_) > 0
     assert all(r_.win_probability > 0.0 for r_ in positive_ratios_)
-    assert analysis_context_.best_long.inputs != ''
 
 
 def test_moving_average_identify_rsi_sma_weekly_execution(real_spy_prices: pl.DataFrame) -> None:
@@ -148,11 +146,9 @@ def test_moving_average_identify_rsi_sma_weekly_execution(real_spy_prices: pl.Da
 
     assert mock_persist_.called
     positive_ratios_ = mock_persist_.call_args[0][0]
-    analysis_context_ = mock_persist_.call_args[0][1]
 
     assert len(positive_ratios_) > 0
     assert all(r_.win_probability > 0.0 for r_ in positive_ratios_)
-    assert analysis_context_.best_long.inputs != ''
 
 
 def test_moving_average_identify_filters_by_win_probability_threshold(real_spy_prices: pl.DataFrame) -> None:

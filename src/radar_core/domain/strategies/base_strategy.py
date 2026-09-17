@@ -27,7 +27,7 @@ import polars as pl
 # technical: provides calculations of TA indicators
 from radar_core.domain.technical import ATR, MogalefBands
 # helpers: constants and functions that provide miscellaneous functionality
-from radar_core.helpers.constants import COMMISSION_PERCENT, DAILY, TIMEFRAMES
+from radar_core.helpers.constants import COMMISSION_PERCENT, DAILY
 from radar_core.helpers.log_helper import verbose
 # infrastructure: provides access to persisted data.
 from radar_core.infrastructure.ratio_repository import RatioRepository
@@ -81,9 +81,6 @@ class AnalysisContext:
         self.percent_change = (final_price - initial_price) / initial_price
         self.last_bar_number = last_bar_number
         self.future_bar_number = future_bar_number
-        # Initialize empty objects Ratios for the best long and short strategies
-        self.best_long = Ratios()
-        self.best_short = Ratios()
 
 
 class StrategyABC(ABC):
@@ -214,20 +211,6 @@ class StrategyABC(ABC):
         :param init_dt: The date and time when the process started.
         :param verbosity_level: An integer specifying the level of verbosity for logging.
         """
-
-        # Validate on best strategies Long and Short if they remain as initial `bad seeds`
-        # Check for -infinite in net_profit to determine if a valid strategy was ever found.
-        if analysis_context.best_long.net_profit == -float("inf"):
-            logger_.debug(
-                f"[{analysis_context.symbol}]: No profitable Long {self.strategy_acronym} "
-                f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe."
-            )
-
-        if analysis_context.best_short.net_profit == -float("inf"):
-            logger_.debug(
-                f"[{analysis_context.symbol}]: No profitable Short {self.strategy_acronym} "
-                f"found in {TIMEFRAMES[analysis_context.timeframe]} timeframe."
-            )
 
         message_ = (
                 init_dt.strftime(
