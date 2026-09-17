@@ -375,7 +375,7 @@ The comparison includes:
 - the expected percentage return of a trade (see [Trade Performance Percentage Ratios](trade_performance_percentage_ratios.md)); and
 - how much time positions remained active.
 
-The system keeps strategy configurations with positive net profit and positive expected percentage return. The configuration with the highest net profit is treated as the best candidate for a given direction, with expected percentage breaking ties.
+The system keeps strategy configurations with positive net profit, positive expected percentage return, and win probability meeting or exceeding the configured threshold. In multi-dimensional grid searches, candidates failing this threshold are filtered out directly within the JIT screening kernel. The configuration with the highest net profit is treated as the best candidate for a given direction, with expected percentage breaking ties.
 
 These results describe historical behavior. A strategy configuration that performed well in the past is not guaranteed to perform well in the future.
 

@@ -110,17 +110,20 @@ def test_rsi2b_adaptive_dwell_timeframe_resolution() -> None:
     with patch('radar_core.domain.strategies.rsi2b._grid_search_2b_fused', return_value=np.empty((0, 2))) as mock_grid_:
         strategy_.persist_ratios = MagicMock()
 
-        # DAILY evaluation -> dwell_bars=2 (8th positional argument to _grid_search_2b_fused)
+        # DAILY evaluation -> dwell_bars=2 (9th positional argument to _grid_search_2b_fused, index 9)
         strategy_.identify('TEST', DAILY, False, prices_df_.clone(), close_prices_, 0.5)
-        assert mock_grid_.call_args[0][8] == 1, 'RsiTwoBands on DAILY must resolve dwell_bars=2'
+        assert mock_grid_.call_args[0][8] == 0.5, 'RsiTwoBands must pass win_probability_threshold'
+        assert mock_grid_.call_args[0][9] == 2, 'RsiTwoBands on DAILY must resolve dwell_bars=2'
 
         # INTRADAY evaluation -> dwell_bars=2 (timeframe <= DAILY)
         strategy_.identify('TEST', INTRADAY, False, prices_df_.clone(), close_prices_, 0.5)
-        assert mock_grid_.call_args[0][8] == 1, 'RsiTwoBands on INTRADAY must resolve dwell_bars=2'
+        assert mock_grid_.call_args[0][8] == 0.5, 'RsiTwoBands must pass win_probability_threshold'
+        assert mock_grid_.call_args[0][9] == 2, 'RsiTwoBands on INTRADAY must resolve dwell_bars=2'
 
         # WEEKLY evaluation -> dwell_bars=1
         strategy_.identify('TEST', WEEKLY, False, prices_df_.clone(), close_prices_, 0.5)
-        assert mock_grid_.call_args[0][8] == 1, 'RsiTwoBands on WEEKLY must resolve dwell_bars=1'
+        assert mock_grid_.call_args[0][8] == 0.5, 'RsiTwoBands must pass win_probability_threshold'
+        assert mock_grid_.call_args[0][9] == 1, 'RsiTwoBands on WEEKLY must resolve dwell_bars=1'
 
 
 def test_find_trades_2b_dwell_bars_validation() -> None:
@@ -144,10 +147,10 @@ def test_find_trades_2b_dwell_bars_validation() -> None:
 
     # _grid_search_2b_fused validation
     with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        _grid_search_2b_fused(rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, dwell_bars=0)
+        _grid_search_2b_fused(rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, 0.5, dwell_bars=0)
 
     with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        _grid_search_2b_fused(rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, dwell_bars=3)
+        _grid_search_2b_fused(rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, 0.5, dwell_bars=3)
 
 
 def test_get_out_range_rsi2b() -> None:

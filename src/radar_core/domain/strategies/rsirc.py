@@ -185,6 +185,7 @@ def _grid_search_rc_fused(
         step: int,
         is_long_position: bool,
         future_bar_number: int,
+        win_probability_threshold: float,
         is_input_eligible: np.ndarray | None = None
 ) -> np.ndarray:
     """
@@ -202,6 +203,7 @@ def _grid_search_rc_fused(
     :param step: Step size for input and over levels.
     :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
     :param future_bar_number: The number of a price bar that will be available in the future.
+    :param win_probability_threshold: Minimum winning probability threshold for candidate screening.
     :param is_input_eligible: Optional 1D boolean array indicating whether each bar is eligible to input.
 
     :return: 2D numpy array of shape (K, 3) with [in, over, out] parameters for surviving winning setups.
@@ -374,7 +376,7 @@ def _grid_search_rc_fused(
                         losses_percentage_,
                     )
 
-                    if _is_profitable_candidate(net_profit_, expected_percentage_):
+                    if _is_profitable_candidate(net_profit_, expected_percentage_, win_probability_, win_probability_threshold):
                         new_is_better_ = _is_better_candidate(
                             net_profit_,
                             expected_percentage_,
@@ -569,7 +571,10 @@ class RsiRollerCoaster(RsiStrategyABC):
 
                         # Check if RSI RC just analyzed for this input level, is a better indicator for positioning
                         #  than the previous calculated ones.
-                        best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
+                        if (ratios_.net_profit > 0.0
+                                and ratios_.expected_percentage > 0.0
+                                and ratios_.win_probability >= win_probability_threshold):
+                            best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
 
                 if (best_ratios_for_in_.net_profit > 0.0 
                         and best_ratios_for_in_.expected_percentage > 0.0 
@@ -579,7 +584,10 @@ class RsiRollerCoaster(RsiStrategyABC):
 
                 # Check if the best RSI RC for this input level is a better indicator for positions
                 # than the previously calculated input levels.
-                best_ratios_ = self.track_best_strategy(best_ratios_for_in_, best_ratios_)
+                if (best_ratios_for_in_.net_profit > 0.0
+                        and best_ratios_for_in_.expected_percentage > 0.0
+                        and best_ratios_for_in_.win_probability >= win_probability_threshold):
+                    best_ratios_ = self.track_best_strategy(best_ratios_for_in_, best_ratios_)
 
             if verbosity_level == DEBUG:
                 print('', end='\r')
@@ -686,7 +694,7 @@ class RsiRollerCoaster(RsiStrategyABC):
             best_candidates_ = _grid_search_rc_fused(
                 rsi_values_, stop_loss_bar_numbers_, close_prices,
                 from_in_, to_in_, from_over_, to_over_, step_, is_long_position_, future_bar_number_,
-                eligible_mask_
+                win_probability_threshold, eligible_mask_
             )
 
             # Materialize complete Ratios objects only for surviving best candidates/combinations
@@ -728,9 +736,9 @@ class RsiRollerCoaster(RsiStrategyABC):
                     # Save only positive ratios
                     positive_ratios_.append(ratios_)
 
-                # Check if RSI RC just analyzed for this input level, is a better indicator for positioning
-                #  than the previous calculated ones.
-                best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
+                    # Check if RSI RC just analyzed for this input level, is a better indicator for positioning
+                    #  than the previous calculated ones.
+                    best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
 
             if verbosity_level == DEBUG:
                 print('', end='\r')

@@ -93,8 +93,9 @@ def test_scalar_screening_helpers_match_strategy_formulas() -> None:
     assert loss_probability_ == 0.5
     assert average_win_percentage_ == 0.10
     assert average_loss_percentage_ == -0.02
-    assert expected_percentage_ == 0.04
-    assert _is_profitable_candidate(net_profit_, expected_percentage_) is True
+    assert _is_profitable_candidate(net_profit_, expected_percentage_, win_probability_, 0.5) is True
+    assert _is_profitable_candidate(net_profit_, expected_percentage_, 0.49, 0.5) is False
+    assert _is_profitable_candidate(net_profit_, expected_percentage_, win_probability_, 0.51) is False
     assert _is_better_candidate(0.08, 0.04, 0.07, 0.05) is True
     assert _is_better_candidate(0.08, 0.04, 0.08, 0.04) is False
     assert _mark_to_market_bar(2, 3) == 2

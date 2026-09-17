@@ -169,7 +169,8 @@ def _grid_search_2b_fused(
         step: int,
         is_long_position: bool,
         future_bar_number: int,
-        dwell_bars: int,
+        win_probability_threshold: float,
+        dwell_bars: int = 1,
         is_input_eligible: np.ndarray | None = None
 ) -> np.ndarray:
     """
@@ -185,6 +186,7 @@ def _grid_search_2b_fused(
     :param step: Step size for input level iteration.
     :param is_long_position: Flag of the position type under analysis: long (True) or short (False).
     :param future_bar_number: The number of a price bar that will be available in the future.
+    :param win_probability_threshold: Minimum winning probability threshold for candidate screening.
     :param dwell_bars: Minimum bars required below/above input level (1 for baseline t-1, 2 for t-2 persistence).
     :param is_input_eligible: Optional 1D boolean array indicating whether each bar is eligible to input.
 
@@ -347,7 +349,7 @@ def _grid_search_2b_fused(
                     losses_percentage_,
                 )
 
-                if _is_profitable_candidate(net_profit_, expected_percentage_):
+                if _is_profitable_candidate(net_profit_, expected_percentage_, win_probability_, win_probability_threshold):
                     new_is_better_ = _is_better_candidate(
                         net_profit_,
                         expected_percentage_,
@@ -535,7 +537,10 @@ class RsiTwoBands(RsiStrategyABC):
 
                     # Check if RSI 2B just analyzed for this input level, is a better indicator for positioning
                     #  than the previous calculated ones.
-                    best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
+                    if (ratios_.net_profit > 0.0
+                            and ratios_.expected_percentage > 0.0
+                            and ratios_.win_probability >= win_probability_threshold):
+                        best_ratios_for_in_ = self.track_best_strategy(ratios_, best_ratios_for_in_)
 
                     if in_ == out_:
                         ratios_for_1_level_ = ratios_
@@ -561,7 +566,10 @@ class RsiTwoBands(RsiStrategyABC):
 
                 # Check if the best RSI 2B for this input level is a better indicator for positions
                 # than the previously calculated input levels.
-                best_ratios_ = self.track_best_strategy(best_ratios_for_in_, best_ratios_)
+                if (best_ratios_for_in_.net_profit > 0.0
+                        and best_ratios_for_in_.expected_percentage > 0.0
+                        and best_ratios_for_in_.win_probability >= win_probability_threshold):
+                    best_ratios_ = self.track_best_strategy(best_ratios_for_in_, best_ratios_)
 
             if verbosity_level == DEBUG:
                 print('', end='\r')
@@ -614,7 +622,7 @@ class RsiTwoBands(RsiStrategyABC):
         """
         verbosity_level = min(verbosity_level, self.verbosity_level)
 
-        dwell_bars_ = 1 if timeframe <= DAILY else 1
+        dwell_bars_ = 2 if timeframe <= DAILY else 1
 
         # Logs initialization and prepares the necessary variables for the process
         init_dt_, analysis_context_, original_column_names_, verbosity_level = self.initialize_identification(
@@ -663,7 +671,7 @@ class RsiTwoBands(RsiStrategyABC):
 
             best_candidates_ = _grid_search_2b_fused(
                 rsi_values_, stop_loss_bar_numbers_, close_prices, from_in_, to_in_, step_,
-                is_long_position_, future_bar_number_, dwell_bars_, eligible_mask_
+                is_long_position_, future_bar_number_, win_probability_threshold, dwell_bars_, eligible_mask_
             )
 
             # Materialize complete Ratios objects only for surviving best candidates/combinations
@@ -706,7 +714,10 @@ class RsiTwoBands(RsiStrategyABC):
 
                 # Check if the best RSI 2B for this input level is a better indicator for positions
                 # than the previously calculated input levels.
-                best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
+                if (ratios_.net_profit > 0.0
+                        and ratios_.expected_percentage > 0.0
+                        and ratios_.win_probability >= win_probability_threshold):
+                    best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
 
             if verbosity_level == DEBUG:
                 print('', end='\r')

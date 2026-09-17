@@ -264,8 +264,8 @@ class MovingAverage(StrategyABC):
                     # Save only positive ratios
                     positive_ratios_.append(ratios_)
 
-                # Check if MA just analyzed is a better indicator for positioning than the previous calculated ones.
-                best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
+                    # Check if MA just analyzed is a better indicator for positioning than the previous calculated ones.
+                    best_ratios_ = self.track_best_strategy(ratios_, best_ratios_)
 
             if verbosity_level == DEBUG:
                 print('', end='\r')

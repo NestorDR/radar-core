@@ -158,16 +158,27 @@ def _calculate_trade_pnl(
 
 
 @njit(cache=True, inline='always')
-def _is_profitable_candidate(net_profit: float, expected_percentage: float) -> bool:
+def _is_profitable_candidate(
+    net_profit: float,
+    expected_percentage: float,
+    win_probability: float,
+    win_probability_threshold: float,
+) -> bool:
     """
     Check the profitability criteria used by fused screening kernels.
 
     :param net_profit: Candidate net-profit ratio.
     :param expected_percentage: Candidate expected percentage.
+    :param win_probability: Candidate win probability ratio.
+    :param win_probability_threshold: Minimum winning probability threshold.
 
-    :return: True when both profitability criteria are strictly positive.
+    :return: True when profitability and threshold criteria are satisfied.
     """
-    return net_profit > 0.0 and expected_percentage > 0.0
+    return (
+        net_profit > 0.0
+        and expected_percentage > 0.0
+        and win_probability >= win_probability_threshold
+    )
 
 
 @njit(cache=True, inline='always')
