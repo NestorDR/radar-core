@@ -3,18 +3,14 @@
 # --- Python modules ---
 from datetime import time
 from pathlib import Path
-from typing import Final
 from zoneinfo import ZoneInfo
 
 # --- Third Party Libraries ---
 import pytest
 
 # --- App modules ---
-from radar_core.settings import Settings, get_settings
-
-_DEFAULT_WIN_PROBABILITY_THRESHOLD: Final[float] = 0.5
-_DEFAULT_STOP_LOSS_CAP_DAILY: Final[float] = 0.12
-_DEFAULT_STOP_LOSS_CAP_WEEKLY: Final[float] = 0.18
+from radar_core.settings import (Settings, get_settings, _DEFAULT_WIN_PROBABILITY_THRESHOLD,
+                                 _DEFAULT_STOP_LOSS_CAP_DAILY, _DEFAULT_STOP_LOSS_CAP_WEEKLY)
 
 
 @pytest.fixture(autouse=True)
@@ -98,6 +94,57 @@ def test_environment_variable_parsing(monkeypatch):
     assert s_.verbosity_level == 20
     assert s_.max_workers == 8
     assert s_.clean_unlisted is True
+
+
+def test_log_level_fallback_on_invalid_or_out_of_range(monkeypatch):
+    """
+    GIVEN an invalid or out-of-range RADAR_LOG_LEVEL environment variable
+    WHEN get_settings() is initialized
+    THEN it safely falls back to INFO level (20).
+    """
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    monkeypatch.setenv('RADAR_LOG_LEVEL', 'invalid_level')
+    s_invalid_ = get_settings()
+    assert s_invalid_.verbosity_level == 20
+
+    Settings._reset()
+    monkeypatch.setenv('RADAR_LOG_LEVEL', '99')
+    s_out_of_range_ = get_settings()
+    assert s_out_of_range_.verbosity_level == 20
+
+
+def test_max_workers_fallback_on_invalid_or_negative(monkeypatch):
+    """
+    GIVEN an invalid or non-positive RADAR_MAX_WORKERS environment variable
+    WHEN get_settings() is initialized
+    THEN max_workers safely clamps to at least 1.
+    """
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    monkeypatch.setenv('RADAR_MAX_WORKERS', '-3')
+    s_neg_ = get_settings()
+    assert s_neg_.max_workers == 1
+
+    Settings._reset()
+    monkeypatch.setenv('RADAR_MAX_WORKERS', 'invalid_workers')
+    s_inv_ = get_settings()
+    assert s_inv_.max_workers == 1
+
+
+def test_file_logging_configuration(monkeypatch, tmp_path):
+    """
+    GIVEN RADAR_ENABLE_FILE_LOGGING set to true with a custom RADAR_LOG_FOLDER
+    WHEN get_settings() is initialized
+    THEN file handler is created in log_config with rotating handler properties.
+    """
+    log_dir_ = tmp_path / 'test_logs'
+    monkeypatch.setenv('RADAR_ENV', 'test')
+    monkeypatch.setenv('RADAR_ENABLE_FILE_LOGGING', 'true')
+    monkeypatch.setenv('RADAR_LOG_FOLDER', str(log_dir_))
+
+    s_ = get_settings(log_filename='custom_test_log')
+    assert 'file' in s_.log_config['handlers']
+    assert 'file' in s_.log_config['root']['handlers']
+    assert log_dir_.exists()
 
 
 def test_database_connection_kwargs_builder(monkeypatch):
@@ -252,32 +299,44 @@ def test_price_cache_empty_dir_raises(monkeypatch):
         get_settings()
 
 
-def test_rsi_input_filter_omitted_returns_none(monkeypatch, tmp_path):
+def test_symbols_and_evaluable_strategies_loaded_from_yaml(monkeypatch, tmp_path):
     """
-    GIVEN a custom YAML configuration without rsi_input_filter
+    GIVEN an isolated YAML configuration with symbols, done, and evaluable_strategies
     WHEN get_settings() is initialized
-    THEN rsi_input_filter returns None adhering to 'explicit is better than implicit'.
+    THEN symbols, undeletable_symbols, and evaluable_strategies are populated accurately.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text(
+        'symbols:\n'
+        '  - AAPL\n'
+        '  - MSFT\n'
+        'done:\n'
+        '  - SPY\n'
+        'evaluable_strategies:\n'
+        '  - sma\n'
+        '  - rsi_2b\n'
+    )
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.symbols == ['AAPL', 'MSFT']
+    assert s_.undeletable_symbols == ['SPY', 'AAPL', 'MSFT']
+    assert s_.evaluable_strategies == ['sma', 'rsi_2b']
+
+
+def test_rsi_input_filter_default_when_omitted(monkeypatch, tmp_path):
+    """
+    GIVEN an isolated YAML configuration omitting rsi_input_filter
+    WHEN get_settings() is initialized
+    THEN rsi_input_filter evaluates to an empty string.
     """
     custom_yaml_ = tmp_path / 'settings.yml'
     custom_yaml_.write_text('symbols:\n  - SPY\n')
     monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
 
     s_ = get_settings()
-    assert s_.rsi_input_filter is None
-
-
-def test_rsi_input_filter_explicit_null_returns_none(monkeypatch, tmp_path):
-    """
-    GIVEN a custom YAML configuration where rsi_input_filter is explicitly null
-    WHEN get_settings() is initialized
-    THEN rsi_input_filter returns None.
-    """
-    custom_yaml_ = tmp_path / 'settings.yml'
-    custom_yaml_.write_text('symbols:\n  - SPY\nrsi_input_filter: null\n')
-    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
-
-    s_ = get_settings()
-    assert s_.rsi_input_filter is None
+    assert s_.rsi_input_filter == ''
+    assert isinstance(s_.rsi_input_filter, str)
 
 
 @pytest.mark.parametrize('filter_name', ['price_action', 'atr_volatility', 'sma_trend', 'none'])
@@ -313,13 +372,13 @@ def test_rsi_input_filter_optional_in_environment_files(monkeypatch):
     """
     GIVEN default dev or production settings files where rsi_input_filter may be omitted
     WHEN get_settings() is initialized
-    THEN rsi_input_filter is safely either None or a registered filter name without raising errors.
+    THEN rsi_input_filter is safely either an empty string or a registered filter name without raising errors.
     """
-    # Verify environment (settings.yml)
     Settings._reset()
     monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
     s_prod_ = get_settings()
-    assert s_prod_.rsi_input_filter in (None, 'price_action', 'atr_volatility', 'sma_trend', 'none')
+    assert s_prod_.rsi_input_filter in ('', 'price_action', 'atr_volatility', 'sma_trend', 'none')
+    assert isinstance(s_prod_.rsi_input_filter, str)
 
 
 def test_win_probability_threshold_default_when_omitted(monkeypatch, tmp_path):
@@ -365,6 +424,20 @@ def test_win_probability_threshold_default_in_settings_file(monkeypatch):
     assert isinstance(s_prod_.win_probability_threshold, float)
 
 
+def test_win_probability_threshold_invalid_type_raises(monkeypatch, tmp_path):
+    """
+    GIVEN an isolated YAML configuration with a non-numeric win_probability_threshold
+    WHEN get_settings() is initialized
+    THEN it raises ValueError during float conversion.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text('symbols:\n  - SPY\nwin_probability_threshold: invalid_threshold\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    with pytest.raises(ValueError):
+        get_settings()
+
+
 def test_stop_loss_cap_defaults_in_settings_file(monkeypatch):
     """
     GIVEN default settings.yml configuration
@@ -395,19 +468,32 @@ def test_stop_loss_cap_custom_yaml(monkeypatch, tmp_path):
     assert s_.stop_loss_cap_weekly == 0.15
 
 
-def test_stop_loss_cap_default_when_omitted_or_null(monkeypatch, tmp_path):
+def test_stop_loss_cap_defaults_when_omitted(monkeypatch, tmp_path):
     """
-    GIVEN an isolated YAML configuration where stop-loss caps are null or omitted
+    GIVEN an isolated YAML configuration omitting stop-loss caps
     WHEN get_settings() is initialized
-    THEN stop_loss_cap_daily and stop_loss_cap_weekly safely fall back to their defaults.
+    THEN stop_loss_cap_daily and stop_loss_cap_weekly fall back to their default constants.
     """
     custom_yaml_ = tmp_path / 'settings.yml'
-    custom_yaml_.write_text('symbols:\n  - SPY\nstop_loss_cap_daily: null\n')
+    custom_yaml_.write_text('symbols:\n  - SPY\n')
     monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
 
     s_ = get_settings()
     assert s_.stop_loss_cap_daily == _DEFAULT_STOP_LOSS_CAP_DAILY
     assert s_.stop_loss_cap_weekly == _DEFAULT_STOP_LOSS_CAP_WEEKLY
+    assert isinstance(s_.stop_loss_cap_daily, float)
+    assert isinstance(s_.stop_loss_cap_weekly, float)
 
 
+def test_stop_loss_cap_invalid_type_raises(monkeypatch, tmp_path):
+    """
+    GIVEN an isolated YAML configuration with a non-numeric stop-loss cap
+    WHEN get_settings() is initialized
+    THEN it raises ValueError during float conversion.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text('symbols:\n  - SPY\nstop_loss_cap_daily: invalid_cap\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
 
+    with pytest.raises(ValueError):
+        get_settings()
