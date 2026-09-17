@@ -3,6 +3,7 @@
 # --- Python modules ---
 from datetime import time
 from pathlib import Path
+from typing import Final
 from zoneinfo import ZoneInfo
 
 # --- Third Party Libraries ---
@@ -10,6 +11,10 @@ import pytest
 
 # --- App modules ---
 from radar_core.settings import Settings, get_settings
+
+_DEFAULT_WIN_PROBABILITY_THRESHOLD: Final[float] = 0.5
+_DEFAULT_STOP_LOSS_CAP_DAILY: Final[float] = 0.12
+_DEFAULT_STOP_LOSS_CAP_WEEKLY: Final[float] = 0.18
 
 
 @pytest.fixture(autouse=True)
@@ -321,14 +326,14 @@ def test_win_probability_threshold_default_when_omitted(monkeypatch, tmp_path):
     """
     GIVEN an isolated YAML configuration omitting win_probability_threshold
     WHEN get_settings() is initialized
-    THEN win_probability_threshold defaults to 0.5.
+    THEN win_probability_threshold defaults to _DEFAULT_WIN_PROBABILITY_THRESHOLD.
     """
     custom_yaml_ = tmp_path / 'settings.yml'
     custom_yaml_.write_text('symbols:\n  - SPY\n')
     monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
 
     s_ = get_settings()
-    assert s_.win_probability_threshold == 0.5
+    assert s_.win_probability_threshold == _DEFAULT_WIN_PROBABILITY_THRESHOLD
     assert isinstance(s_.win_probability_threshold, float)
 
 
@@ -351,11 +356,58 @@ def test_win_probability_threshold_default_in_settings_file(monkeypatch):
     """
     GIVEN default settings.yml
     WHEN get_settings() is initialized
-    THEN win_probability_threshold returns 0.5 as configured.
+    THEN win_probability_threshold returns _DEFAULT_WIN_PROBABILITY_THRESHOLD as configured.
     """
     Settings._reset()
     monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
     s_prod_ = get_settings()
-    assert s_prod_.win_probability_threshold == 0.5
+    assert s_prod_.win_probability_threshold == _DEFAULT_WIN_PROBABILITY_THRESHOLD
     assert isinstance(s_prod_.win_probability_threshold, float)
+
+
+def test_stop_loss_cap_defaults_in_settings_file(monkeypatch):
+    """
+    GIVEN default settings.yml configuration
+    WHEN get_settings() is initialized
+    THEN stop_loss_cap_daily and stop_loss_cap_weekly return default configured caps.
+    """
+    Settings._reset()
+    monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
+    s_prod_ = get_settings()
+    assert s_prod_.stop_loss_cap_daily == _DEFAULT_STOP_LOSS_CAP_DAILY
+    assert s_prod_.stop_loss_cap_weekly == _DEFAULT_STOP_LOSS_CAP_WEEKLY
+    assert isinstance(s_prod_.stop_loss_cap_daily, float)
+    assert isinstance(s_prod_.stop_loss_cap_weekly, float)
+
+
+def test_stop_loss_cap_custom_yaml(monkeypatch, tmp_path):
+    """
+    GIVEN an isolated YAML configuration specifying custom stop-loss caps
+    WHEN get_settings() is initialized
+    THEN stop_loss_cap_daily and stop_loss_cap_weekly reflect the custom YAML values.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text('symbols:\n  - SPY\nstop_loss_cap_daily: 0.10\nstop_loss_cap_weekly: 0.15\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.stop_loss_cap_daily == 0.10
+    assert s_.stop_loss_cap_weekly == 0.15
+
+
+def test_stop_loss_cap_default_when_omitted_or_null(monkeypatch, tmp_path):
+    """
+    GIVEN an isolated YAML configuration where stop-loss caps are null or omitted
+    WHEN get_settings() is initialized
+    THEN stop_loss_cap_daily and stop_loss_cap_weekly safely fall back to their defaults.
+    """
+    custom_yaml_ = tmp_path / 'settings.yml'
+    custom_yaml_.write_text('symbols:\n  - SPY\nstop_loss_cap_daily: null\n')
+    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
+
+    s_ = get_settings()
+    assert s_.stop_loss_cap_daily == _DEFAULT_STOP_LOSS_CAP_DAILY
+    assert s_.stop_loss_cap_weekly == _DEFAULT_STOP_LOSS_CAP_WEEKLY
+
+
 

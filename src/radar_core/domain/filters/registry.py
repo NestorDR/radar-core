@@ -37,21 +37,19 @@ def get_filter(filter_name: str) -> FilterABC:
 
 
 def get_filter_masks(
-    filter_name: str | None,
+    filter_name: str,
     prices_df: pl.DataFrame,
     is_bear: bool,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """
     Directly get Long and Short eligibility masks for a named filter or baseline.
 
-    :param filter_name: Registered filter name, or None/'none'/'baseline' for unfiltered baseline.
+    :param filter_name: Registered filter name, or 'none'/'baseline' for unfiltered baseline.
     :param prices_df: A Polars DataFrame containing OHLCV price series.
     :param is_bear: Whether the security is an inverse ETF (bear asset).
 
     :return: Tuple of (long_mask, short_mask) as 1D boolean NumPy arrays, or (None, None) for baseline.
     """
-    if filter_name is None:
-        return None, None
 
     normalized_name_ = filter_name.strip().lower()
     if normalized_name_ in ('', 'none', 'baseline'):

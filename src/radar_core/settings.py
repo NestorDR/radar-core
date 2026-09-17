@@ -12,6 +12,8 @@ from pathlib import Path
 # sys: provides access to some variables used or maintained by the interpreter and to functions that interact strongly
 #      with the interpreter.
 import sys
+# typing: provides runtime support for type hints
+from typing import Final
 # urllib.parse: provides URL parsing and unquoting facilities
 from urllib import parse
 # zoneinfo: provides concrete time zone implementations representing the system's time zones.
@@ -26,6 +28,10 @@ import yaml
 # --- App modules ---
 # helpers: constants and functions that provide miscellaneous functionality
 from radar_core.helpers.log_helper import verbose, DEFAULT_CONSOLE_LOG_LEVEL
+
+_DEFAULT_WIN_PROBABILITY_THRESHOLD: Final[float] = 0.5
+_DEFAULT_STOP_LOSS_CAP_DAILY: Final[float] = 0.12
+_DEFAULT_STOP_LOSS_CAP_WEEKLY: Final[float] = 0.18
 
 logger_ = getLogger(__name__)
 
@@ -87,9 +93,10 @@ class Settings:
         self.undeletable_symbols: list[str] = config_.get('done', []) or []
         self.undeletable_symbols += self.symbols
         self.evaluable_strategies: list[str] = config_.get('evaluable_strategies', [])
-        raw_filter_ = config_.get('rsi_input_filter')
-        self.rsi_input_filter: str | None = raw_filter_.strip() if isinstance(raw_filter_, str) else raw_filter_
-        self.win_probability_threshold: float = float(config_.get('win_probability_threshold', 0.5))
+        self.rsi_input_filter: str = str(config_.get('rsi_input_filter', '')).strip()
+        self.win_probability_threshold: float = float(config_.get('win_probability_threshold', _DEFAULT_WIN_PROBABILITY_THRESHOLD))
+        self.stop_loss_cap_daily: float = float(config_.get('stop_loss_cap_daily', _DEFAULT_STOP_LOSS_CAP_DAILY))
+        self.stop_loss_cap_weekly: float = float(config_.get('stop_loss_cap_weekly', _DEFAULT_STOP_LOSS_CAP_WEEKLY))
 
     @classmethod
     def _reset(cls) -> None:

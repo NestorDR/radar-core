@@ -19,6 +19,17 @@ from radar_core.infrastructure import PriceProvider
 from radar_core.infrastructure.crud import StrategyCrud
 from radar_core.infrastructure.security_repository import SecurityRepository
 from radar_core.models import Strategies
+from radar_core.settings import Settings, get_settings
+
+
+@pytest.fixture(autouse=True)
+def clean_settings_state():
+    """
+    Ensures that Settings singleton state is cleanly reset before and after each test.
+    """
+    Settings._reset()
+    yield
+    Settings._reset()
 
 
 def _sample_price_df(rows: int = 30) -> pl.DataFrame:
@@ -359,5 +370,133 @@ def test_strategy_identify_signatures_conform_to_lsp() -> None:
         assert cls_params_ == expected_params_, f'{strategy_cls_.__name__}.identify signature violates LSP'
         assert cls_sig_.parameters['is_input_eligible'].default is None
         assert cls_sig_.parameters['verbosity_level'].default == base_sig_.parameters['verbosity_level'].default
+
+
+def test_identify_where_to_stop_loss_daily_clamping() -> None:
+    """
+    GIVEN a price DataFrame with wide Mogalef stop loss corridors (> 12% from Close)
+    WHEN identify_where_to_stop_loss is evaluated on the DAILY timeframe with default 12% cap
+    THEN LongStopLoss is clamped to Close * 0.88 and ShortStopLoss is clamped to Close * 1.12.
+    """
+    df_ = pl.DataFrame({
+        'Date': [date(2025, 1, 1), date(2025, 1, 2), date(2025, 1, 3)],
+        'Open': [100.0, 100.0, 100.0],
+        'High': [105.0, 105.0, 105.0],
+        'Low': [95.0, 95.0, 95.0],
+        'Close': [100.0, 100.0, 100.0],
+        'BarNumber': [0, 1, 2],
+        'LongStopLoss': [70.0, 75.0, 80.0],
+        'ShortStopLoss': [130.0, 125.0, 120.0],
+    })
+    close_prices_ = df_['Close'].to_numpy()
+
+    result_df_ = RsiStrategyABC.identify_where_to_stop_loss(DAILY, df_, close_prices_)
+
+    assert np.allclose(result_df_['LongStopLoss'].to_numpy(), [88.0, 88.0, 88.0])
+    assert np.allclose(result_df_['ShortStopLoss'].to_numpy(), [112.0, 112.0, 112.0])
+
+
+def test_identify_where_to_stop_loss_weekly_clamping() -> None:
+    """
+    GIVEN a price DataFrame with wide Mogalef stop loss corridors (> 18% from Close)
+    WHEN identify_where_to_stop_loss is evaluated on the WEEKLY timeframe with default 18% cap
+    THEN LongStopLoss is clamped to Close * 0.82 and ShortStopLoss is clamped to Close * 1.18.
+    """
+    df_ = pl.DataFrame({
+        'Date': [date(2025, 1, 1), date(2025, 1, 8), date(2025, 1, 15)],
+        'Open': [100.0, 100.0, 100.0],
+        'High': [105.0, 105.0, 105.0],
+        'Low': [95.0, 95.0, 95.0],
+        'Close': [100.0, 100.0, 100.0],
+        'BarNumber': [0, 1, 2],
+        'LongStopLoss': [70.0, 75.0, 80.0],
+        'ShortStopLoss': [130.0, 125.0, 120.0],
+    })
+    close_prices_ = df_['Close'].to_numpy()
+
+    result_df_ = RsiStrategyABC.identify_where_to_stop_loss(WEEKLY, df_, close_prices_)
+
+    assert np.allclose(result_df_['LongStopLoss'].to_numpy(), [82.0, 82.0, 82.0])
+    assert np.allclose(result_df_['ShortStopLoss'].to_numpy(), [118.0, 118.0, 118.0])
+
+
+def test_identify_where_to_stop_loss_preserves_tighter_corridors() -> None:
+    """
+    GIVEN a price DataFrame where Mogalef stop loss corridors are narrower than the clamping cap (e.g. 5% span)
+    WHEN identify_where_to_stop_loss is evaluated
+    THEN LongStopLoss and ShortStopLoss retain the tighter Mogalef levels without artificial widening.
+    """
+    df_ = pl.DataFrame({
+        'Date': [date(2025, 1, 1), date(2025, 1, 2)],
+        'Open': [100.0, 200.0],
+        'High': [105.0, 205.0],
+        'Low': [95.0, 195.0],
+        'Close': [100.0, 200.0],
+        'BarNumber': [0, 1],
+        'LongStopLoss': [95.0, 192.0],
+        'ShortStopLoss': [105.0, 208.0],
+    })
+    close_prices_ = df_['Close'].to_numpy()
+
+    # Daily cap is 12%, but Mogalef is tighter (5% / 4%)
+    result_daily_ = RsiStrategyABC.identify_where_to_stop_loss(DAILY, df_, close_prices_)
+    assert np.allclose(result_daily_['LongStopLoss'].to_numpy(), [95.0, 192.0])
+    assert np.allclose(result_daily_['ShortStopLoss'].to_numpy(), [105.0, 208.0])
+
+    # Weekly cap is 18%, but Mogalef is tighter (5% / 4%)
+    result_weekly_ = RsiStrategyABC.identify_where_to_stop_loss(WEEKLY, df_, close_prices_)
+    assert np.allclose(result_weekly_['LongStopLoss'].to_numpy(), [95.0, 192.0])
+    assert np.allclose(result_weekly_['ShortStopLoss'].to_numpy(), [105.0, 208.0])
+
+
+def test_identify_where_to_stop_loss_disabled_cap(monkeypatch) -> None:
+    """
+    GIVEN settings where stop_loss_cap_daily and stop_loss_cap_weekly are disabled (0.0)
+    WHEN identify_where_to_stop_loss is evaluated
+    THEN LongStopLoss and ShortStopLoss match unconstrained Mogalef levels without modification.
+    """
+    monkeypatch.setattr(get_settings(), 'stop_loss_cap_daily', 0.0)
+    monkeypatch.setattr(get_settings(), 'stop_loss_cap_weekly', 0.0)
+
+    df_ = pl.DataFrame({
+        'Date': [date(2025, 1, 1), date(2025, 1, 2)],
+        'Open': [100.0, 100.0],
+        'High': [105.0, 105.0],
+        'Low': [95.0, 95.0],
+        'Close': [100.0, 100.0],
+        'BarNumber': [0, 1],
+        'LongStopLoss': [60.0, 65.0],
+        'ShortStopLoss': [140.0, 135.0],
+    })
+    close_prices_ = df_['Close'].to_numpy()
+
+    result_df_ = RsiStrategyABC.identify_where_to_stop_loss(DAILY, df_, close_prices_)
+    assert np.allclose(result_df_['LongStopLoss'].to_numpy(), [60.0, 65.0])
+    assert np.allclose(result_df_['ShortStopLoss'].to_numpy(), [140.0, 135.0])
+
+
+def test_identify_where_to_stop_loss_full_calculation_respects_clamping() -> None:
+    """
+    GIVEN a standard OHLC DataFrame requiring full Mogalef indicator calculation
+    WHEN identify_where_to_stop_loss is evaluated on DAILY and WEEKLY timeframes
+    THEN LongStopLoss is strictly >= Close * (1 - cap) and ShortStopLoss is strictly <= Close * (1 + cap).
+    """
+    df_ = _sample_price_df(50)
+    close_prices_ = df_['Close'].to_numpy()
+
+    # Daily evaluation (cap = 0.12)
+    result_daily_ = RsiStrategyABC.identify_where_to_stop_loss(DAILY, df_, close_prices_)
+    min_allowed_long_daily_ = result_daily_['Close'] * (1.0 - 0.12)
+    max_allowed_short_daily_ = result_daily_['Close'] * (1.0 + 0.12)
+    assert (result_daily_['LongStopLoss'] >= min_allowed_long_daily_ - 1e-9).all()
+    assert (result_daily_['ShortStopLoss'] <= max_allowed_short_daily_ + 1e-9).all()
+
+    # Weekly evaluation (cap = 0.18)
+    result_weekly_ = RsiStrategyABC.identify_where_to_stop_loss(WEEKLY, df_, close_prices_)
+    min_allowed_long_weekly_ = result_weekly_['Close'] * (1.0 - 0.18)
+    max_allowed_short_weekly_ = result_weekly_['Close'] * (1.0 + 0.18)
+    assert (result_weekly_['LongStopLoss'] >= min_allowed_long_weekly_ - 1e-9).all()
+    assert (result_weekly_['ShortStopLoss'] <= max_allowed_short_weekly_ + 1e-9).all()
+
 
 

@@ -87,3 +87,5 @@ evaluable_strategies: # Use attribute name of the `class Strategies`, module `ev
   - rsi_2b    # Profitable RSI(14) 2B
 rsi_input_filter: 'price_action'  # options: 'none', 'price_action', 'atr_volatility', 'sma_trend'
 win_probability_threshold: 0.5  # Minimum winning probability threshold for a strategy to be persisted into the database
+stop_loss_cap_daily: 0.12  # Maximum percentage loss threshold for daily timeframe (Alternative A)
+stop_loss_cap_weekly: 0.18  # Maximum percentage loss threshold for weekly timeframe (Alternative A)

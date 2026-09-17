@@ -34,6 +34,8 @@ from radar_core.infrastructure.ratio_repository import RatioRepository
 from radar_core.infrastructure.crud import StrategyCrud
 # models: result of Object-Relational Mapping
 from radar_core.models import Ratios
+# settings: provides process-local settings singleton
+from radar_core.settings import get_settings
 
 # Constant for price format
 PRICE_PRECISION: Final[Decimal] = Decimal("1.00")
@@ -630,6 +632,17 @@ class RsiStrategyABC(StrategyABC, ABC):
         period_reg_, period_dev_, multiplier_ = (3, 7, 2.0) if timeframe <= DAILY else (3, 5, 1.5)
         # Set the stop loss using Mogalef Bands
         prices_df = RsiStrategyABC.set_mogalef_stop_loss(prices_df, period_reg_, period_dev_, multiplier_)
+
+        # Apply timeframe-differentiated stop-loss clamping relative to Close price
+        settings_ = get_settings()
+        cap_ = settings_.stop_loss_cap_daily if timeframe <= DAILY else settings_.stop_loss_cap_weekly
+        if cap_ is not None and cap_ > 0.0:
+            prices_df = prices_df.with_columns(
+                [
+                    pl.max_horizontal([pl.col('LongStopLoss'), pl.col('Close') * (1.0 - cap_)]).alias('LongStopLoss'),
+                    pl.min_horizontal([pl.col('ShortStopLoss'), pl.col('Close') * (1.0 + cap_)]).alias('ShortStopLoss'),
+                ]
+            )
         """
         [DEPRECATED]
         # Determine rolling window sizes according to execution timeframe
