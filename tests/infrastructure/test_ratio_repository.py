@@ -8,16 +8,25 @@ import pytest
 
 # --- App modules ---
 from radar_core.infrastructure.ratio_repository import RatioRepository
+from tests.conftest import NDQ, SPY
 
 
-def test_remove_unlisted_symbols_delegates_to_crud():
+@pytest.mark.parametrize(
+    ('symbols', 'expected_count'),
+    [
+        ([SPY, NDQ], 6),
+        ([], 0),
+    ],
+    ids=['with_symbols', 'empty_symbols'],
+)
+def test_remove_unlisted_symbols_delegates_to_crud(symbols: list[str], expected_count: int) -> None:
     """
-    GIVEN a ratio repository
-    WHEN remove_unlisted_symbols is called
-    THEN the request is delegated and its row count is returned.
+    GIVEN a list of symbols (populated or empty)
+    WHEN remove_unlisted_symbols is called on RatioRepository
+    THEN the request is delegated to the CRUD layer and its row count is returned.
     """
     crud_ = MagicMock()
-    crud_.remove_unlisted_symbols.return_value = 6
+    crud_.remove_unlisted_symbols.return_value = expected_count
 
     with patch(
             'radar_core.infrastructure.ratio_repository.RatioCrud',
@@ -25,34 +34,13 @@ def test_remove_unlisted_symbols_delegates_to_crud():
     ):
         repository_ = RatioRepository()
 
-        result_ = repository_.remove_unlisted_symbols(['SPY', 'NDQ'])
+        result_ = repository_.remove_unlisted_symbols(symbols)
 
-    assert result_ == 6
-    crud_.remove_unlisted_symbols.assert_called_once_with(['SPY', 'NDQ'])
-
-
-def test_remove_unlisted_symbols_passes_empty_symbols_to_crud():
-    """
-    GIVEN an empty symbol list
-    WHEN repository cleanup is requested
-    THEN the empty list is passed unchanged to the CRUD layer.
-    """
-    crud_ = MagicMock()
-    crud_.remove_unlisted_symbols.return_value = 0
-
-    with patch(
-            'radar_core.infrastructure.ratio_repository.RatioCrud',
-            return_value=crud_
-    ):
-        repository_ = RatioRepository()
-
-        result_ = repository_.remove_unlisted_symbols([])
-
-    assert result_ == 0
-    crud_.remove_unlisted_symbols.assert_called_once_with([])
+    assert result_ == expected_count
+    crud_.remove_unlisted_symbols.assert_called_once_with(symbols)
 
 
-def test_flag_in_process_uses_one_write_connection():
+def test_flag_in_process_uses_one_write_connection() -> None:
     """
     GIVEN a ratio repository and an operation-scoped connection
     WHEN flag_in_process is called
@@ -69,17 +57,19 @@ def test_flag_in_process_uses_one_write_connection():
     ):
         repository_ = RatioRepository()
 
-        result_ = repository_.flag_in_process('SPY', 1, 2)
+        result_ = repository_.flag_in_process(SPY, 1, 2)
 
     assert result_ == 3
     crud_.flag_in_process.assert_called_once_with(
-        'SPY',
+        SPY,
         1,
         2,
     )
 
 
-def test_persist_and_cleanup_deletes_flags_when_no_positive_ratios_exist(mock_connection_scope):
+def test_persist_and_cleanup_deletes_flags_when_no_positive_ratios_exist(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN no positive ratios
     WHEN persist_and_cleanup is called
@@ -100,13 +90,13 @@ def test_persist_and_cleanup_deletes_flags_when_no_positive_ratios_exist(mock_co
     ):
         repository_ = RatioRepository()
 
-        result_ = repository_.persist_and_cleanup([], 'SPY', 1, 2)
+        result_ = repository_.persist_and_cleanup([], SPY, 1, 2)
 
     assert result_ == 0
     connection_factory_.assert_called_once_with()
     crud_.upsert_many.assert_not_called()
     crud_.delete_flagged_in_process.assert_called_once_with(
-        'SPY',
+        SPY,
         1,
         2,
         conn=repository_connection_
@@ -115,8 +105,8 @@ def test_persist_and_cleanup_deletes_flags_when_no_positive_ratios_exist(mock_co
 
 
 def test_persist_and_cleanup_does_not_cleanup_when_upsert_fails(
-        mock_connection_scope
-):
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN an upsert failure
     WHEN persist_and_cleanup is called
@@ -140,10 +130,10 @@ def test_persist_and_cleanup_does_not_cleanup_when_upsert_fails(
     ):
         repository_ = RatioRepository()
 
-        with pytest.raises(RuntimeError, match='upsert failed'):
+        with pytest.raises(RuntimeError, match=r'upsert failed'):
             repository_.persist_and_cleanup(
                 positive_ratios_,
-                'SPY',
+                SPY,
                 1,
                 2
             )
@@ -154,8 +144,8 @@ def test_persist_and_cleanup_does_not_cleanup_when_upsert_fails(
 
 
 def test_persist_and_cleanup_propagates_cleanup_failure(
-        mock_connection_scope
-):
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN a successful upsert and a cleanup failure
     WHEN persist_and_cleanup is called
@@ -181,10 +171,10 @@ def test_persist_and_cleanup_propagates_cleanup_failure(
     ):
         repository_ = RatioRepository()
 
-        with pytest.raises(RuntimeError, match='cleanup failed'):
+        with pytest.raises(RuntimeError, match=r'cleanup failed'):
             repository_.persist_and_cleanup(
                 positive_ratios_,
-                'SPY',
+                SPY,
                 1,
                 2
             )
@@ -194,7 +184,7 @@ def test_persist_and_cleanup_propagates_cleanup_failure(
         conn=repository_connection_
     )
     crud_.delete_flagged_in_process.assert_called_once_with(
-        'SPY',
+        SPY,
         1,
         2,
         conn=repository_connection_

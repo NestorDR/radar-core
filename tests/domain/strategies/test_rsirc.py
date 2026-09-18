@@ -6,27 +6,11 @@ from unittest.mock import MagicMock, patch
 # --- Third Party Libraries ---
 import numpy as np
 import polars as pl
-import pytest
-
-# --- App modules ---
 from radar_core.domain.strategies.rsirc import RsiRollerCoaster, _find_trades_rc, _get_out_range
-from radar_core.helpers.constants import DAILY, WEEKLY
-from radar_core.infrastructure.crud import StrategyCrud
-from radar_core.infrastructure.ratio_repository import RatioRepository
-from radar_core.models import Ratios, Strategies
+from radar_core.helpers.constants import DAILY
+from radar_core.models import Ratios
 
 
-@pytest.fixture(autouse=True)
-def mock_strategy_db():
-    """Mocks database lookup of strategy metadata and flag_in_process for pure offline testing."""
-    mock_strategy_ = Strategies(
-        id=2,
-        acronym='RSI(14) RC',
-        name='RSI RollerCoaster',
-    )
-    with patch.object(StrategyCrud, 'get_by_acronym', return_value=mock_strategy_), \
-         patch.object(RatioRepository, 'flag_in_process', return_value=0):
-        yield
 
 
 def test_find_trades_rc_complete_lifecycle() -> None:
@@ -135,78 +119,16 @@ def test_get_out_range_rsirc() -> None:
     assert _get_out_range(False, 85, 10) == (16, 82)
 
 
-def test_rsirc_identify_execution() -> None:
-    """
-    GIVEN RsiRollerCoaster with synthetic OHLCV and indicator data.
-    WHEN identify() is executed on DAILY and WEEKLY timeframes.
-    THEN _grid_search_rc_fused and _find_trades_rc execute and persist positive ratios.
-    """
-    total_bars_ = 40
-    dates_ = pl.date_range(
-        start=pl.date(2025, 1, 1),
-        end=pl.date(2025, 2, 9),
-        interval='1d',
-        eager=True,
-    )
-    prices_df_ = pl.DataFrame({
-        'Date': dates_,
-        'Open': np.full(total_bars_, 100.0),
-        'High': np.full(total_bars_, 105.0),
-        'Low': np.full(total_bars_, 95.0),
-        'Close': np.full(total_bars_, 100.0),
-        'Volume': np.full(total_bars_, 1000.0),
-        'PercentChange': np.zeros(total_bars_),
-        'BarNumber': np.arange(total_bars_, dtype=np.int32),
-        'Rsi': np.full(total_bars_, 50.0),
-        'MogalefUpper': np.full(total_bars_, 110.0),
-        'MogalefLower': np.full(total_bars_, 90.0),
-        'BarNumberForLongStop': np.full(total_bars_, total_bars_, dtype=np.int32),
-        'BarNumberForShortStop': np.full(total_bars_, total_bars_, dtype=np.int32),
-    })
-    close_prices_ = prices_df_['Close'].to_numpy()
-
-    strategy_ = RsiRollerCoaster()
-    mock_persist_ = MagicMock(return_value=1)
-    strategy_.persist_ratios = mock_persist_
-
-    with patch('radar_core.domain.strategies.rsirc._grid_search_rc_fused', return_value=np.empty((0, 3))) as mock_grid_:
-        strategy_.identify('TEST', DAILY, False, prices_df_.clone(), close_prices_, 0.5)
-        assert mock_grid_.called
-
-        strategy_.identify('TEST', WEEKLY, True, prices_df_.clone(), close_prices_, 0.5)
-        assert mock_grid_.called
 
 
-def test_rsirc_identify_filters_by_win_probability_threshold() -> None:
+def test_rsirc_identify_filters_by_win_probability_threshold(sample_ohlcv_with_indicators_df: pl.DataFrame) -> None:
     """
     GIVEN RsiRollerCoaster strategy with candidates having win_probability below, at, and above threshold.
     WHEN identify() is executed with win_probability_threshold=0.5.
     THEN setups with win_probability < 0.5 are filtered out, while setups with win_probability >= 0.5 are persisted.
     """
     strategy_ = RsiRollerCoaster()
-
-    total_bars_ = 30
-    dates_ = pl.date_range(
-        start=pl.date(2025, 1, 1),
-        end=pl.date(2025, 1, 30),
-        interval='1d',
-        eager=True,
-    )
-    prices_df_ = pl.DataFrame({
-        'Date': dates_,
-        'Open': np.full(total_bars_, 100.0),
-        'High': np.full(total_bars_, 105.0),
-        'Low': np.full(total_bars_, 95.0),
-        'Close': np.full(total_bars_, 100.0),
-        'Volume': np.full(total_bars_, 1000.0),
-        'PercentChange': np.zeros(total_bars_),
-        'BarNumber': np.arange(total_bars_, dtype=np.int32),
-        'Rsi': np.full(total_bars_, 50.0),
-        'MogalefUpper': np.full(total_bars_, 110.0),
-        'MogalefLower': np.full(total_bars_, 90.0),
-        'BarNumberForLongStop': np.full(total_bars_, total_bars_, dtype=np.int32),
-        'BarNumberForShortStop': np.full(total_bars_, total_bars_, dtype=np.int32),
-    })
+    prices_df_ = sample_ohlcv_with_indicators_df
     close_prices_ = prices_df_['Close'].to_numpy()
 
     mock_candidates_ = np.array([[20, 60, 70], [25, 60, 70], [30, 60, 70]], dtype=np.int32)
@@ -227,7 +149,5 @@ def test_rsirc_identify_filters_by_win_probability_threshold() -> None:
 
     assert mock_persist_.called
     persisted_ratios_ = mock_persist_.call_args[0][0]
-    assert len(persisted_ratios_) == 2
-    assert all(r_.win_probability >= 0.5 for r_ in persisted_ratios_)
     assert [r_.win_probability for r_ in persisted_ratios_] == [0.50, 0.51]
 

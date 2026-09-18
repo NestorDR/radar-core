@@ -1,9 +1,7 @@
 # tests/infrastructure/crud/test_ratio_crud.py
 
 # --- Python modules ---
-# datetime: provides classes for manipulating dates and times.
-import datetime
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 # --- Third Party Libraries ---
 # pytest: testing framework
@@ -12,53 +10,13 @@ import pytest
 # --- App modules ---
 # infrastructure: allows access to the own DB and/or integration with external prices providers
 from radar_core.infrastructure.crud import RatioCrud
-# models: result of Object-Relational Mapping
 from radar_core.models import Ratios
+from tests.conftest import NDQ, SPY
 
 
-def _create_sample_ratio(symbol: str = 'BTC-USD',
-                         strategy_id: int = 1,
-                         inputs: str = '{"period": 10}',
-                         timeframe: int = 2,
-                         is_long_position: bool = True,
-                         net_profit: float = 0.15,
-                         expected_percentage: float = 0.05,
-                         last_output_date: datetime.date | None = datetime.date(2025, 12, 31)) -> Ratios:
-    """
-    Helper function to build a sample Ratios instance for testing.
-    """
-    return Ratios(
-        symbol=symbol,
-        strategy_id=strategy_id,
-        timeframe=timeframe,
-        inputs=inputs,
-        is_long_position=is_long_position,
-        is_in_process=False,
-        from_date=datetime.date(2025, 1, 1),
-        to_date=datetime.date(2025, 12, 31),
-        initial_price=100,
-        final_price=150,
-        net_change=0.5,
-        signals=5,
-        winnings=60,
-        losses=10,
-        net_profit=net_profit,
-        expected_percentage=expected_percentage,
-        win_probability=0.8,
-        loss_probability=0.2,
-        average_win_percentage=15,
-        average_loss_percentage=5,
-        total_sessions=250,
-        winning_sessions=200,
-        losing_sessions=50,
-        percentage_exposure=0.8,
-        first_input_date=datetime.date(2025, 1, 10),
-        last_input_date=datetime.date(2025, 11, 1),
-        last_output_date=last_output_date,
-    )
-
-
-def test_remove_unlisted_symbols_empty_is_noop(mock_connection_scope):
+def test_remove_unlisted_symbols_empty_is_noop(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN an empty symbol list
     WHEN remove_unlisted_symbols is called
@@ -79,7 +37,7 @@ def test_remove_unlisted_symbols_empty_is_noop(mock_connection_scope):
     scope_.__exit__.assert_not_called()
 
 
-def test_remove_unlisted_symbols_rejects_none_symbol():
+def test_remove_unlisted_symbols_rejects_none_symbol() -> None:
     """
     GIVEN a symbol list containing None
     WHEN remove_unlisted_symbols is called
@@ -88,13 +46,15 @@ def test_remove_unlisted_symbols_rejects_none_symbol():
     with patch(
             'radar_core.infrastructure.crud.ratio_crud.connection_scope'
     ) as connection_scope_:
-        with pytest.raises(ValueError, match='Symbols cannot contain None'):
-            RatioCrud.remove_unlisted_symbols(['SPY', None])  # type: ignore[list-item]
+        with pytest.raises(ValueError, match=r'cannot contain None'):
+            RatioCrud.remove_unlisted_symbols([SPY, None])  # type: ignore[list-item]
 
     connection_scope_.assert_not_called()
 
 
-def test_remove_unlisted_symbols_reuses_supplied_connection(mock_connection_scope):
+def test_remove_unlisted_symbols_reuses_supplied_connection(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN a supplied database connection
     WHEN remove_unlisted_symbols is called
@@ -108,17 +68,19 @@ def test_remove_unlisted_symbols_reuses_supplied_connection(mock_connection_scop
             return_value=scope_
     ) as connection_scope_:
         result_ = RatioCrud.remove_unlisted_symbols(
-            ['SPY', 'NDQ'],
+            [SPY, NDQ],
             conn=connection_
         )
 
     assert result_ == 2
     connection_scope_.assert_called_once_with(connection_)
-    assert cursor_.execute.call_args.args[1] == (['SPY', 'NDQ'],)
+    assert cursor_.execute.call_args.args[1] == ([SPY, NDQ],)
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_flag_in_process_returns_rowcount_and_reuses_connection(mock_connection_scope):
+def test_flag_in_process_returns_rowcount_and_reuses_connection(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN a supplied database connection
     WHEN flag_in_process is called
@@ -132,7 +94,7 @@ def test_flag_in_process_returns_rowcount_and_reuses_connection(mock_connection_
             return_value=scope_
     ) as connection_scope_:
         result_ = RatioCrud.flag_in_process(
-            'SPY',
+            SPY,
             3,
             2,
             conn=connection_
@@ -140,11 +102,13 @@ def test_flag_in_process_returns_rowcount_and_reuses_connection(mock_connection_
 
     assert result_ == 5
     connection_scope_.assert_called_once_with(connection_)
-    assert cursor_.execute.call_args.args[1] == ('SPY', 3, 2)
+    assert cursor_.execute.call_args.args[1] == (SPY, 3, 2)
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_delete_flagged_in_process_returns_rowcount_and_reuses_connection(mock_connection_scope):
+def test_delete_flagged_in_process_returns_rowcount_and_reuses_connection(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN a supplied database connection
     WHEN delete_flagged_in_process is called
@@ -158,7 +122,7 @@ def test_delete_flagged_in_process_returns_rowcount_and_reuses_connection(mock_c
             return_value=scope_
     ) as connection_scope_:
         result_ = RatioCrud.delete_flagged_in_process(
-            'SPY',
+            SPY,
             3,
             2,
             conn=connection_
@@ -166,11 +130,11 @@ def test_delete_flagged_in_process_returns_rowcount_and_reuses_connection(mock_c
 
     assert result_ == 4
     connection_scope_.assert_called_once_with(connection_)
-    assert cursor_.execute.call_args.args[1] == ('SPY', 3, 2)
+    assert cursor_.execute.call_args.args[1] == (SPY, 3, 2)
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_upsert_many_empty_returns_zero():
+def test_upsert_many_empty_returns_zero() -> None:
     """
     GIVEN an empty list of ratios
     WHEN upsert_many is called
@@ -185,13 +149,12 @@ def test_upsert_many_empty_returns_zero():
     connection_scope_.assert_not_called()
 
 
-def test_upsert_many_propagates_connection_scope_error():
+def test_upsert_many_propagates_connection_scope_error(sample_ratio: Ratios) -> None:
     """
     GIVEN a batch of ratio records and a connection-scope failure
     WHEN upsert_many is executed
     THEN the original connection error is propagated.
     """
-    sample_ratio_ = _create_sample_ratio()
     failure_ = RuntimeError('psycopg3 database error')
 
     with patch(
@@ -199,13 +162,16 @@ def test_upsert_many_propagates_connection_scope_error():
     ) as scope_:
         scope_.return_value.__enter__.side_effect = failure_
 
-        with pytest.raises(RuntimeError, match='psycopg3 database error'):
-            RatioCrud.upsert_many([sample_ratio_])
+        with pytest.raises(RuntimeError, match=r'database error'):
+            RatioCrud.upsert_many([sample_ratio])
 
     scope_.return_value.__exit__.assert_not_called()
 
 
-def test_upsert_many_reuses_supplied_connection(mock_connection_scope):
+def test_upsert_many_reuses_supplied_connection(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+    sample_ratio: Ratios,
+) -> None:
     """
     GIVEN a non-empty ratio list and a supplied database connection
     WHEN upsert_many is called
@@ -213,14 +179,13 @@ def test_upsert_many_reuses_supplied_connection(mock_connection_scope):
     """
     connection_, cursor_, scope_ = mock_connection_scope
     cursor_.rowcount = 1
-    sample_ratio_ = _create_sample_ratio()
 
     with patch(
             'radar_core.infrastructure.crud.ratio_crud.connection_scope',
             return_value=scope_
     ) as connection_scope_:
         result_ = RatioCrud.upsert_many(
-            [sample_ratio_],
+            [sample_ratio],
             conn=connection_
         )
 
@@ -230,7 +195,10 @@ def test_upsert_many_reuses_supplied_connection(mock_connection_scope):
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_upsert_many_creates_operation_scoped_connection_when_none_is_supplied(mock_connection_scope):
+def test_upsert_many_creates_operation_scoped_connection_when_none_is_supplied(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+    sample_ratio: Ratios,
+) -> None:
     """
     GIVEN a non-empty ratio list without a supplied connection
     WHEN upsert_many is called
@@ -243,7 +211,7 @@ def test_upsert_many_creates_operation_scoped_connection_when_none_is_supplied(m
             'radar_core.infrastructure.crud.ratio_crud.connection_scope',
             return_value=scope_
     ) as connection_scope_:
-        result_ = RatioCrud.upsert_many([_create_sample_ratio()])
+        result_ = RatioCrud.upsert_many([sample_ratio])
 
     assert result_ == 1
     connection_scope_.assert_called_once_with(None)

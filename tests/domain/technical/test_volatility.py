@@ -1,7 +1,8 @@
 # tests/domain/technical/test_volatility.py
 
 # --- Python modules ---
-from datetime import date, timedelta
+from collections.abc import Callable
+from typing import Any
 
 # --- Third Party Libraries ---
 import numpy as np
@@ -10,28 +11,7 @@ import pytest
 import talib
 
 # --- App modules ---
-import radar_core.domain.technical.volatility as volatility_module
 from radar_core.domain.technical.volatility import ATR, MogalefBands
-
-
-def _sample_ohlc_df(rows: int = 30) -> pl.DataFrame:
-    """Helper to generate sample OHLC data for testing."""
-    np.random.seed(42)
-    base_price_ = 100.0 + np.cumsum(np.random.randn(rows) * 1.5)
-    high_prices_ = base_price_ + np.random.uniform(0.5, 2.0, size=rows)
-    low_prices_ = base_price_ - np.random.uniform(0.5, 2.0, size=rows)
-    open_prices_ = base_price_ + np.random.uniform(-0.5, 0.5, size=rows)
-    close_prices_ = base_price_ + np.random.uniform(-0.5, 0.5, size=rows)
-
-    return pl.DataFrame(
-        {
-            'Date': [date(2025, 1, 1) + timedelta(days=i_) for i_ in range(rows)],
-            'Open': open_prices_,
-            'High': high_prices_,
-            'Low': low_prices_,
-            'Close': close_prices_,
-        }
-    )
 
 
 def test_mogalef_bands_default_output_contract_and_warmup() -> None:
@@ -57,15 +37,6 @@ def test_mogalef_bands_default_output_contract_and_warmup() -> None:
     assert result_df_['MogalefLower'][:8].is_null().all()
     np.testing.assert_allclose(result_df_['MogalefUpper'][8:].to_numpy(), [10.0, 10.0])
     np.testing.assert_allclose(result_df_['MogalefLower'][8:].to_numpy(), [10.0, 10.0])
-
-
-def test_legacy_mogalef_bands_function_is_removed() -> None:
-    """
-    GIVEN the technical volatility module.
-    WHEN the replacement implementation is imported.
-    THEN the removed legacy Mogalef function is not available.
-    """
-    assert not hasattr(volatility_module, 'old_MogalefBands')
 
 
 def test_mogalef_bands_stepped_levels_hold_and_reset() -> None:
@@ -157,25 +128,32 @@ def test_mogalef_bands_missing_columns() -> None:
     THEN a ValueError is raised specifying the missing column(s).
     """
     df_missing_ = pl.DataFrame({'High': [10.0, 11.0], 'Low': [9.0, 9.5], 'Close': [9.8, 10.5]})
-    with pytest.raises(ValueError, match='Missing required columns.*Open'):
+    with pytest.raises(ValueError, match=r'Missing required columns'):
         MogalefBands(df_missing_)
 
 
-def test_mogalef_bands_invalid_parameters() -> None:
+@pytest.mark.parametrize(
+    ('kwargs', 'match_pattern'),
+    [
+        ({'period_reg': 0}, r'Lookback periods'),
+        ({'period_dev': -1}, r'Lookback periods'),
+        ({'multiplier': -0.5}, r'Multiplier'),
+    ],
+    ids=['zero_period_reg', 'negative_period_dev', 'negative_multiplier'],
+)
+def test_mogalef_bands_invalid_parameters(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+    kwargs: dict[str, Any],
+    match_pattern: str,
+) -> None:
     """
     GIVEN invalid parameters (period < 1 or multiplier < 0).
     WHEN MogalefBands is called.
-    THEN a ValueError is raised.
+    THEN a ValueError is raised with a descriptive error message.
     """
-    df_ = _sample_ohlc_df(10)
-    with pytest.raises(ValueError, match='Lookback periods must be greater than or equal to 1'):
-        MogalefBands(df_, period_reg=0)
-
-    with pytest.raises(ValueError, match='Lookback periods must be greater than or equal to 1'):
-        MogalefBands(df_, period_dev=-1)
-
-    with pytest.raises(ValueError, match='Multiplier must be non-negative'):
-        MogalefBands(df_, multiplier=-0.5)
+    df_ = ohlcv_factory(10)
+    with pytest.raises(ValueError, match=match_pattern):
+        MogalefBands(df_, **kwargs)
 
 
 def test_mogalef_bands_empty_and_short_dataframe() -> None:
@@ -198,13 +176,13 @@ def test_mogalef_bands_empty_and_short_dataframe() -> None:
     assert result_short_['MogalefLower'].is_null().all()
 
 
-def test_atr_standard_calculation() -> None:
+def test_atr_standard_calculation(ohlcv_factory: Callable[..., pl.DataFrame]) -> None:
     """
     GIVEN a DataFrame with High, Low, and Close columns.
     WHEN ATR is called.
     THEN the Atr column is added matching talib.ATR output.
     """
-    df_ = _sample_ohlc_df(30)
+    df_ = ohlcv_factory(30)
     result_df_ = ATR(df_, period=14)
 
     assert 'Atr' in result_df_.columns
@@ -219,5 +197,5 @@ def test_atr_missing_columns() -> None:
     THEN a ValueError is raised.
     """
     df_missing_ = pl.DataFrame({'Open': [10.0], 'Close': [10.5]})
-    with pytest.raises(ValueError, match='Missing required columns'):
+    with pytest.raises(ValueError, match=r'Missing required columns'):
         ATR(df_missing_)

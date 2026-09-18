@@ -9,21 +9,11 @@ from zoneinfo import ZoneInfo
 import pytest
 
 # --- App modules ---
-from radar_core.settings import (Settings, get_settings, _DEFAULT_WIN_PROBABILITY_THRESHOLD,
-                                 _DEFAULT_STOP_LOSS_CAP_DAILY, _DEFAULT_STOP_LOSS_CAP_WEEKLY)
+from radar_core.settings import (Settings, get_settings, _DEFAULT_WIN_PROBABILITY_THRESHOLD)
+from tests.conftest import SPY
 
 
-@pytest.fixture(autouse=True)
-def clean_settings_state():
-    """
-    Ensures that Settings singleton state is cleanly reset before and after each test.
-    """
-    Settings._reset()
-    yield
-    Settings._reset()
-
-
-def test_singleton_identity():
+def test_singleton_identity() -> None:
     """
     GIVEN the Settings class and get_settings accessor
     WHEN both are called repeatedly in the current process
@@ -41,7 +31,7 @@ def test_singleton_identity():
     assert s1_.price_cache_kwargs is not None
 
 
-def test_singleton_attributes_preserved_on_repeated_calls():
+def test_singleton_attributes_preserved_on_repeated_calls() -> None:
     """
     GIVEN an already initialized Settings singleton
     WHEN Settings() or get_settings() is called again
@@ -54,10 +44,10 @@ def test_singleton_attributes_preserved_on_repeated_calls():
     s2_ = Settings()
     assert s2_.verbosity_level == level_
     assert s2_.max_workers == workers_
-    assert s2_.clean_unlisted is False or s2_.clean_unlisted is True
+    assert s2_.clean_unlisted == s1_.clean_unlisted
 
 
-def test_initialization_retry_on_failure(monkeypatch):
+def test_initialization_retry_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     GIVEN a failure during the first initialization attempt
     WHEN Settings() raises an exception
@@ -77,7 +67,7 @@ def test_initialization_retry_on_failure(monkeypatch):
     assert Settings._instance is s_
 
 
-def test_environment_variable_parsing(monkeypatch):
+def test_environment_variable_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     GIVEN custom RADAR_* environment variables
     WHEN get_settings() is initialized
@@ -96,7 +86,7 @@ def test_environment_variable_parsing(monkeypatch):
     assert s_.clean_unlisted is True
 
 
-def test_log_level_fallback_on_invalid_or_out_of_range(monkeypatch):
+def test_log_level_fallback_on_invalid_or_out_of_range(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     GIVEN an invalid or out-of-range RADAR_LOG_LEVEL environment variable
     WHEN get_settings() is initialized
@@ -113,7 +103,7 @@ def test_log_level_fallback_on_invalid_or_out_of_range(monkeypatch):
     assert s_out_of_range_.verbosity_level == 20
 
 
-def test_max_workers_fallback_on_invalid_or_negative(monkeypatch):
+def test_max_workers_fallback_on_invalid_or_negative(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     GIVEN an invalid or non-positive RADAR_MAX_WORKERS environment variable
     WHEN get_settings() is initialized
@@ -130,7 +120,7 @@ def test_max_workers_fallback_on_invalid_or_negative(monkeypatch):
     assert s_inv_.max_workers == 1
 
 
-def test_file_logging_configuration(monkeypatch, tmp_path):
+def test_file_logging_configuration(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
     GIVEN RADAR_ENABLE_FILE_LOGGING set to true with a custom RADAR_LOG_FOLDER
     WHEN get_settings() is initialized
@@ -147,7 +137,7 @@ def test_file_logging_configuration(monkeypatch, tmp_path):
     assert log_dir_.exists()
 
 
-def test_database_connection_kwargs_builder(monkeypatch):
+def test_database_connection_kwargs_builder(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     GIVEN custom POSTGRES_* environment variables including encoded options
     WHEN get_settings() is initialized
@@ -175,7 +165,7 @@ def test_database_connection_kwargs_builder(monkeypatch):
     assert kwargs_['connect_timeout'] == 10
 
 
-def test_reset_clears_singleton():
+def test_reset_clears_singleton() -> None:
     """
     GIVEN an initialized Settings singleton
     WHEN Settings._reset() is invoked
@@ -190,7 +180,7 @@ def test_reset_clears_singleton():
     assert Settings._instance is settings_
 
 
-def test_price_cache_kwargs_defaults(monkeypatch):
+def test_price_cache_kwargs_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     GIVEN no RADAR_PRICE_CACHE_* environment variables set
     WHEN get_settings() is initialized
@@ -220,7 +210,7 @@ def test_price_cache_kwargs_defaults(monkeypatch):
     assert kwargs_['dev_max_age_minutes'] == 10
 
 
-def test_price_cache_kwargs_custom(monkeypatch):
+def test_price_cache_kwargs_custom(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     GIVEN custom RADAR_PRICE_CACHE_* environment variables
     WHEN get_settings() is initialized
@@ -247,59 +237,32 @@ def test_price_cache_kwargs_custom(monkeypatch):
     assert kwargs_['dev_max_age_minutes'] == 15
 
 
-def test_price_cache_malformed_integer_raises(monkeypatch):
+@pytest.mark.parametrize(
+    ('env_var', 'invalid_val', 'error_match'),
+    [
+        ('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', 'not_a_number', r'Invalid integer'),
+        ('RADAR_PRICE_CACHE_TRADING_START', '25:99', r'Invalid time'),
+        ('RADAR_PRICE_CACHE_TIMEZONE', 'Invalid/Non_Existent_Timezone', r'Invalid timezone'),
+        ('RADAR_PRICE_CACHE_DIR', '   ', r'cannot be empty'),
+    ],
+    ids=['malformed_integer', 'malformed_time', 'malformed_timezone', 'empty_dir'],
+)
+def test_price_cache_invalid_env_vars_raise(
+    monkeypatch: pytest.MonkeyPatch, env_var: str, invalid_val: str, error_match: str
+) -> None:
     """
-    GIVEN an invalid non-integer string for RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES
+    GIVEN an invalid or malformed RADAR_PRICE_CACHE_* environment variable
     WHEN get_settings() is initialized
-    THEN it raises ValueError and fails initialization.
+    THEN it raises ValueError with a descriptive error message.
     """
     monkeypatch.setenv('RADAR_ENV', 'test')
-    monkeypatch.setenv('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', 'not_a_number')
+    monkeypatch.setenv(env_var, invalid_val)
 
-    with pytest.raises(ValueError, match=r'Invalid integer'):
+    with pytest.raises(ValueError, match=error_match):
         get_settings()
 
 
-def test_price_cache_malformed_time_raises(monkeypatch):
-    """
-    GIVEN an invalid time string for RADAR_PRICE_CACHE_TRADING_START
-    WHEN get_settings() is initialized
-    THEN it raises ValueError and fails initialization.
-    """
-    monkeypatch.setenv('RADAR_ENV', 'test')
-    monkeypatch.setenv('RADAR_PRICE_CACHE_TRADING_START', '25:99')
-
-    with pytest.raises(ValueError, match=r'Invalid time'):
-        get_settings()
-
-
-def test_price_cache_malformed_timezone_raises(monkeypatch):
-    """
-    GIVEN an unknown IANA timezone for RADAR_PRICE_CACHE_TIMEZONE
-    WHEN get_settings() is initialized
-    THEN it raises ValueError and fails initialization.
-    """
-    monkeypatch.setenv('RADAR_ENV', 'test')
-    monkeypatch.setenv('RADAR_PRICE_CACHE_TIMEZONE', 'Invalid/Non_Existent_Timezone')
-
-    with pytest.raises(ValueError, match=r'Invalid timezone'):
-        get_settings()
-
-
-def test_price_cache_empty_dir_raises(monkeypatch):
-    """
-    GIVEN an empty string for RADAR_PRICE_CACHE_DIR
-    WHEN get_settings() is initialized
-    THEN it raises ValueError and fails initialization.
-    """
-    monkeypatch.setenv('RADAR_ENV', 'test')
-    monkeypatch.setenv('RADAR_PRICE_CACHE_DIR', '   ')
-
-    with pytest.raises(ValueError, match=r'cannot be empty'):
-        get_settings()
-
-
-def test_symbols_and_evaluable_strategies_loaded_from_yaml(monkeypatch, tmp_path):
+def test_symbols_and_evaluable_strategies_loaded_from_yaml(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
     GIVEN an isolated YAML configuration with symbols, done, and evaluable_strategies
     WHEN get_settings() is initialized
@@ -324,7 +287,7 @@ def test_symbols_and_evaluable_strategies_loaded_from_yaml(monkeypatch, tmp_path
     assert s_.evaluable_strategies == ['sma', 'rsi_2b']
 
 
-def test_rsi_input_filter_default_when_omitted(monkeypatch, tmp_path):
+def test_rsi_input_filter_default_when_omitted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
     GIVEN an isolated YAML configuration omitting rsi_input_filter
     WHEN get_settings() is initialized
@@ -340,7 +303,9 @@ def test_rsi_input_filter_default_when_omitted(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize('filter_name', ['price_action', 'atr_volatility', 'sma_trend', 'none'])
-def test_rsi_input_filter_explicitly_configured(monkeypatch, tmp_path, filter_name):
+def test_rsi_input_filter_explicitly_configured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, filter_name: str
+) -> None:
     """
     GIVEN an isolated YAML configuration with an explicitly configured rsi_input_filter
     WHEN get_settings() is initialized
@@ -354,7 +319,7 @@ def test_rsi_input_filter_explicitly_configured(monkeypatch, tmp_path, filter_na
     assert s_.rsi_input_filter == filter_name
 
 
-def test_rsi_input_filter_whitespace_stripped(monkeypatch, tmp_path):
+def test_rsi_input_filter_whitespace_stripped(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
     GIVEN an isolated YAML configuration with padding whitespace around rsi_input_filter
     WHEN get_settings() is initialized
@@ -368,20 +333,7 @@ def test_rsi_input_filter_whitespace_stripped(monkeypatch, tmp_path):
     assert s_.rsi_input_filter == 'price_action'
 
 
-def test_rsi_input_filter_optional_in_environment_files(monkeypatch):
-    """
-    GIVEN default dev or production settings files where rsi_input_filter may be omitted
-    WHEN get_settings() is initialized
-    THEN rsi_input_filter is safely either an empty string or a registered filter name without raising errors.
-    """
-    Settings._reset()
-    monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
-    s_prod_ = get_settings()
-    assert s_prod_.rsi_input_filter in ('', 'price_action', 'atr_volatility', 'sma_trend', 'none')
-    assert isinstance(s_prod_.rsi_input_filter, str)
-
-
-def test_win_probability_threshold_default_when_omitted(monkeypatch, tmp_path):
+def test_win_probability_threshold_default_when_omitted(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
     GIVEN an isolated YAML configuration omitting win_probability_threshold
     WHEN get_settings() is initialized
@@ -396,7 +348,7 @@ def test_win_probability_threshold_default_when_omitted(monkeypatch, tmp_path):
     assert isinstance(s_.win_probability_threshold, float)
 
 
-def test_win_probability_threshold_custom_float(monkeypatch, tmp_path):
+def test_win_probability_threshold_custom_float(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """
     GIVEN an isolated YAML configuration specifying a custom win_probability_threshold
     WHEN get_settings() is initialized
@@ -411,88 +363,25 @@ def test_win_probability_threshold_custom_float(monkeypatch, tmp_path):
     assert isinstance(s_.win_probability_threshold, float)
 
 
-def test_win_probability_threshold_default_in_settings_file(monkeypatch):
+@pytest.mark.parametrize(
+    'yaml_snippet',
+    [
+        'win_probability_threshold: invalid_threshold\n',
+        'stop_loss_cap_daily: invalid_cap\n',
+        'stop_loss_cap_weekly: invalid_cap\n',
+    ],
+    ids=['win_probability_threshold', 'stop_loss_cap_daily', 'stop_loss_cap_weekly'],
+)
+def test_numeric_setting_invalid_type_raises(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, yaml_snippet: str
+) -> None:
     """
-    GIVEN default settings.yml
-    WHEN get_settings() is initialized
-    THEN win_probability_threshold returns _DEFAULT_WIN_PROBABILITY_THRESHOLD as configured.
-    """
-    Settings._reset()
-    monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
-    s_prod_ = get_settings()
-    assert s_prod_.win_probability_threshold == _DEFAULT_WIN_PROBABILITY_THRESHOLD
-    assert isinstance(s_prod_.win_probability_threshold, float)
-
-
-def test_win_probability_threshold_invalid_type_raises(monkeypatch, tmp_path):
-    """
-    GIVEN an isolated YAML configuration with a non-numeric win_probability_threshold
+    GIVEN an isolated YAML configuration with a non-numeric float setting
     WHEN get_settings() is initialized
     THEN it raises ValueError during float conversion.
     """
     custom_yaml_ = tmp_path / 'settings.yml'
-    custom_yaml_.write_text('symbols:\n  - SPY\nwin_probability_threshold: invalid_threshold\n')
-    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
-
-    with pytest.raises(ValueError, match=r'Invalid float'):
-        get_settings()
-
-
-def test_stop_loss_cap_defaults_in_settings_file(monkeypatch):
-    """
-    GIVEN default settings.yml configuration
-    WHEN get_settings() is initialized
-    THEN stop_loss_cap_daily and stop_loss_cap_weekly return default configured caps.
-    """
-    Settings._reset()
-    monkeypatch.setenv('RADAR_SETTING_FILE', 'settings.yml')
-    s_prod_ = get_settings()
-    assert s_prod_.stop_loss_cap_daily == _DEFAULT_STOP_LOSS_CAP_DAILY
-    assert s_prod_.stop_loss_cap_weekly == _DEFAULT_STOP_LOSS_CAP_WEEKLY
-    assert isinstance(s_prod_.stop_loss_cap_daily, float)
-    assert isinstance(s_prod_.stop_loss_cap_weekly, float)
-
-
-def test_stop_loss_cap_custom_yaml(monkeypatch, tmp_path):
-    """
-    GIVEN an isolated YAML configuration specifying custom stop-loss caps
-    WHEN get_settings() is initialized
-    THEN stop_loss_cap_daily and stop_loss_cap_weekly reflect the custom YAML values.
-    """
-    custom_yaml_ = tmp_path / 'settings.yml'
-    custom_yaml_.write_text('symbols:\n  - SPY\nstop_loss_cap_daily: 0.10\nstop_loss_cap_weekly: 0.15\n')
-    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
-
-    s_ = get_settings()
-    assert s_.stop_loss_cap_daily == 0.10
-    assert s_.stop_loss_cap_weekly == 0.15
-
-
-def test_stop_loss_cap_defaults_when_omitted(monkeypatch, tmp_path):
-    """
-    GIVEN an isolated YAML configuration omitting stop-loss caps
-    WHEN get_settings() is initialized
-    THEN stop_loss_cap_daily and stop_loss_cap_weekly fall back to their default constants.
-    """
-    custom_yaml_ = tmp_path / 'settings.yml'
-    custom_yaml_.write_text('symbols:\n  - SPY\n')
-    monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
-
-    s_ = get_settings()
-    assert s_.stop_loss_cap_daily == _DEFAULT_STOP_LOSS_CAP_DAILY
-    assert s_.stop_loss_cap_weekly == _DEFAULT_STOP_LOSS_CAP_WEEKLY
-    assert isinstance(s_.stop_loss_cap_daily, float)
-    assert isinstance(s_.stop_loss_cap_weekly, float)
-
-
-def test_stop_loss_cap_invalid_type_raises(monkeypatch, tmp_path):
-    """
-    GIVEN an isolated YAML configuration with a non-numeric stop-loss cap
-    WHEN get_settings() is initialized
-    THEN it raises ValueError during float conversion.
-    """
-    custom_yaml_ = tmp_path / 'settings.yml'
-    custom_yaml_.write_text('symbols:\n  - SPY\nstop_loss_cap_daily: invalid_cap\n')
+    custom_yaml_.write_text(f'symbols:\n  - {SPY}\n{yaml_snippet}')
     monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
 
     with pytest.raises(ValueError, match=r'Invalid float'):

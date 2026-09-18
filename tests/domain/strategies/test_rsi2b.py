@@ -11,22 +11,9 @@ import pytest
 # --- App modules ---
 from radar_core.domain.strategies.rsi2b import RsiTwoBands, _find_trades_2b, _get_out_range, _grid_search_2b_fused
 from radar_core.helpers.constants import DAILY, INTRADAY, WEEKLY
-from radar_core.infrastructure.crud import StrategyCrud
-from radar_core.infrastructure.ratio_repository import RatioRepository
-from radar_core.models import Ratios, Strategies
+from radar_core.models import Ratios
 
 
-@pytest.fixture(autouse=True)
-def mock_strategy_db():
-    """Mocks database lookup of strategy metadata and flag_in_process for pure offline testing."""
-    mock_strategy_ = Strategies(
-        id=1,
-        acronym='RSI(14) 2B',
-        name='RSI Two Bands',
-    )
-    with patch.object(StrategyCrud, 'get_by_acronym', return_value=mock_strategy_), \
-         patch.object(RatioRepository, 'flag_in_process', return_value=0):
-        yield
 
 
 def test_find_trades_2b_dwell_flicker_rejection() -> None:
@@ -74,37 +61,14 @@ def test_find_trades_2b_boundary_safety() -> None:
     assert len(outputs_) == 0
 
 
-def test_rsi2b_adaptive_dwell_timeframe_resolution() -> None:
+def test_rsi2b_adaptive_dwell_timeframe_resolution(sample_ohlcv_with_indicators_df: pl.DataFrame) -> None:
     """
     GIVEN an RsiTwoBands strategy instance.
     WHEN identify() is executed on DAILY vs WEEKLY timeframes.
     THEN it adaptively resolves dwell_bars=2 on DAILY (and INTRADAY) and dwell_bars=1 on WEEKLY.
     """
     strategy_ = RsiTwoBands()
-
-    # Synthetic DataFrame
-    total_bars_ = 30
-    dates_ = pl.date_range(
-        start=pl.date(2025, 1, 1),
-        end=pl.date(2025, 1, 30),
-        interval='1d',
-        eager=True,
-    )
-    prices_df_ = pl.DataFrame({
-        'Date': dates_,
-        'Open': np.full(total_bars_, 100.0),
-        'High': np.full(total_bars_, 105.0),
-        'Low': np.full(total_bars_, 95.0),
-        'Close': np.full(total_bars_, 100.0),
-        'Volume': np.full(total_bars_, 1000.0),
-        'PercentChange': np.zeros(total_bars_),
-        'BarNumber': np.arange(total_bars_, dtype=np.int32),
-        'Rsi': np.full(total_bars_, 50.0),
-        'MogalefUpper': np.full(total_bars_, 110.0),
-        'MogalefLower': np.full(total_bars_, 90.0),
-        'BarNumberForLongStop': np.full(total_bars_, total_bars_, dtype=np.int32),
-        'BarNumberForShortStop': np.full(total_bars_, total_bars_, dtype=np.int32),
-    })
+    prices_df_ = sample_ohlcv_with_indicators_df
     close_prices_ = prices_df_['Close'].to_numpy()
 
     with patch('radar_core.domain.strategies.rsi2b._grid_search_2b_fused', return_value=np.empty((0, 2))) as mock_grid_:
@@ -126,7 +90,8 @@ def test_rsi2b_adaptive_dwell_timeframe_resolution() -> None:
         assert mock_grid_.call_args[0][9] == 1, 'RsiTwoBands on WEEKLY must resolve dwell_bars=1'
 
 
-def test_find_trades_2b_dwell_bars_validation() -> None:
+@pytest.mark.parametrize('invalid_dwell', [0, 3], ids=['zero', 'three'])
+def test_find_trades_2b_dwell_bars_validation(invalid_dwell: int) -> None:
     """
     GIVEN unsupported dwell_bars parameter values (< 1 or > 2).
     WHEN _find_trades_2b or _grid_search_2b_fused is invoked.
@@ -136,68 +101,45 @@ def test_find_trades_2b_dwell_bars_validation() -> None:
     stop_loss_bars_ = np.full(len(rsi_values_), 3, dtype=np.int32)
     close_prices_ = np.array([100.0, 101.0, 102.0], dtype=np.float64)
 
-    # _find_trades_2b validation
-    with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        _find_trades_2b(rsi_values_, stop_loss_bars_, in_=40, out_=70, is_long_position=True,
-                        future_bar_number=3, dwell_bars=0)
+    with pytest.raises(ValueError, match=r'dwell_bars'):
+        _find_trades_2b(
+            rsi_values_, stop_loss_bars_, in_=40, out_=70, is_long_position=True,
+            future_bar_number=3, dwell_bars=invalid_dwell
+        )
 
-    with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        _find_trades_2b(rsi_values_, stop_loss_bars_, in_=40, out_=70, is_long_position=True,
-                        future_bar_number=3, dwell_bars=3)
-
-    # _grid_search_2b_fused validation
-    with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        _grid_search_2b_fused(rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, 0.5, dwell_bars=0)
-
-    with pytest.raises(ValueError, match='dwell_bars must be 1 or 2'):
-        _grid_search_2b_fused(rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, 0.5, dwell_bars=3)
+    with pytest.raises(ValueError, match=r'dwell_bars'):
+        _grid_search_2b_fused(
+            rsi_values_, stop_loss_bars_, close_prices_, 20, 60, 5, True, 3, 0.5, dwell_bars=invalid_dwell
+        )
 
 
-def test_get_out_range_rsi2b() -> None:
+@pytest.mark.parametrize(
+    ('is_long', 'in_val', 'expected_range'),
+    [
+        (True, 30, (84, 30)),
+        (True, 85, (85, 85)),
+        (False, 70, (16, 70)),
+        (False, 10, (10, 10)),
+    ],
+    ids=['long_standard', 'long_boundary', 'short_standard', 'short_boundary'],
+)
+def test_get_out_range_rsi2b(is_long: bool, in_val: int, expected_range: tuple[int, int]) -> None:
     """
     GIVEN Long and Short positions with different input levels.
     WHEN _get_out_range is called.
     THEN appropriate (from_out, to_out) bounds are returned.
     """
-    # Long: from_out is 84 if in_ < 84 else in_, to_out is in_
-    assert _get_out_range(True, 30) == (84, 30)
-    assert _get_out_range(True, 85) == (85, 85)
-
-    # Short: from_out is 16 if in_ > 16 else in_, to_out is in_
-    assert _get_out_range(False, 70) == (16, 70)
-    assert _get_out_range(False, 10) == (10, 10)
+    assert _get_out_range(is_long, in_val) == expected_range
 
 
-def test_rsi2b_identify_filters_by_win_probability_threshold() -> None:
+def test_rsi2b_identify_filters_by_win_probability_threshold(sample_ohlcv_with_indicators_df: pl.DataFrame) -> None:
     """
     GIVEN RsiTwoBands strategy and candidate setups with win_probability below, at, and above threshold.
     WHEN identify() is executed with win_probability_threshold=0.5.
     THEN candidate setups with win_probability < 0.5 are filtered out, while setups with win_probability >= 0.5 are persisted.
     """
     strategy_ = RsiTwoBands()
-
-    total_bars_ = 30
-    dates_ = pl.date_range(
-        start=pl.date(2025, 1, 1),
-        end=pl.date(2025, 1, 30),
-        interval='1d',
-        eager=True,
-    )
-    prices_df_ = pl.DataFrame({
-        'Date': dates_,
-        'Open': np.full(total_bars_, 100.0),
-        'High': np.full(total_bars_, 105.0),
-        'Low': np.full(total_bars_, 95.0),
-        'Close': np.full(total_bars_, 100.0),
-        'Volume': np.full(total_bars_, 1000.0),
-        'PercentChange': np.zeros(total_bars_),
-        'BarNumber': np.arange(total_bars_, dtype=np.int32),
-        'Rsi': np.full(total_bars_, 50.0),
-        'MogalefUpper': np.full(total_bars_, 110.0),
-        'MogalefLower': np.full(total_bars_, 90.0),
-        'BarNumberForLongStop': np.full(total_bars_, total_bars_, dtype=np.int32),
-        'BarNumberForShortStop': np.full(total_bars_, total_bars_, dtype=np.int32),
-    })
+    prices_df_ = sample_ohlcv_with_indicators_df
     close_prices_ = prices_df_['Close'].to_numpy()
 
     mock_candidates_ = np.array([[20, 70], [25, 70], [30, 70]], dtype=np.int32)
@@ -218,8 +160,6 @@ def test_rsi2b_identify_filters_by_win_probability_threshold() -> None:
 
     assert mock_persist_.called
     persisted_ratios_ = mock_persist_.call_args[0][0]
-    assert len(persisted_ratios_) == 2
-    assert all(r_.win_probability >= 0.5 for r_ in persisted_ratios_)
     assert [r_.win_probability for r_ in persisted_ratios_] == [0.50, 0.51]
 
 

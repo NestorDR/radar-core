@@ -1,6 +1,7 @@
 # tests/domain/filters/test_filters.py
 
 # --- Python modules ---
+from collections.abc import Callable
 import datetime
 
 # --- Third Party Libraries ---
@@ -39,28 +40,15 @@ class _DummyPassthroughFilter(FilterABC):
         return mask_, mask_
 
 
-def _build_dummy_ohlc_df(rows: int) -> pl.DataFrame:
-    """Helper to generate a synthetic OHLC DataFrame for filter tests."""
-    dates_ = [datetime.date(2020, 1, 1) + datetime.timedelta(days=i_) for i_ in range(rows)]
-    # Trending prices: 100.0, 100.5, 101.0, ...
-    base_prices_ = np.linspace(100.0, 200.0, rows)
-    return pl.DataFrame({
-        'Date': dates_,
-        'Open': base_prices_ - 0.5,
-        'High': base_prices_ + 1.0,
-        'Low': base_prices_ - 1.0,
-        'Close': base_prices_ + 0.5,
-        'Volume': np.full(rows, 1000000, dtype=np.int64),
-    })
-
-
-def test_filter_abc_contract_with_dummy_filter() -> None:
+def test_filter_abc_contract_with_dummy_filter(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN a test-local FilterABC subclass.
     WHEN generating masks for a DataFrame with 10 price bars.
     THEN both Long and Short masks have length 10 and all elements are True.
     """
-    df_ = _build_dummy_ohlc_df(10)
+    df_ = ohlcv_factory(10)
     filter_ = _DummyPassthroughFilter()
 
     assert filter_.name == 'dummy_passthrough'
@@ -265,13 +253,15 @@ def test_price_action_filter_empty_dataframe() -> None:
     assert bear_short_ is None
 
 
-def test_atr_volatility_filter_insufficient_history() -> None:
+def test_atr_volatility_filter_insufficient_history(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN a DataFrame with fewer than 252 bars.
     WHEN AtrVolatilityFilter generates eligibility masks.
     THEN all elements in the masks evaluate to False due to insufficient quantile lookback history.
     """
-    df_ = _build_dummy_ohlc_df(100)
+    df_ = ohlcv_factory(100)
     filter_ = AtrVolatilityFilter()
 
     long_mask_, short_mask_ = filter_.get_masks(df_, is_bear=False)
@@ -323,13 +313,15 @@ def test_atr_volatility_filter_percentile_boundary() -> None:
     assert not short_mask_[-1]
 
 
-def test_sma_trend_filter_insufficient_history() -> None:
+def test_sma_trend_filter_insufficient_history(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN a DataFrame with fewer than 220 bars.
     WHEN SmaTrendFilter generates eligibility masks.
     THEN all elements in the masks evaluate to False.
     """
-    df_ = _build_dummy_ohlc_df(150)
+    df_ = ohlcv_factory(150)
     filter_ = SmaTrendFilter()
 
     long_mask_, short_mask_ = filter_.get_masks(df_, is_bear=False)
@@ -339,14 +331,16 @@ def test_sma_trend_filter_insufficient_history() -> None:
     assert not np.any(short_mask_)
 
 
-def test_sma_trend_filter_uptrend_and_downtrend() -> None:
+def test_sma_trend_filter_uptrend_and_downtrend(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN an upward-trending price series with 250 bars.
     WHEN SmaTrendFilter evaluates the series.
     THEN after bar 220, Long setups are eligible while Short setups are ineligible.
     """
     rows_ = 250
-    df_ = _build_dummy_ohlc_df(rows_)
+    df_ = ohlcv_factory(rows_)
     filter_ = SmaTrendFilter()
 
     long_mask_, short_mask_ = filter_.get_masks(df_, is_bear=False)
@@ -358,14 +352,16 @@ def test_sma_trend_filter_uptrend_and_downtrend() -> None:
     assert not short_mask_[230]
 
 
-def test_filter_registry_and_helper_functions() -> None:
+def test_filter_registry_and_helper_functions(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN registered filter names ('atr_volatility', 'price_action', 'sma_trend') and baseline.
     WHEN get_filter and get_filter_masks are invoked.
     THEN instances of the corresponding FilterABC subclasses are returned,
          baseline/None queries return (None, None), and unknown filter names raise KeyError.
     """
-    df_ = _build_dummy_ohlc_df(10)
+    df_ = ohlcv_factory(10)
 
     for name_ in ['atr_volatility', 'sma_trend']:
         filter_ = get_filter(name_)
@@ -395,9 +391,9 @@ def test_filter_registry_and_helper_functions() -> None:
         assert long_mask_ is None
         assert short_mask_ is None
 
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match=r'Unknown filter'):
         get_filter('unregistered_filter_name')
 
-    with pytest.raises(KeyError):
+    with pytest.raises(KeyError, match=r'Unknown filter'):
         get_filter('baseline')
 

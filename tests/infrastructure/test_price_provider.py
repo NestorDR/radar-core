@@ -2,6 +2,7 @@
 
 # --- Python modules ---
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 # --- Third Party Libraries ---
@@ -43,7 +44,7 @@ def _make_mock_yfinance_df(tickers: list[str],
     return df_
 
 
-def test_price_provider_empty_symbols_guard():
+def test_price_provider_empty_symbols_guard() -> None:
     """
     GIVEN an empty list of symbols
     WHEN PriceProvider.get_prices is called
@@ -58,7 +59,7 @@ def test_price_provider_empty_symbols_guard():
         mock_download_.assert_not_called()
 
 
-def test_price_provider_empty_tickers_guard():
+def test_price_provider_empty_tickers_guard() -> None:
     """
     GIVEN a list of symbols that maps to 0 tickers
     WHEN PriceProvider.get_prices is called
@@ -72,7 +73,7 @@ def test_price_provider_empty_tickers_guard():
         mock_download_.assert_not_called()
 
 
-def test_full_download_writes_price_cache(tmp_path):
+def test_full_download_writes_price_cache(tmp_path: Path) -> None:
     """
     GIVEN PriceProvider configured with an active cache directory
     WHEN get_prices is called and all requested symbols are downloaded successfully
@@ -110,7 +111,7 @@ def test_full_download_writes_price_cache(tmp_path):
         assert set(cached_df_['Symbol'].unique().to_list()) == {'SPY', 'QQQ'}
 
 
-def test_partial_download_skips_cache_write(tmp_path):
+def test_partial_download_skips_cache_write(tmp_path: Path) -> None:
     """
     GIVEN PriceProvider configured with an active cache directory
     WHEN get_prices is called but one symbol fails to download (partial result)
@@ -135,7 +136,7 @@ def test_partial_download_skips_cache_write(tmp_path):
         assert cache_.read_metadata() is None
 
 
-def test_cache_write_disabled_skips_save(tmp_path):
+def test_cache_write_disabled_skips_save(tmp_path: Path) -> None:
     """
     GIVEN PriceProvider configured with write=False in cache settings
     WHEN get_prices successfully downloads all symbols
@@ -161,7 +162,7 @@ def test_cache_write_disabled_skips_save(tmp_path):
         assert cache_.read_metadata() is None
 
 
-def test_cache_save_error_does_not_crash_get_prices(tmp_path):
+def test_cache_save_error_does_not_crash_get_prices(tmp_path: Path) -> None:
     """
     GIVEN PriceProvider configured with an active cache directory
     WHEN PriceCache.save raises an unexpected exception (e.g. disk failure)
@@ -184,7 +185,7 @@ def test_cache_save_error_does_not_crash_get_prices(tmp_path):
         assert 'SPY' in results_
 
 
-def test_cache_eligibility_production_window(tmp_path):
+def test_cache_eligibility_production_window(tmp_path: Path) -> None:
     """
     GIVEN PriceProvider configured with price cache
     WHEN evaluating _is_cache_eligible across different times, weekdays, and metadata states
@@ -250,7 +251,7 @@ def test_cache_eligibility_production_window(tmp_path):
     assert provider_._is_cache_eligible(mapping_, now=next_monday_) is False
 
 
-def test_cache_eligibility_development_environment(tmp_path):
+def test_cache_eligibility_development_environment(tmp_path: Path) -> None:
     """
     GIVEN PriceProvider in development mode (app_environment='dev')
     WHEN evaluating _is_cache_eligible outside trading hours
@@ -364,7 +365,7 @@ def test_cache_eligibility_development_environment(tmp_path):
     assert provider_._is_cache_eligible(mapping_, trading_now_) is True
 
 
-def test_eligible_execution_makes_current_day_request_and_refreshes_rows(tmp_path):
+def test_eligible_execution_makes_current_day_request_and_refreshes_rows(tmp_path: Path) -> None:
     """
     GIVEN an existing valid cache with historical data up to current session date
     WHEN get_prices runs in an eligible production window
@@ -439,7 +440,7 @@ def test_eligible_execution_makes_current_day_request_and_refreshes_rows(tmp_pat
         assert loaded_meta_.session_date == '2026-01-05'
 
 
-def test_ineligible_execution_makes_complete_request(tmp_path):
+def test_ineligible_execution_makes_complete_request(tmp_path: Path) -> None:
     """
     GIVEN an existing cache but execution is outside the trading window (e.g. Saturday)
     WHEN get_prices is called
@@ -482,7 +483,7 @@ def test_ineligible_execution_makes_complete_request(tmp_path):
         assert args_[2] == provider_.end_date
 
 
-def test_failed_refresh_falls_back_to_full_download(tmp_path):
+def test_failed_refresh_falls_back_to_full_download(tmp_path: Path) -> None:
     """
     GIVEN an eligible cache state where current-day download returns empty
     WHEN get_prices is called
@@ -532,7 +533,7 @@ def test_failed_refresh_falls_back_to_full_download(tmp_path):
         assert post_meta_.is_complete is True
 
 
-def test_dev_cache_eligible_performs_current_day_refresh(tmp_path):
+def test_dev_cache_eligible_performs_current_day_refresh(tmp_path: Path) -> None:
     """
     GIVEN a compatible price cache updated within dev_max_age_minutes
     WHEN get_prices runs in development mode (app_environment='dev')
@@ -588,7 +589,7 @@ def test_dev_cache_eligible_performs_current_day_refresh(tmp_path):
         assert args_[2] == provider_.end_date
 
 
-def test_dev_cache_stale_triggers_complete_download(tmp_path):
+def test_dev_cache_stale_triggers_complete_download(tmp_path: Path) -> None:
     """
     GIVEN a compatible price cache that is older than dev_max_age_minutes
     WHEN get_prices runs in development mode (app_environment='dev')
@@ -639,7 +640,7 @@ def test_dev_cache_stale_triggers_complete_download(tmp_path):
         assert loaded_df_['Close'][-1] == 130.0
 
 
-def test_dev_max_age_not_permitted_in_production(tmp_path):
+def test_dev_max_age_not_permitted_in_production(tmp_path: Path) -> None:
     """
     GIVEN a compatible price cache updated 2 minutes ago
     WHEN get_prices runs in production mode (app_environment='prod') outside the market window (e.g. Saturday)
@@ -682,7 +683,7 @@ def test_dev_max_age_not_permitted_in_production(tmp_path):
         assert args_[1] == provider_.start_date
 
 
-def test_cache_disabled_and_ignore_bypass_cache_reads(tmp_path):
+def test_cache_disabled_and_ignore_bypass_cache_reads(tmp_path: Path) -> None:
     """
     GIVEN a valid fresh cache on disk
     WHEN cache is disabled (enabled=False) or ignored (ignore=True)
@@ -729,7 +730,7 @@ def test_cache_disabled_and_ignore_bypass_cache_reads(tmp_path):
         mock_download_.assert_called_once()
 
 
-def test_cache_disabled_skips_save(tmp_path):
+def test_cache_disabled_skips_save(tmp_path: Path) -> None:
     """
     GIVEN cache settings with enabled=False
     WHEN get_prices successfully downloads all symbols
@@ -754,7 +755,7 @@ def test_cache_disabled_skips_save(tmp_path):
         assert cache_.read_metadata() is None
 
 
-def test_cache_consumption_failure_falls_back_to_download(tmp_path):
+def test_cache_consumption_failure_falls_back_to_download(tmp_path: Path) -> None:
     """
     GIVEN a fresh development cache on disk with malformed or missing columns
     WHEN get_prices is called in development mode
@@ -798,7 +799,7 @@ def test_cache_consumption_failure_falls_back_to_download(tmp_path):
         assert results_['SPY']['Close'].to_list() == [150.0, 155.0, 160.0]
 
 
-def test_dev_cache_invalid_timestamp_falls_back_to_download(tmp_path):
+def test_dev_cache_invalid_timestamp_falls_back_to_download(tmp_path: Path) -> None:
     """
     GIVEN a cache on disk with an invalid or unparseable updated_at_utc timestamp
     WHEN get_prices is called in development mode
@@ -836,7 +837,7 @@ def test_dev_cache_invalid_timestamp_falls_back_to_download(tmp_path):
         mock_download_.assert_called_once()
 
 
-def test_price_provider_end_date_uses_cache_timezone():
+def test_price_provider_end_date_uses_cache_timezone() -> None:
     """
     GIVEN PriceProvider initialized with a specific timezone in cache settings
     WHEN end_date is calculated
@@ -850,7 +851,7 @@ def test_price_provider_end_date_uses_cache_timezone():
         assert provider_.end_date == date(2026, 1, 6)
 
 
-def test_post_market_close_cache_eligible_in_both_environments(tmp_path):
+def test_post_market_close_cache_eligible_in_both_environments(tmp_path: Path) -> None:
     """
     GIVEN a compatible price cache generated after market close on a weekday
     WHEN evaluating _is_cache_eligible in production and development mode after trading hours
@@ -885,7 +886,7 @@ def test_post_market_close_cache_eligible_in_both_environments(tmp_path):
     assert provider_._is_cache_eligible(mapping_, post_close_now_) is True
 
 
-def test_get_prices_updates_end_date_from_now():
+def test_get_prices_updates_end_date_from_now() -> None:
     """
     GIVEN a PriceProvider instance with an initial default end_date
     WHEN get_prices is called with a specific evaluation datetime
@@ -901,7 +902,7 @@ def test_get_prices_updates_end_date_from_now():
     assert provider_.end_date == date(2025, 6, 16)
 
 
-def test_refresh_cache_subset_slicing(tmp_path):
+def test_refresh_cache_subset_slicing(tmp_path: Path) -> None:
     """
     GIVEN a cache containing multiple symbols ('SPY' and 'QQQ')
     WHEN _refresh_cache is called for a single symbol subset ('SPY')
@@ -954,7 +955,7 @@ def test_refresh_cache_subset_slicing(tmp_path):
     assert refreshed_['SPY']['Date'].to_list() == [date(2026, 1, 2), date(2026, 1, 5)]
 
 
-def test_refresh_cache_ticker_download_failure_fallback_to_history(tmp_path):
+def test_refresh_cache_ticker_download_failure_fallback_to_history(tmp_path: Path) -> None:
     """
     GIVEN a cache containing multiple symbols ('SPY' and 'QQQ')
     WHEN current-day download for 'QQQ' returns empty data
@@ -1013,7 +1014,7 @@ def test_refresh_cache_ticker_download_failure_fallback_to_history(tmp_path):
     assert refreshed_['QQQ']['Date'][-1] == date(2026, 1, 2)
 
 
-def test_save_cache_persists_symbol_as_categorical(tmp_path):
+def test_save_cache_persists_symbol_as_categorical(tmp_path: Path) -> None:
     """
     GIVEN processed symbol results
     WHEN _save_cache persists DataFrame to disk
@@ -1040,7 +1041,7 @@ def test_save_cache_persists_symbol_as_categorical(tmp_path):
     assert saved_df_['Symbol'].dtype == pl.Categorical
 
 
-def test_weekend_production_cache_eligibility(tmp_path):
+def test_weekend_production_cache_eligibility(tmp_path: Path) -> None:
     """
     GIVEN a PriceProvider in production mode on a weekend
     WHEN checking cache eligibility across Saturday and Sunday
@@ -1124,7 +1125,7 @@ def test_weekend_production_cache_eligibility(tmp_path):
     assert provider_._is_cache_eligible(mapping_, sun_evening_) is True
 
 
-def test_weekend_refresh_empty_today_df_uses_cache(tmp_path):
+def test_weekend_refresh_empty_today_df_uses_cache(tmp_path: Path) -> None:
     """
     GIVEN a cache containing equities on a weekend
     WHEN current-day download returns empty DataFrame because equity markets are closed

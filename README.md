@@ -225,7 +225,7 @@ The `auto/` directory contains Windows Command scripts to simplify common tasks:
   - Runs Ruff lint checks and autofixes; Ruff formatting is currently disabled in the script.
 
 - **`auto\test.cmd`**: Testing is implemented using `pytest`. Unit tests are located under the `tests/` directory.
-  - The test suite includes fast, in-memory unit tests using `pytest` and `unittest.mock` covering symbol translation and auto-creation, price provider download guards, model instantiation, error handling, and CRUD methods without external database dependencies.
+  - Unit tests run without external dependencies (no Database or Yahoo Finance access).
 
 - **`auto\cleanup.cmd`**: Cache and temporary file cleanup.
   - Clears Python bytecode caches (`__pycache__`) and cleans Ruff cache using `uvx ruff clean`.

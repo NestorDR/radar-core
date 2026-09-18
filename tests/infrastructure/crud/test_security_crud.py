@@ -1,14 +1,20 @@
 # tests/infrastructure/crud/test_security_crud.py
 
 # --- Python modules ---
-from unittest.mock import call, patch
+from unittest.mock import MagicMock, call, patch
+
+# --- Third Party Libraries ---
+import pytest
 
 # --- App modules ---
 from radar_core.infrastructure.crud import SecurityCrud
 from radar_core.models import Securities
+from tests.conftest import QQQ, SOXS, SPX, SPY, SQQQ
 
 
-def test_security_crud_get_by_symbol_existing(mock_connection_scope):
+def test_security_crud_get_by_symbol_existing(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN an existing security symbol
     WHEN get_by_symbol is called
@@ -17,7 +23,7 @@ def test_security_crud_get_by_symbol_existing(mock_connection_scope):
     _, cursor_, scope_ = mock_connection_scope
     cursor_.fetchone.return_value = (
         1,
-        'SPX',
+        SPX,
         'S&P 500 Index',
         False,
         False,
@@ -30,11 +36,11 @@ def test_security_crud_get_by_symbol_existing(mock_connection_scope):
             'radar_core.infrastructure.crud.security_crud.read_connection_scope',
             return_value=scope_
     ) as read_scope_:
-        security_ = SecurityCrud().get_by_symbol('SPX')
+        security_ = SecurityCrud().get_by_symbol(SPX)
 
     assert security_ is not None
     assert security_.id == 1
-    assert security_.symbol == 'SPX'
+    assert security_.symbol == SPX
     assert security_.description == 'S&P 500 Index'
     assert security_.is_bear is False
     assert security_.is_shortable is False
@@ -45,7 +51,9 @@ def test_security_crud_get_by_symbol_existing(mock_connection_scope):
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_security_crud_get_by_symbol_nonexistent(mock_connection_scope):
+def test_security_crud_get_by_symbol_nonexistent(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN a non-existent security symbol
     WHEN get_by_symbol is called
@@ -65,7 +73,9 @@ def test_security_crud_get_by_symbol_nonexistent(mock_connection_scope):
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_security_crud_get_by_symbol_reuses_connection_for_synonym(mock_connection_scope):
+def test_security_crud_get_by_symbol_reuses_connection_for_synonym(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN an existing security and provider identifier
     WHEN get_by_symbol is called
@@ -105,7 +115,9 @@ def test_security_crud_get_by_symbol_reuses_connection_for_synonym(mock_connecti
     assert connection_.cursor.return_value.__enter__.return_value is cursor_
 
 
-def test_security_crud_get_synonym_existing(mock_connection_scope):
+def test_security_crud_get_synonym_existing(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN an existing security synonym
     WHEN get_synonym is called
@@ -129,7 +141,9 @@ def test_security_crud_get_synonym_existing(mock_connection_scope):
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_security_crud_get_synonym_nonexistent(mock_connection_scope):
+def test_security_crud_get_synonym_nonexistent(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN no synonym for a security and provider
     WHEN get_synonym is called
@@ -149,8 +163,8 @@ def test_security_crud_get_synonym_nonexistent(mock_connection_scope):
 
 
 def test_security_crud_get_tickers_by_symbols_preserves_order(
-        mock_connection_scope
-):
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN symbols returned by the database in a different order
     WHEN get_tickers_by_symbols is called
@@ -182,7 +196,7 @@ def test_security_crud_get_tickers_by_symbols_preserves_order(
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_security_crud_get_tickers_by_symbols_empty_does_not_open_connection():
+def test_security_crud_get_tickers_by_symbols_empty_does_not_open_connection() -> None:
     """
     GIVEN an empty symbol list
     WHEN get_tickers_by_symbols is called
@@ -197,7 +211,9 @@ def test_security_crud_get_tickers_by_symbols_empty_does_not_open_connection():
     read_scope_.assert_not_called()
 
 
-def test_security_crud_add_security(mock_connection_scope):
+def test_security_crud_add_security(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+) -> None:
     """
     GIVEN a new security
     WHEN add_security is called
@@ -230,73 +246,56 @@ def test_security_crud_add_security(mock_connection_scope):
     scope_.__exit__.assert_called_once_with(None, None, None)
 
 
-def test_security_crud_get_shortable_symbols_empty():
+@pytest.mark.parametrize(
+    'method_name',
+    ['get_shortable_symbols', 'get_bear_symbols'],
+    ids=['shortable_symbols', 'bear_symbols'],
+)
+def test_security_crud_symbol_filtering_methods_empty(method_name: str) -> None:
     """
     GIVEN an empty list of symbols
-    WHEN get_shortable_symbols is called
-    THEN it returns an empty set without opening a read connection.
+    WHEN symbol classification queries are called on SecurityCrud
+    THEN an empty set is returned without opening a read connection.
     """
     with patch(
             'radar_core.infrastructure.crud.security_crud.read_connection_scope'
     ) as read_scope_:
-        result_ = SecurityCrud.get_shortable_symbols([])
+        result_ = getattr(SecurityCrud, method_name)([])
 
     assert result_ == set()
     read_scope_.assert_not_called()
 
 
-def test_security_crud_get_shortable_symbols_filters_correctly(mock_connection_scope):
+@pytest.mark.parametrize(
+    ('method_name', 'mock_rows', 'query_symbols', 'expected_set'),
+    [
+        ('get_shortable_symbols', [(SPY,), (QQQ,)], [SPY, 'UNKNOWN', QQQ], {SPY, QQQ}),
+        ('get_bear_symbols', [(SQQQ,), (SOXS,)], [SQQQ, SPY, SOXS], {SQQQ, SOXS}),
+    ],
+    ids=['shortable_symbols', 'bear_symbols'],
+)
+def test_security_crud_symbol_filtering_methods_filter_correctly(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock],
+    method_name: str,
+    mock_rows: list[tuple[str]],
+    query_symbols: list[str],
+    expected_set: set[str],
+) -> None:
     """
-    GIVEN a list of symbols
-    WHEN get_shortable_symbols is called
-    THEN it returns a set of symbols where is_shortable is True.
+    GIVEN a list of symbols and database rows matching the boolean flag
+    WHEN symbol classification queries are called on SecurityCrud
+    THEN a set containing only the matching symbols is returned.
     """
     _, cursor_, scope_ = mock_connection_scope
-    cursor_.fetchall.return_value = [('SPY',), ('QQQ',)]
+    cursor_.fetchall.return_value = mock_rows
 
     with patch(
             'radar_core.infrastructure.crud.security_crud.read_connection_scope',
             return_value=scope_
     ) as read_scope_:
-        result_ = SecurityCrud.get_shortable_symbols(['SPY', 'UNKNOWN', 'QQQ'])
+        result_ = getattr(SecurityCrud, method_name)(query_symbols)
 
-    assert result_ == {'SPY', 'QQQ'}
-    read_scope_.assert_called_once_with(None)
-    cursor_.execute.assert_called_once()
-    scope_.__exit__.assert_called_once_with(None, None, None)
-
-
-def test_security_crud_get_bear_symbols_empty():
-    """
-    GIVEN an empty list of symbols
-    WHEN get_bear_symbols is called
-    THEN it returns an empty set without opening a read connection.
-    """
-    with patch(
-            'radar_core.infrastructure.crud.security_crud.read_connection_scope'
-    ) as read_scope_:
-        result_ = SecurityCrud.get_bear_symbols([])
-
-    assert result_ == set()
-    read_scope_.assert_not_called()
-
-
-def test_security_crud_get_bear_symbols_filters_correctly(mock_connection_scope):
-    """
-    GIVEN a list of symbols
-    WHEN get_bear_symbols is called
-    THEN it returns a set of symbols where is_bear is True.
-    """
-    _, cursor_, scope_ = mock_connection_scope
-    cursor_.fetchall.return_value = [('SQQQ',), ('SOXS',)]
-
-    with patch(
-            'radar_core.infrastructure.crud.security_crud.read_connection_scope',
-            return_value=scope_
-    ) as read_scope_:
-        result_ = SecurityCrud.get_bear_symbols(['SQQQ', 'SPY', 'SOXS'])
-
-    assert result_ == {'SQQQ', 'SOXS'}
+    assert result_ == expected_set
     read_scope_.assert_called_once_with(None)
     cursor_.execute.assert_called_once()
     scope_.__exit__.assert_called_once_with(None, None, None)

@@ -1,9 +1,9 @@
 # tests/domain/strategies/test_base_strategy.py
 
 # --- Python modules ---
-from datetime import date, datetime, timedelta, timezone
+from collections.abc import Callable
+from datetime import date
 import inspect
-import json
 from unittest.mock import patch
 
 # --- Third Party Libraries ---
@@ -15,40 +15,9 @@ import pytest
 from radar_core.domain.strategies import MovingAverage, RsiRollerCoaster, RsiTwoBands, StrategyABC
 from radar_core.domain.strategies.base_strategy import AnalysisContext, RsiStrategyABC, _find_stop_loss_bars
 from radar_core.helpers.constants import DAILY, SMA, WEEKLY
-from radar_core.infrastructure import PriceProvider
 from radar_core.infrastructure.crud import StrategyCrud
-from radar_core.infrastructure.security_repository import SecurityRepository
 from radar_core.models import Strategies
-from radar_core.settings import Settings, get_settings
-
-
-@pytest.fixture(autouse=True)
-def clean_settings_state():
-    """
-    Ensures that Settings singleton state is cleanly reset before and after each test.
-    """
-    Settings._reset()
-    yield
-    Settings._reset()
-
-
-def _sample_price_df(rows: int = 30) -> pl.DataFrame:
-    """Helper to generate sample OHLC and BarNumber data for stop loss testing."""
-    np.random.seed(42)
-    base_price_ = 100.0 + np.cumsum(np.random.randn(rows) * 1.5)
-    high_prices_ = base_price_ + np.random.uniform(0.5, 2.0, size=rows)
-    low_prices_ = base_price_ - np.random.uniform(0.5, 2.0, size=rows)
-    open_prices_ = base_price_ + np.random.uniform(-0.5, 0.5, size=rows)
-    close_prices_ = base_price_ + np.random.uniform(-0.5, 0.5, size=rows)
-
-    return pl.DataFrame({
-        'Date': [date(2025, 1, 1) + timedelta(days=i_) for i_ in range(rows)],
-        'Open': open_prices_,
-        'High': high_prices_,
-        'Low': low_prices_,
-        'Close': close_prices_,
-        'BarNumber': np.arange(rows, dtype=np.int32),
-    })
+from radar_core.settings import get_settings
 
 
 def _find_stop_loss_bars_legacy(
@@ -74,13 +43,15 @@ def _find_stop_loss_bars_legacy(
     return bar_for_long_stop_, bar_for_short_stop_
 
 
-def test_set_mogalef_stop_loss_standard_bounds() -> None:
+def test_set_mogalef_stop_loss_standard_bounds(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN a Polars DataFrame with OHLC columns.
     WHEN set_mogalef_stop_loss is executed.
     THEN LongStopLoss and ShortStopLoss match MogalefLower and MogalefUpper across all valid rows.
     """
-    df_ = _sample_price_df(30)
+    df_ = ohlcv_factory(30)
     result_df_ = RsiStrategyABC.set_mogalef_stop_loss(df_, period_reg=3, period_dev=7, multiplier=2.0)
 
     assert 'LongStopLoss' in result_df_.columns
@@ -91,13 +62,15 @@ def test_set_mogalef_stop_loss_standard_bounds() -> None:
     assert (valid_rows_['ShortStopLoss'] == valid_rows_['MogalefUpper']).all()
 
 
-def test_set_mogalef_stop_loss_idempotency() -> None:
+def test_set_mogalef_stop_loss_idempotency(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN a DataFrame that already contains LongStopLoss and ShortStopLoss columns.
     WHEN set_mogalef_stop_loss is called.
     THEN the DataFrame is returned unchanged.
     """
-    df_ = _sample_price_df(10).with_columns([
+    df_ = ohlcv_factory(10).with_columns([
         pl.lit(95.0).alias('LongStopLoss'),
         pl.lit(105.0).alias('ShortStopLoss')
     ])
@@ -107,13 +80,15 @@ def test_set_mogalef_stop_loss_idempotency() -> None:
     assert (result_df_['ShortStopLoss'] == 105.0).all()
 
 
-def test_set_stop_loss_backwards_compatibility() -> None:
+def test_set_stop_loss_backwards_compatibility(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN a DataFrame with High, Low, and Close columns.
     WHEN the baseline set_stop_loss is executed.
     THEN LongStopLoss and ShortStopLoss columns are produced using ATR and rolling window.
     """
-    df_ = _sample_price_df(30)
+    df_ = ohlcv_factory(30)
     result_df_ = RsiStrategyABC.set_stop_loss(df_, bars_for_stop_loss=10)
 
     assert 'LongStopLoss' in result_df_.columns
@@ -121,13 +96,15 @@ def test_set_stop_loss_backwards_compatibility() -> None:
     assert 'Atr' in result_df_.columns
 
 
-def test_identify_where_to_stop_loss_daily_and_weekly() -> None:
+def test_identify_where_to_stop_loss_daily_and_weekly(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN a price DataFrame and close prices array.
     WHEN identify_where_to_stop_loss is called for DAILY and WEEKLY timeframes.
     THEN stop loss columns and trigger bar numbers are generated.
     """
-    df_ = _sample_price_df(35)
+    df_ = ohlcv_factory(35)
     close_prices_ = df_['Close'].to_numpy()
 
     # Test Daily
@@ -186,32 +163,20 @@ def test_stop_loss_jit_handles_no_breaches() -> None:
     assert np.all(short_jit_ == future_bar_)
 
 
-@pytest.fixture(scope='module')
-def real_spy_prices() -> pl.DataFrame:
-    """Fixture downloading real SPY daily data from Yahoo Finance."""
-    with patch.object(SecurityRepository, 'map_symbol_to_ticker', return_value={'SPY': 'SPY'}):
-        prices_data_ = PriceProvider(long_term=False).get_prices(['SPY'], datetime.now(timezone.utc))
-
-    prices_df_ = prices_data_['SPY']
-    return prices_df_.with_columns(
-        pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber')
-    )
-
-
-def test_identify_where_to_stop_loss_parity_on_real_market_data(real_spy_prices: pl.DataFrame) -> None:
+def test_identify_where_to_stop_loss_parity_on_real_market_data(frozen_spy_prices: pl.DataFrame) -> None:
     """
     GIVEN real SPY daily market prices.
     WHEN RsiStrategyABC.identify_where_to_stop_loss is executed.
     THEN BarNumberForLongStop and BarNumberForShortStop columns are created and match legacy values.
     """
-    df_ = real_spy_prices.clone()
+    df_ = frozen_spy_prices.clone()
     close_prices_ = df_['Close'].to_numpy()
 
     result_df_ = RsiStrategyABC.identify_where_to_stop_loss(DAILY, df_, close_prices_)
 
     assert 'BarNumberForLongStop' in result_df_.columns
     assert 'BarNumberForShortStop' in result_df_.columns
-    assert result_df_.height == real_spy_prices.height
+    assert result_df_.height == frozen_spy_prices.height
 
     # Check that calling again returns the cached DataFrame immediately
     cached_df_ = RsiStrategyABC.identify_where_to_stop_loss(DAILY, result_df_, close_prices_)
@@ -252,7 +217,7 @@ def test_perfile_performance_with_current_indicators() -> None:
     WHEN StrategyABC.perfile_performance is executed.
     THEN the returned Ratios object has current_indicators populated with the serialized JSON string.
     """
-    mock_strategy_ = Strategies(id=1, acronym='SMA', name='Moving Average')
+    mock_strategy_ = Strategies(id=1, acronym=SMA, name='Moving Average')
     with patch.object(StrategyCrud, 'get_by_acronym', return_value=mock_strategy_):
         strategy_ = MovingAverage(SMA, 'Close', 'Sma')
 
@@ -293,7 +258,6 @@ def test_perfile_performance_with_current_indicators() -> None:
 
     assert ratios_ is not None
     assert ratios_.current_indicators == '{"sma": 112.5}'
-    assert json.loads(ratios_.current_indicators) == {'sma': 112.5}
 
 
 def test_perfile_performance_without_current_indicators_fallback() -> None:
@@ -302,7 +266,7 @@ def test_perfile_performance_without_current_indicators_fallback() -> None:
     WHEN StrategyABC.perfile_performance is executed.
     THEN the returned Ratios object has current_indicators set to None.
     """
-    mock_strategy_ = Strategies(id=1, acronym='SMA', name='Moving Average')
+    mock_strategy_ = Strategies(id=1, acronym=SMA, name='Moving Average')
     with patch.object(StrategyCrud, 'get_by_acronym', return_value=mock_strategy_):
         strategy_ = MovingAverage(SMA, 'Close', 'Sma')
 
@@ -449,7 +413,9 @@ def test_identify_where_to_stop_loss_preserves_tighter_corridors() -> None:
     assert np.allclose(result_weekly_['ShortStopLoss'].to_numpy(), [105.0, 208.0])
 
 
-def test_identify_where_to_stop_loss_disabled_cap(monkeypatch) -> None:
+def test_identify_where_to_stop_loss_disabled_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """
     GIVEN settings where stop_loss_cap_daily and stop_loss_cap_weekly are disabled (0.0)
     WHEN identify_where_to_stop_loss is evaluated
@@ -475,13 +441,15 @@ def test_identify_where_to_stop_loss_disabled_cap(monkeypatch) -> None:
     assert np.allclose(result_df_['ShortStopLoss'].to_numpy(), [140.0, 135.0])
 
 
-def test_identify_where_to_stop_loss_full_calculation_respects_clamping() -> None:
+def test_identify_where_to_stop_loss_full_calculation_respects_clamping(
+    ohlcv_factory: Callable[..., pl.DataFrame],
+) -> None:
     """
     GIVEN a standard OHLC DataFrame requiring full Mogalef indicator calculation
     WHEN identify_where_to_stop_loss is evaluated on DAILY and WEEKLY timeframes
     THEN LongStopLoss is strictly >= Close * (1 - cap) and ShortStopLoss is strictly <= Close * (1 + cap).
     """
-    df_ = _sample_price_df(50)
+    df_ = ohlcv_factory(50)
     close_prices_ = df_['Close'].to_numpy()
 
     # Daily evaluation (cap = 0.12)

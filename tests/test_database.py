@@ -14,63 +14,23 @@ from radar_core.database import (
     get_psycopg_read_connection,
     read_connection_scope,
 )
-from radar_core.settings import Settings, get_settings
+from radar_core.settings import get_settings
 
 
-def test_get_psycopg_conn_kwargs_default(monkeypatch):
+def test_get_psycopg_conn_kwargs_returns_copy_of_settings() -> None:
     """
-    GIVEN default environment variables without POSTGRES_OPTIONS
+    GIVEN an initialized Settings singleton
     WHEN _get_psycopg_conn_kwargs is called
-    THEN it formats a valid connection dictionary for psycopg3 without options key.
+    THEN it returns a defensive copy of Settings.db_conn_kwargs.
     """
-    Settings._reset()
-    try:
-        monkeypatch.setenv('RADAR_ENV', 'test')
-        monkeypatch.delenv('POSTGRES_OPTIONS', raising=False)
-        kwargs_ = _get_psycopg_conn_kwargs()
-        assert 'host' in kwargs_
-        assert 'port' in kwargs_
-        assert 'dbname' in kwargs_
-        assert 'user' in kwargs_
-        assert 'password' in kwargs_
-        assert 'sslmode' in kwargs_
-        assert kwargs_['connect_timeout'] == 10
-        assert 'options' not in kwargs_
-    finally:
-        Settings._reset()
+    expected_kwargs_ = get_settings().db_conn_kwargs
+    kwargs_ = _get_psycopg_conn_kwargs()
+
+    assert kwargs_ == expected_kwargs_
+    assert kwargs_ is not expected_kwargs_
 
 
-def test_get_psycopg_conn_kwargs_with_custom_options(monkeypatch):
-    """
-    GIVEN environment variables including encoded POSTGRES_OPTIONS
-    WHEN _get_psycopg_conn_kwargs is called
-    THEN it unquotes the options string and sets custom connection parameters.
-    """
-    Settings._reset()
-    try:
-        monkeypatch.setenv('RADAR_ENV', 'test')
-        monkeypatch.setenv('POSTGRES_HOST', 'custom-db-host')
-        monkeypatch.setenv('POSTGRES_PORT', '5433')
-        monkeypatch.setenv('POSTGRES_DB', 'custom_db')
-        monkeypatch.setenv('POSTGRES_USER', 'custom_user')
-        monkeypatch.setenv('POSTGRES_PASSWORD', 'custom_secret')
-        monkeypatch.setenv('POSTGRES_SSL_MODE', 'require')
-        monkeypatch.setenv('POSTGRES_OPTIONS', '-c%20statement_timeout%3D5000')
-
-        kwargs_ = _get_psycopg_conn_kwargs()
-
-        assert kwargs_['host'] == 'custom-db-host'
-        assert kwargs_['port'] == 5433
-        assert kwargs_['dbname'] == 'custom_db'
-        assert kwargs_['user'] == 'custom_user'
-        assert kwargs_['password'] == 'custom_secret'  # noqa: S105
-        assert kwargs_['sslmode'] == 'require'
-        assert kwargs_['options'] == '-c statement_timeout=5000'
-    finally:
-        Settings._reset()
-
-
-def test_get_psycopg_connection_commit_on_success():
+def test_get_psycopg_connection_commit_on_success() -> None:
     """
     GIVEN a successful context block
     WHEN get_psycopg_connection is executed
@@ -91,7 +51,7 @@ def test_get_psycopg_connection_commit_on_success():
         mock_conn_.close.assert_called_once()
 
 
-def test_get_psycopg_connection_rollback_on_error():
+def test_get_psycopg_connection_rollback_on_error() -> None:
     """
     GIVEN an exception raised inside the context block
     WHEN get_psycopg_connection is executed
@@ -101,7 +61,7 @@ def test_get_psycopg_connection_rollback_on_error():
     error_message_ = 'Simulated SQL execution error'
 
     with patch('psycopg.connect', return_value=mock_conn_):
-        with pytest.raises(RuntimeError, match=error_message_):
+        with pytest.raises(RuntimeError, match=r'SQL execution error'):
             with get_psycopg_connection():
                 raise RuntimeError(error_message_)
 
@@ -110,7 +70,7 @@ def test_get_psycopg_connection_rollback_on_error():
         mock_conn_.close.assert_called_once()
 
 
-def test_get_psycopg_connection_suppresses_rollback_failure_on_error():
+def test_get_psycopg_connection_suppresses_rollback_failure_on_error() -> None:
     """
     GIVEN an exception raised inside the context block and rollback itself fails
     WHEN get_psycopg_connection is executed
@@ -121,7 +81,7 @@ def test_get_psycopg_connection_suppresses_rollback_failure_on_error():
     error_message_ = 'Original query failure'
 
     with patch('psycopg.connect', return_value=mock_conn_):
-        with pytest.raises(RuntimeError, match=error_message_):
+        with pytest.raises(RuntimeError, match=r'Original query failure'):
             with get_psycopg_connection():
                 raise RuntimeError(error_message_)
 
@@ -130,7 +90,7 @@ def test_get_psycopg_connection_suppresses_rollback_failure_on_error():
         mock_conn_.close.assert_called_once()
 
 
-def test_connection_scope_reuses_supplied_connection():
+def test_connection_scope_reuses_supplied_connection() -> None:
     """
     GIVEN an active caller-supplied connection
     WHEN connection_scope is executed with the connection
@@ -148,7 +108,9 @@ def test_connection_scope_reuses_supplied_connection():
         supplied_conn_.close.assert_not_called()
 
 
-def test_connection_scope_creates_new_connection_when_none(mock_connection_scope):
+def test_connection_scope_creates_new_connection_when_none(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock]
+) -> None:
     """
     GIVEN a None connection argument
     WHEN connection_scope is executed
@@ -165,7 +127,7 @@ def test_connection_scope_creates_new_connection_when_none(mock_connection_scope
         scope_.__exit__.assert_called_once()
 
 
-def test_get_psycopg_read_connection_yields_and_closes_on_success():
+def test_get_psycopg_read_connection_yields_and_closes_on_success() -> None:
     """
     GIVEN a successful context block
     WHEN get_psycopg_read_connection is executed
@@ -186,7 +148,7 @@ def test_get_psycopg_read_connection_yields_and_closes_on_success():
         mock_conn_.close.assert_called_once()
 
 
-def test_get_psycopg_read_connection_closes_on_error():
+def test_get_psycopg_read_connection_closes_on_error() -> None:
     """
     GIVEN an exception raised inside the read context block
     WHEN get_psycopg_read_connection is executed
@@ -196,7 +158,7 @@ def test_get_psycopg_read_connection_closes_on_error():
     error_message_ = 'Simulated read query error'
 
     with patch('psycopg.connect', return_value=mock_conn_):
-        with pytest.raises(RuntimeError, match=error_message_):
+        with pytest.raises(RuntimeError, match=r'read query error'):
             with get_psycopg_read_connection():
                 raise RuntimeError(error_message_)
 
@@ -205,7 +167,7 @@ def test_get_psycopg_read_connection_closes_on_error():
         mock_conn_.close.assert_called_once()
 
 
-def test_read_connection_scope_reuses_supplied_connection():
+def test_read_connection_scope_reuses_supplied_connection() -> None:
     """
     GIVEN an active caller-supplied read connection
     WHEN read_connection_scope is executed with the connection
@@ -223,7 +185,9 @@ def test_read_connection_scope_reuses_supplied_connection():
         supplied_conn_.close.assert_not_called()
 
 
-def test_read_connection_scope_creates_new_connection_when_none(mock_connection_scope):
+def test_read_connection_scope_creates_new_connection_when_none(
+    mock_connection_scope: tuple[MagicMock, MagicMock, MagicMock]
+) -> None:
     """
     GIVEN a None connection argument
     WHEN read_connection_scope is executed
@@ -241,7 +205,7 @@ def test_read_connection_scope_creates_new_connection_when_none(mock_connection_
 
 
 @pytest.mark.integration
-def test_get_psycopg_connection_live_query():
+def test_get_psycopg_connection_live_query() -> None:
     """
     GIVEN an active PostgreSQL server container
     WHEN get_psycopg_connection is used to execute a live query
@@ -257,7 +221,7 @@ def test_get_psycopg_connection_live_query():
 
 
 @pytest.mark.integration
-def test_get_psycopg_read_connection_live_query():
+def test_get_psycopg_read_connection_live_query() -> None:
     """
     GIVEN an active PostgreSQL server container
     WHEN get_psycopg_read_connection is used to execute a live query

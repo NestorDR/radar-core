@@ -3,8 +3,9 @@
 # --- Python modules ---
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
 from unittest.mock import patch
-from zoneinfo import ZoneInfo
 
 # --- Third Party Libraries ---
 import polars as pl
@@ -17,9 +18,10 @@ from radar_core.infrastructure.price_cache import (
     PriceCache,
     PriceCacheMetadata,
 )
+from tests.conftest import QQQ, SPY
 
 
-def test_price_cache_constants():
+def test_price_cache_constants() -> None:
     """
     GIVEN price cache store constants
     WHEN inspected
@@ -29,7 +31,7 @@ def test_price_cache_constants():
     assert CACHE_METADATA_FILENAME == 'price_cache_metadata.json'
 
 
-def test_metadata_requires_all_attributes():
+def test_metadata_requires_all_attributes() -> None:
     """
     GIVEN PriceCacheMetadata class
     WHEN instantiated with all metadata attributes
@@ -51,7 +53,7 @@ def test_metadata_requires_all_attributes():
     assert metadata_.generation_id == 'generation-1'
     assert metadata_.updated_at_utc == '2026-09-05T23:00:00+00:00'
 
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match=r'missing.*argument'):
         PriceCacheMetadata(
             symbol_to_ticker={'SPY': 'SPY'},
             start_date='2020-01-01',
@@ -59,7 +61,7 @@ def test_metadata_requires_all_attributes():
         )
 
 
-def test_metadata_json_roundtrip():
+def test_metadata_json_roundtrip() -> None:
     """
     GIVEN a PriceCacheMetadata instance
     WHEN serialized to JSON and deserialized back
@@ -89,7 +91,7 @@ def test_metadata_json_roundtrip():
     assert restored_.is_complete == original_.is_complete
 
 
-def test_metadata_from_json_ignores_unknown_fields():
+def test_metadata_from_json_ignores_unknown_fields() -> None:
     """
     GIVEN a JSON string with extra unknown fields
     WHEN deserialized via from_json
@@ -110,7 +112,7 @@ def test_metadata_from_json_ignores_unknown_fields():
     assert not hasattr(restored_, 'unknown_field_x')
 
 
-def test_is_compatible_success():
+def test_is_compatible_success() -> None:
     """
     GIVEN a complete metadata snapshot
     WHEN is_compatible is called with matching mapping, start_date, and session_date
@@ -133,83 +135,57 @@ def test_is_compatible_success():
     assert reason_ == 'Compatible'
 
 
-def test_is_compatible_rejects_incomplete_cache():
+@pytest.mark.parametrize(
+    ('metadata_kwargs', 'query_kwargs', 'expected_reason'),
+    [
+        ({'is_complete': False}, {}, 'Cache is incomplete'),
+        ({'start_date': '2020-01-01'}, {'start_date': '2021-01-01'}, 'Start date mismatch'),
+        ({'symbol_to_ticker': {SPY: SPY}}, {'symbol_to_ticker': {SPY: SPY, QQQ: QQQ}}, 'Symbol or ticker mapping mismatch'),
+        ({'session_date': '2026-09-04'}, {'session_date': '2026-09-05'}, 'Session date mismatch'),
+    ],
+    ids=['incomplete_cache', 'start_date_mismatch', 'mapping_mismatch', 'session_date_mismatch'],
+)
+def test_is_compatible_rejections(
+    metadata_kwargs: dict[str, Any],
+    query_kwargs: dict[str, Any],
+    expected_reason: str,
+) -> None:
     """
-    GIVEN a metadata entry marked as is_complete=False
+    GIVEN an incompatible PriceCacheMetadata or query parameters
     WHEN is_compatible is evaluated
-    THEN it returns False with reason 'Cache is incomplete'.
+    THEN it returns False with the expected mismatch reason.
     """
-    metadata_ = PriceCacheMetadata(
-        symbol_to_ticker={'SPY': 'SPY'},
-        start_date='2020-01-01',
-        session_date='2026-09-05',
-        generation_id='generation-1',
-        is_complete=False,
-        updated_at_utc='2026-09-05T23:00:00+00:00',
-    )
-    is_compat_, reason_ = metadata_.is_compatible(
-        symbol_to_ticker={'SPY': 'SPY'},
-        start_date='2020-01-01',
-        session_date='2026-09-05',
-    )
+    base_meta_ = {
+        'symbol_to_ticker': {SPY: SPY},
+        'start_date': '2020-01-01',
+        'session_date': '2026-09-05',
+        'generation_id': 'generation-1',
+        'is_complete': True,
+        'updated_at_utc': '2026-09-05T23:00:00+00:00',
+    }
+    base_meta_.update(metadata_kwargs)
+    metadata_ = PriceCacheMetadata(**base_meta_)
+
+    base_query_ = {
+        'symbol_to_ticker': {SPY: SPY},
+        'start_date': '2020-01-01',
+        'session_date': '2026-09-05',
+    }
+    base_query_.update(query_kwargs)
+
+    is_compat_, reason_ = metadata_.is_compatible(**base_query_)
     assert is_compat_ is False
-    assert reason_ == 'Cache is incomplete'
+    assert expected_reason in reason_
 
 
-def test_is_compatible_rejects_start_date_mismatch():
+def test_is_compatible_accepts_subset_mapping() -> None:
     """
-    GIVEN a metadata entry with start_date '2020-01-01'
-    WHEN requested with start_date '2021-01-01'
-    THEN it returns False with start date mismatch reason.
-    """
-    metadata_ = PriceCacheMetadata(
-        symbol_to_ticker={'SPY': 'SPY'},
-        start_date='2020-01-01',
-        session_date='2026-09-05',
-        generation_id='generation-1',
-        is_complete=True,
-        updated_at_utc='2026-09-05T23:00:00+00:00',
-    )
-    is_compat_, reason_ = metadata_.is_compatible(
-        symbol_to_ticker={'SPY': 'SPY'},
-        start_date='2021-01-01',
-        session_date='2026-09-05',
-    )
-    assert is_compat_ is False
-    assert 'Start date mismatch' in reason_
-
-
-def test_is_compatible_rejects_mapping_mismatch():
-    """
-    GIVEN a metadata entry with symbol_to_ticker {'SPY': 'SPY'}
-    WHEN requested with different symbol mapping {'SPY': 'SPY', 'QQQ': 'QQQ'}
-    THEN it returns False with mapping mismatch reason.
-    """
-    metadata_ = PriceCacheMetadata(
-        symbol_to_ticker={'SPY': 'SPY'},
-        start_date='2020-01-01',
-        session_date='2026-09-05',
-        generation_id='generation-1',
-        is_complete=True,
-        updated_at_utc='2026-09-05T23:00:00+00:00',
-    )
-    is_compat_, reason_ = metadata_.is_compatible(
-        symbol_to_ticker={'SPY': 'SPY', 'QQQ': 'QQQ'},
-        start_date='2020-01-01',
-        session_date='2026-09-05',
-    )
-    assert is_compat_ is False
-    assert 'Symbol or ticker mapping mismatch' in reason_
-
-
-def test_is_compatible_accepts_subset_mapping():
-    """
-    GIVEN a metadata entry with multiple cached symbols {'SPY': 'SPY', 'QQQ': 'QQQ'}
-    WHEN requested with a subset of cached symbols {'SPY': 'SPY'}
+    GIVEN a metadata entry with multiple cached symbols {SPY: SPY, QQQ: QQQ}
+    WHEN requested with a subset of cached symbols {SPY: SPY}
     THEN it returns True with reason 'Compatible'.
     """
     metadata_ = PriceCacheMetadata(
-        symbol_to_ticker={'SPY': 'SPY', 'QQQ': 'QQQ'},
+        symbol_to_ticker={SPY: SPY, QQQ: QQQ},
         start_date='2020-01-01',
         session_date='2026-09-05',
         generation_id='generation-1',
@@ -217,7 +193,7 @@ def test_is_compatible_accepts_subset_mapping():
         updated_at_utc='2026-09-05T23:00:00+00:00',
     )
     is_compat_, reason_ = metadata_.is_compatible(
-        symbol_to_ticker={'SPY': 'SPY'},
+        symbol_to_ticker={SPY: SPY},
         start_date='2020-01-01',
         session_date='2026-09-05',
     )
@@ -225,40 +201,7 @@ def test_is_compatible_accepts_subset_mapping():
     assert reason_ == 'Compatible'
 
 
-def test_is_compatible_rejects_session_date_mismatch():
-    """
-    GIVEN a metadata entry from session_date '2026-09-04'
-    WHEN requested with current session_date '2026-09-05'
-    THEN it returns False with session date mismatch reason.
-    """
-    metadata_ = PriceCacheMetadata(
-        symbol_to_ticker={'SPY': 'SPY'},
-        start_date='2020-01-01',
-        session_date='2026-09-04',
-        generation_id='generation-1',
-        is_complete=True,
-        updated_at_utc='2026-09-05T23:00:00+00:00',
-    )
-    is_compat_, reason_ = metadata_.is_compatible(
-        symbol_to_ticker={'SPY': 'SPY'},
-        start_date='2020-01-01',
-        session_date='2026-09-05',
-    )
-    assert is_compat_ is False
-    assert 'Session date mismatch' in reason_
-
-
-def test_timezone_resolution_new_york():
-    """
-    GIVEN the IANA timezone identifier 'America/New_York'
-    WHEN resolved via zoneinfo.ZoneInfo
-    THEN it successfully resolves without raising an exception.
-    """
-    tz_ = ZoneInfo('America/New_York')
-    assert tz_.key == 'America/New_York'
-
-
-def test_price_cache_paths(tmp_path):
+def test_price_cache_paths(tmp_path: Path) -> None:
     """
     GIVEN a PriceCache initialized with a cache directory
     WHEN data_path and metadata_path are accessed
@@ -269,7 +212,7 @@ def test_price_cache_paths(tmp_path):
     assert cache_.metadata_path == tmp_path / CACHE_METADATA_FILENAME
 
 
-def test_price_cache_save_roundtrip(tmp_path):
+def test_price_cache_save_roundtrip(tmp_path: Path) -> None:
     """
     GIVEN a Polars DataFrame and PriceCacheMetadata
     WHEN save is called
@@ -302,7 +245,7 @@ def test_price_cache_save_roundtrip(tmp_path):
     assert loaded_meta_.symbol_to_ticker == meta_.symbol_to_ticker
 
 
-def test_price_cache_read_metadata_missing_or_corrupt(tmp_path):
+def test_price_cache_read_metadata_missing_or_corrupt(tmp_path: Path) -> None:
     """
     GIVEN a PriceCache instance
     WHEN metadata is missing, corrupted, or incomplete
@@ -326,7 +269,7 @@ def test_price_cache_read_metadata_missing_or_corrupt(tmp_path):
     assert cache_.read_metadata() is None
 
 
-def test_price_cache_read_data_corrupt_file(tmp_path):
+def test_price_cache_read_data_corrupt_file(tmp_path: Path) -> None:
     """
     GIVEN a cache directory with a corrupted parquet data file
     WHEN read_data is called
@@ -337,7 +280,7 @@ def test_price_cache_read_data_corrupt_file(tmp_path):
     assert cache_.read_data() is None
 
 
-def test_price_cache_save_atomic_failure_safety(tmp_path):
+def test_price_cache_save_atomic_failure_safety(tmp_path: Path) -> None:
     """
     GIVEN an existing valid cache
     WHEN a subsequent save operation fails
@@ -365,7 +308,7 @@ def test_price_cache_save_atomic_failure_safety(tmp_path):
     )
 
     with patch.object(pl.DataFrame, 'write_parquet', side_effect=IOError('Disk full')), \
-         pytest.raises(IOError, match='Disk full'):
+         pytest.raises(IOError, match=r'Disk full'):
         cache_.save(df_, failing_meta_)
 
     loaded_df_ = cache_.read_data()
@@ -376,7 +319,7 @@ def test_price_cache_save_atomic_failure_safety(tmp_path):
     assert list(tmp_path.glob('.tmp_*')) == []
 
 
-def test_price_cache_metadata_age_in_minutes():
+def test_price_cache_metadata_age_in_minutes() -> None:
     """
     GIVEN a metadata entry with updated_at_utc
     WHEN age_in_minutes is called with a timezone-aware datetime
@@ -395,7 +338,7 @@ def test_price_cache_metadata_age_in_minutes():
     assert abs(age_ - 7.5) < 1e-4
 
 
-def test_price_cache_read_data_success(tmp_path):
+def test_price_cache_read_data_success(tmp_path: Path) -> None:
     """
     GIVEN a saved Parquet data file
     WHEN read_data is called
@@ -417,7 +360,7 @@ def test_price_cache_read_data_success(tmp_path):
     assert read_df_.shape == (3, 1)
 
 
-def test_price_cache_read_data_missing_file(tmp_path):
+def test_price_cache_read_data_missing_file(tmp_path: Path) -> None:
     """
     GIVEN a cache directory without data file
     WHEN read_data is called
