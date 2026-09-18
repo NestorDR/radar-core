@@ -16,7 +16,7 @@ import pytest
 
 # --- App modules ---
 from radar_core.domain.technical import RSI
-from radar_core.helpers.constants import RSI_2B, RSI_RC, SMA
+from radar_core.helpers.constants import RSI_2B, RSI_RC, RSI_SMA, SMA
 from radar_core.infrastructure.price_provider import PriceProvider
 from radar_core.infrastructure.security_repository import SecurityRepository
 from radar_core.models import Ratios, Strategies
@@ -106,11 +106,11 @@ def mock_crud_scope(
         yield connection_, cursor_, scope_
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def mock_strategy_db() -> Generator[None, None, None]:
     """
-    Mocks database lookup of strategy metadata and flag_in_process for pure offline testing.
-    Dynamically returns matching Strategies instances based on acronym.
+    Autouse fixture that mocks database strategy lookup and ratio persistence in StrategyABC
+    to ensure domain strategy tests run purely offline without live database connections.
     """
     def _mock_get_by_acronym(acronym: str, conn: Any = None) -> Strategies:
         if acronym == RSI_2B:
@@ -119,11 +119,20 @@ def mock_strategy_db() -> Generator[None, None, None]:
             return Strategies(id=2, acronym=RSI_RC, name=STRATEGY_NAME_RSI_RC)
         if acronym == SMA:
             return Strategies(id=3, acronym=SMA, name=STRATEGY_NAME_SMA)
+        if acronym == RSI_SMA:
+            return Strategies(id=4, acronym=RSI_SMA, name=STRATEGY_NAME_RSI_SMA)
         return Strategies(id=99, acronym=acronym, name=acronym)
 
+    mock_crud_instance_ = MagicMock()
+    mock_crud_instance_.get_by_acronym.side_effect = _mock_get_by_acronym
+
+    mock_repo_instance_ = MagicMock()
+    mock_repo_instance_.flag_in_process.return_value = 0
+    mock_repo_instance_.persist_and_cleanup.return_value = 0
+
     with (
-        patch('radar_core.infrastructure.crud.StrategyCrud.get_by_acronym', side_effect=_mock_get_by_acronym),
-        patch('radar_core.infrastructure.ratio_repository.RatioRepository.flag_in_process', return_value=0),
+        patch('radar_core.domain.strategies.base_strategy.StrategyCrud', return_value=mock_crud_instance_),
+        patch('radar_core.domain.strategies.base_strategy.RatioRepository', return_value=mock_repo_instance_),
     ):
         yield
 
@@ -164,11 +173,35 @@ def real_spy_prices(live_spy_prices: pl.DataFrame) -> pl.DataFrame:
 def _cached_frozen_spy_prices() -> pl.DataFrame:
     """
     Internal session fixture that reads the frozen SPY daily sample parquet file.
+    If the fixture file does not exist, generates a synthetic oscillating price dataset.
 
     :return: Polars DataFrame containing frozen sample prices.
     """
     parquet_path_ = Path(__file__).parent / 'fixtures' / 'spy_daily_sample.parquet'
-    df_ = pl.read_parquet(parquet_path_)
+    if parquet_path_.is_file():
+        df_ = pl.read_parquet(parquet_path_)
+    else:
+        # Graceful fallback: synthesize 350 bars with oscillations so moving average crosses occur
+        dates_ = [date(2024, 1, 1) + timedelta(days=i_) for i_ in range(350)]
+        t_ = np.linspace(0, 8 * np.pi, 350)
+        close_ = 400.0 + 30.0 * np.sin(t_) + 0.1 * np.arange(350)
+        open_ = close_ - 0.5
+        high_ = close_ + 2.0
+        low_ = close_ - 2.0
+        volume_ = np.full(350, 1000000.0)
+        pct_change_ = np.zeros(350)
+        pct_change_[1:] = (close_[1:] - close_[:-1]) / close_[:-1] * 100.0
+        bar_number_ = np.arange(350, dtype=np.int32)
+        df_ = pl.DataFrame({
+            'Date': dates_,
+            'Open': open_,
+            'High': high_,
+            'Low': low_,
+            'Close': close_,
+            'Volume': volume_,
+            'PercentChange': pct_change_,
+            'BarNumber': bar_number_,
+        })
     if 'Rsi' not in df_.columns:
         df_ = RSI(df_)
     return df_
