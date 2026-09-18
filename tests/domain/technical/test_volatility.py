@@ -199,3 +199,44 @@ def test_atr_missing_columns() -> None:
     df_missing_ = pl.DataFrame({'Open': [10.0], 'Close': [10.5]})
     with pytest.raises(ValueError, match=r'Missing required columns'):
         ATR(df_missing_)
+
+
+def test_mogalef_bands_non_positive_prices_automatic_linear_fallback() -> None:
+    """
+    GIVEN a price series containing a bar with a non-positive typical price (e.g. USOIL 2020-04-20).
+    WHEN MogalefBands is executed with log_scale=True (the default).
+    THEN it automatically executes in linear price space, matching log_scale=False,
+    and all subsequent bars remain valid without permanent NaN accumulator corruption.
+    """
+    # Create price series with a negative bar at index 10 followed by normal positive prices
+    prices_ = [20.0] * 10 + [-37.63] + [20.0] * 20
+    prices_df_ = pl.DataFrame({
+        'Open': prices_,
+        'High': prices_,
+        'Low': prices_,
+        'Close': prices_,
+    })
+
+    # Default log_scale=True execution
+    result_log_df_ = MogalefBands(prices_df_, period_reg=3, period_dev=7)
+    # Explicit log_scale=False execution
+    result_linear_df_ = MogalefBands(prices_df_, period_reg=3, period_dev=7, log_scale=False)
+
+    # Both must match exactly because log_scale automatically fell back to linear scale
+    np.testing.assert_allclose(
+        result_log_df_['MogalefUpper'].to_numpy(),
+        result_linear_df_['MogalefUpper'].to_numpy(),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        result_log_df_['MogalefLower'].to_numpy(),
+        result_linear_df_['MogalefLower'].to_numpy(),
+        equal_nan=True,
+    )
+
+    # Trailing bars (beyond warmup period) must NOT be null / NaN
+    assert result_log_df_['MogalefUpper'][-1] is not None
+    assert result_log_df_['MogalefLower'][-1] is not None
+    assert not np.isnan(float(result_log_df_['MogalefUpper'][-1]))
+    assert not np.isnan(float(result_log_df_['MogalefLower'][-1]))
+

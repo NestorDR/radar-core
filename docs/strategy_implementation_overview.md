@@ -234,7 +234,7 @@ Compared with the RSI SMA strategy, Two Bands uses absolute RSI zones rather tha
 
 The strategy also has a price-based stop-loss. For a long position, the stop-loss is based on a lower price band. For a short position, it is based on an upper price band.
 
-These bands are calculated using Mogalef Bands (operating in scale-invariant logarithmic space by default to prevent negative lower bands and trapped corridors on high-volatility assets; see [Logarithmic Mogalef Bands](mogalef_bands_logarithmic_scale.md)), which create a moving price corridor. In addition, stop-loss levels are vectorially clamped in Polars according to the execution timeframe (Daily 12% / Weekly 18%) to prevent catastrophic tail risk on volatile and leveraged instruments while preserving tighter Mogalef corridors (see [Timeframe-Differentiated Stop-Loss Clamping](timeframe_differentiated_stop_loss_clamping.md)). If the price breaches the relevant stop-loss before the RSI output completes the expected lifecycle, the position is closed as a loss.
+These bands are calculated using Mogalef Bands (operating in scale-invariant logarithmic space by default to prevent negative lower bands and trapped corridors on high-volatility assets, with automatic linear fallback for assets with non-positive prices; see [Logarithmic Mogalef Bands](mogalef_bands_logarithmic_scale.md)), which create a moving price corridor. In addition, stop-loss levels are vectorially clamped in Polars according to the execution timeframe (Daily 12% / Weekly 18%) to prevent catastrophic tail risk on volatile and leveraged instruments while preserving tighter Mogalef corridors (see [Timeframe-Differentiated Stop-Loss Clamping](timeframe_differentiated_stop_loss_clamping.md)). If the price breaches the relevant stop-loss before the RSI output completes the expected lifecycle, the position is closed as a loss.
 
 The stop-loss and RSI output are therefore two alternative ways for a Two Bands position to end:
 
@@ -418,4 +418,4 @@ RsiRollerCoaster  →  RSI Rollercoaster
 RsiStrategyABC    →  shared RSI stop-loss preparation
 ```
 
-RSI(14) is calculated once per timeframe and shared by the RSI strategies. Mogalef Bands are also calculated once per timeframe when either RSI band strategy is enabled, applying logarithmic scaling by default. The detailed filtering and lifecycle rules are then applied separately to each strategy's own signal process.
+RSI(14) is calculated once per timeframe and shared by the RSI strategies. Mogalef Bands are also calculated once per timeframe when either RSI band strategy is enabled, applying logarithmic scaling by default with automatic linear fallback when non-positive prices are present. The detailed filtering and lifecycle rules are then applied separately to each strategy's own signal process.

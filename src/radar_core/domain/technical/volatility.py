@@ -1,5 +1,8 @@
 # src/radar_core/domain/technical/volatility.py
 
+# --- Python modules ---
+import logging
+
 # --- Third Party Libraries ---
 # numba: JIT compiler for numerical Python functions
 from numba import njit
@@ -10,6 +13,8 @@ import polars as pl
 # TA-Lib: Python wrapper for TA-LIB based on Cython, for TA indicator calculations
 #  Visit: https://github.com/ta-lib/ta-lib-python/ and https://ta-lib.org/functions/
 import talib
+
+logger_ = logging.getLogger(__name__)
 
 
 # noqa: N802 – instructs the linter (Ruff/Bandit) to ignore function name should be lowercase
@@ -111,13 +116,17 @@ def MogalefBands(  # noqa: N802
      - Stepped Corridor: Stepped levels hold until breakout in log space, then exponentiated back (exp)
      This scale-invariant formulation guarantees strictly positive lower bands (MogalefLower > 0)
      and prevents frozen corridors on high-volatility or decaying inverse ETFs.
+     If non-positive typical prices (CP <= 0) exist in the series, the calculation automatically falls
+     back to linear price space to prevent undefined logarithms and avoid permanent NaN corruption in
+     downstream TA-Lib accumulators.
     When log_scale is False, calculation is performed directly in linear price space.
 
     :param prices_df: Historical prices. It must include at least ['Open', 'High', 'Low', 'Close'].
     :param period_reg: Lookback period for the linear regression line. Must be >= 1.
     :param period_dev: Lookback period for standard deviation of the regression line. Must be >= 1.
     :param multiplier: Non-negative standard-deviation multiplier for upper and lower bands.
-    :param log_scale: If True (default), calculates bands in logarithmic space to prevent negative bands.
+    :param log_scale: If True (default), calculates bands in logarithmic space to prevent negative bands,
+     automatically falling back to linear space if any non-positive prices are detected.
 
     :return: The input DataFrame with 'MogalefUpper' and 'MogalefLower' columns added.
 
@@ -154,11 +163,14 @@ def MogalefBands(  # noqa: N802
 
     typical_price_ = (open_prices_ + high_prices_ + low_prices_ + 2.0 * close_prices_) / 5.0
 
-    if log_scale:
-        # Guard against non-positive prices before natural logarithmic transformation
-        valid_mask_ = typical_price_ > 0.0
-        log_typical_price_ = np.full_like(typical_price_, np.nan)
-        np.log(typical_price_, out=log_typical_price_, where=valid_mask_)
+    # Determine effective calculation scale: automatically fallback to linear scale if any non-positive prices exist
+    use_log_scale_ = log_scale and not np.any(typical_price_ <= 0.0)
+    if log_scale and not use_log_scale_:
+        logger_.info('Non-positive typical price detected in series; falling back to linear scale Mogalef Bands.')
+
+    if use_log_scale_:
+        # Natural logarithmic transformation of strictly positive typical prices
+        log_typical_price_ = np.log(typical_price_)
 
         # Calculate Linear Regression for Central Equilibrium Line in log space
         linear_regression_ = talib.LINEARREG(log_typical_price_, period_reg)

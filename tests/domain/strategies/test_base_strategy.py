@@ -211,6 +211,22 @@ def test_rsi_strategy_abc_get_current_indicators() -> None:
     assert indicators_ == {'rsi': 55.4, 'up': 128.5, 'low': 118.2}
 
 
+def test_rsi_strategy_abc_get_current_indicators_with_null_values() -> None:
+    """
+    GIVEN a Polars DataFrame where Rsi, MogalefUpper, or MogalefLower contains null values at the latest bar.
+    WHEN RsiStrategyABC.get_current_indicators is called.
+    THEN it gracefully returns None for null fields without raising a TypeError.
+    """
+    df_nulls_ = pl.DataFrame({
+        'Rsi': [45.1, 50.4, None],
+        'MogalefUpper': [120.5, 125.6, None],
+        'MogalefLower': [110.1, 115.4, 118.2],
+    })
+    indicators_ = RsiStrategyABC.get_current_indicators(df_nulls_)
+
+    assert indicators_ == {'rsi': None, 'up': None, 'low': 118.2}
+
+
 def test_perfile_performance_with_current_indicators() -> None:
     """
     GIVEN an AnalysisContext, price data, and a current_indicators dictionary.

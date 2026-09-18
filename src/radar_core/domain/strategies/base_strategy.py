@@ -768,12 +768,16 @@ class RsiStrategyABC(StrategyABC, ABC):
     def get_current_indicators(prices_df: pl.DataFrame) -> dict:
         """
         Extracts current technical indicators (RSI and Mogalef Upper/Lower bands) at the latest price bar.
+        If an indicator value is missing or null, None is preserved without raising an error.
 
         :param prices_df: DataFrame containing at least 'Rsi', 'MogalefUpper', and 'MogalefLower' columns.
-        :return: A dictionary containing current indicators rounded to one decimal place.
+        :return: A dictionary containing current indicators rounded to one decimal place, or None if null.
         """
+        rsi_ = prices_df['Rsi'][-1]
+        up_ = prices_df['MogalefUpper'][-1]
+        low_ = prices_df['MogalefLower'][-1]
         return {
-            'rsi': round(float(prices_df['Rsi'][-1]), 1),
-            'up': round(float(prices_df['MogalefUpper'][-1]), 1),
-            'low': round(float(prices_df['MogalefLower'][-1]), 1),
+            'rsi': round(float(rsi_), 1) if rsi_ is not None else None,
+            'up': round(float(up_), 1) if up_ is not None else None,
+            'low': round(float(low_), 1) if low_ is not None else None,
         }
