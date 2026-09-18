@@ -13,7 +13,7 @@ from pathlib import Path
 #      with the interpreter.
 import sys
 # typing: provides runtime support for type hints
-from typing import Final
+from typing import Any, Final
 # urllib.parse: provides URL parsing and unquoting facilities
 from urllib import parse
 # zoneinfo: provides concrete time zone implementations representing the system's time zones.
@@ -88,15 +88,18 @@ class Settings:
         self.price_cache_kwargs = self._get_price_cache_kwargs()
 
         # Load YAML settings file
-        config_ = self._read_yaml_file() or {}
-        self.symbols: list[str] = config_.get('symbols', [])
-        self.undeletable_symbols: list[str] = config_.get('done', []) or []
+        config_: dict[str, Any] = self._read_yaml_file() or {}
+        self.symbols: list[str] = self._get_list(config_, 'symbols', [])
+        self.undeletable_symbols: list[str] = self._get_list(config_, 'done', [])
         self.undeletable_symbols += self.symbols
-        self.evaluable_strategies: list[str] = config_.get('evaluable_strategies', [])
+        self.evaluable_strategies: list[str] = self._get_list(config_, 'evaluable_strategies', [])
         self.rsi_input_filter: str = str(config_.get('rsi_input_filter', '')).strip()
-        self.win_probability_threshold: float = float(config_.get('win_probability_threshold', _DEFAULT_WIN_PROBABILITY_THRESHOLD))
-        self.stop_loss_cap_daily: float = float(config_.get('stop_loss_cap_daily', _DEFAULT_STOP_LOSS_CAP_DAILY))
-        self.stop_loss_cap_weekly: float = float(config_.get('stop_loss_cap_weekly', _DEFAULT_STOP_LOSS_CAP_WEEKLY))
+        self.win_probability_threshold: float = self._parse_float(
+            config_, 'win_probability_threshold', _DEFAULT_WIN_PROBABILITY_THRESHOLD)
+        self.stop_loss_cap_daily: float = self._parse_float(
+            config_, 'stop_loss_cap_daily', _DEFAULT_STOP_LOSS_CAP_DAILY)
+        self.stop_loss_cap_weekly: float = self._parse_float(
+            config_, 'stop_loss_cap_weekly', _DEFAULT_STOP_LOSS_CAP_WEEKLY)
 
     @classmethod
     def _reset(cls) -> None:
@@ -293,10 +296,6 @@ class Settings:
             'dev_max_age_minutes': Settings._parse_int('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', 10),
         }
 
-    # endregion Environment Variables
-
-    # region Parsers
-
     @staticmethod
     def _parse_bool(env_var: str,
                     default: bool = False) -> bool:
@@ -326,7 +325,7 @@ class Settings:
         try:
             return int(value_)
         except ValueError as e_:
-            raise ValueError(f'Invalid integer value for {env_var}: "{value_}".') from e_
+            raise ValueError(f'Invalid integer value for `{env_var}`: "{value_}".') from e_
 
     @staticmethod
     def _parse_time(env_var: str,
@@ -344,7 +343,7 @@ class Settings:
         try:
             return time.fromisoformat(value_)
         except ValueError as e_:
-            raise ValueError(f'Invalid time format for {env_var}: "{value_}". Expected HH:MM.') from e_
+            raise ValueError(f'Invalid time format for `{env_var}`: "{value_}". Expected HH:MM.') from e_
 
     @staticmethod
     def _parse_timezone(env_var: str,
@@ -362,7 +361,7 @@ class Settings:
         try:
             return ZoneInfo(value_)
         except (ZoneInfoNotFoundError, ValueError) as e_:
-            raise ValueError(f'Invalid timezone for {env_var}: "{value_}".') from e_
+            raise ValueError(f'Invalid timezone for `{env_var}`: "{value_}".') from e_
 
     @staticmethod
     def _parse_dir(env_var: str,
@@ -378,11 +377,11 @@ class Settings:
         """
         value_ = os.getenv(env_var, default).strip()
         if not value_:
-            raise ValueError(f'{env_var} cannot be empty.')
+            raise ValueError(f'`{env_var}` cannot be empty.')
 
         return Path(value_)
 
-    # endregion Parsers
+    # endregion Environment Variables
 
     # region YAML Settings File
 
@@ -421,6 +420,50 @@ class Settings:
             verbose(message_, ERROR, self.verbosity_level)
             logger_.exception(message_, exc_info=e_)
             raise FileNotFoundError(message_) from e_
+
+    @staticmethod
+    def _get_list(config: dict,
+                  setting_name: str,
+                  default: list[str] | None = None) -> list[str]:
+        """
+        Retrieves a list setting from the YAML setting.
+
+        :param config: Parsed YAML configuration.
+        :param setting_name: Name of the list setting.
+        :param default: Default list value if not set.
+
+        :return: The configured list.
+        :raises ValueError: If the setting is not a list.
+        """
+
+        value_ = config.get(setting_name, default) or []
+
+        if not isinstance(value_, list):
+            raise ValueError(f'Invalid list value for `{setting_name}`.')
+
+        return value_
+
+    @staticmethod
+    def _parse_float(config: dict,
+                     setting_name: str,
+                     default: float) -> float:
+        """
+        Parses a floating-point from the YAML setting.
+
+        :param config: Parsed YAML configuration.
+        :param setting_name: Name of the setting value.
+        :param default: Default value if not set.
+
+        :return: Parsed floating-point value.
+        :raises ValueError: If the supplied value cannot be parsed as a float.
+        """
+
+        value_ = config.get(setting_name, default)
+
+        try:
+            return float(value_)
+        except (TypeError, ValueError) as e_:
+            raise ValueError(f'Invalid float value for `{setting_name}`.') from e_
 
     # endregion YAML Settings File
 

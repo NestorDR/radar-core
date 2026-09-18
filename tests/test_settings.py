@@ -65,7 +65,7 @@ def test_initialization_retry_on_failure(monkeypatch):
     """
     monkeypatch.setenv('RADAR_SETTING_FILE', 'non_existent_settings_file_12345.yml')
 
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(FileNotFoundError, match=r'not found'):
         get_settings()
 
     assert Settings._instance is None
@@ -256,7 +256,7 @@ def test_price_cache_malformed_integer_raises(monkeypatch):
     monkeypatch.setenv('RADAR_ENV', 'test')
     monkeypatch.setenv('RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES', 'not_a_number')
 
-    with pytest.raises(ValueError, match='Invalid integer value for RADAR_PRICE_CACHE_DEV_MAX_AGE_MINUTES'):
+    with pytest.raises(ValueError, match=r'Invalid integer'):
         get_settings()
 
 
@@ -269,7 +269,7 @@ def test_price_cache_malformed_time_raises(monkeypatch):
     monkeypatch.setenv('RADAR_ENV', 'test')
     monkeypatch.setenv('RADAR_PRICE_CACHE_TRADING_START', '25:99')
 
-    with pytest.raises(ValueError, match='Invalid time format for RADAR_PRICE_CACHE_TRADING_START'):
+    with pytest.raises(ValueError, match=r'Invalid time'):
         get_settings()
 
 
@@ -282,7 +282,7 @@ def test_price_cache_malformed_timezone_raises(monkeypatch):
     monkeypatch.setenv('RADAR_ENV', 'test')
     monkeypatch.setenv('RADAR_PRICE_CACHE_TIMEZONE', 'Invalid/Non_Existent_Timezone')
 
-    with pytest.raises(ValueError, match='Invalid timezone for RADAR_PRICE_CACHE_TIMEZONE'):
+    with pytest.raises(ValueError, match=r'Invalid timezone'):
         get_settings()
 
 
@@ -295,7 +295,7 @@ def test_price_cache_empty_dir_raises(monkeypatch):
     monkeypatch.setenv('RADAR_ENV', 'test')
     monkeypatch.setenv('RADAR_PRICE_CACHE_DIR', '   ')
 
-    with pytest.raises(ValueError, match='RADAR_PRICE_CACHE_DIR cannot be empty'):
+    with pytest.raises(ValueError, match=r'cannot be empty'):
         get_settings()
 
 
@@ -434,7 +434,7 @@ def test_win_probability_threshold_invalid_type_raises(monkeypatch, tmp_path):
     custom_yaml_.write_text('symbols:\n  - SPY\nwin_probability_threshold: invalid_threshold\n')
     monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r'Invalid float'):
         get_settings()
 
 
@@ -495,5 +495,5 @@ def test_stop_loss_cap_invalid_type_raises(monkeypatch, tmp_path):
     custom_yaml_.write_text('symbols:\n  - SPY\nstop_loss_cap_daily: invalid_cap\n')
     monkeypatch.setenv('RADAR_SETTING_FILE', str(custom_yaml_))
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r'Invalid float'):
         get_settings()
