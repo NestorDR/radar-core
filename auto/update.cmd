@@ -1,11 +1,11 @@
-@echo off
+::@echo off
 cls
 
 :: Self-actualization
 uv self update
 
 ::Set python environment
-set ENV_FOLDER=%USERPROFILE%\repos\VirtualEnvironments\radar-3.13.14-uv-env
+set ENV_FOLDER=C:\Development\VirtualEnvs\radar-3.13.15-uv-env
 call %ENV_FOLDER%\Scripts\activate.bat
 
 uv pip uninstall talib

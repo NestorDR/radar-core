@@ -1,11 +1,11 @@
 :: new_uv_venv.cmd
 
 :: Set virtual environment (venv) outside the project folder structure for reusability
-set ENV_FOLDER=C:\Development\VirtualEnvs\radar-3.13.14-uv-env
+set ENV_FOLDER=C:\Development\VirtualEnvs\radar-3.13.15-uv-env
 
 :: Create with uv (universal virtualenv) the virtual environment pinned to that exact Python version
 :: --seed : will install pip, setuptools and wheel into the new environment, making it 100% compatible with PyCharm.
-uv venv --python 3.13.14 --seed %ENV_FOLDER%
+uv venv --python 3.13.15 --seed %ENV_FOLDER%
 
 :: Activate
 call %ENV_FOLDER%\Scripts\activate.bat

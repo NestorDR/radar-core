@@ -5,7 +5,7 @@
 
 :: 1. Set the virtual environment for this test run.
 :: setlocal preserves the original VIRTUAL_ENV; endlocal restores it before exit.
-set "VIRTUAL_ENV=C:\Development\VirtualEnvs\radar-3.13.14-uv-env"
+set "VIRTUAL_ENV=C:\Development\VirtualEnvs\radar-3.13.15-uv-env"
 
 :: 2. Run pytest with --cache-clear and route temporary fixture files to system TEMP
 uv run --active pytest %1 --cache-clear --basetemp="%TEMP%\pytest_runner"
