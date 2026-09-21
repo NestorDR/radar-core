@@ -496,13 +496,13 @@ if __name__ == '__main__':
     from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
 
     # Initialize app settings
-    settings_ = get_settings()
+    settings = get_settings()
     # Logger initialization
-    logging.config.dictConfig(settings_.log_config)
+    logging.config.dictConfig(settings.log_config)
     rotate_log_at_startup()
     # Get root logger and log start messages
     logger_ = getLogger(__name__)
-    script_name_ = os.path.basename(__file__)
+    script_name_ = str(os.path.basename(__file__))
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
@@ -512,9 +512,9 @@ if __name__ == '__main__':
         #  Analyze strategies over historical prices
         exit_code = analyzer(symbols_)
     except Exception as e_:
-        message_ = f'An exception occurred during the analysis: {e_}'
-        verbose(message_, ERROR, DEBUG)
-        logger_.exception(message_, exc_info=True)
+        message = f'An exception occurred during the analysis: {e_}'
+        verbose(message, ERROR, DEBUG)
+        logger_.exception(message, exc_info=True)
         exit_code = -100
     finally:
         # Finish logging, remove logger handlers and release memory

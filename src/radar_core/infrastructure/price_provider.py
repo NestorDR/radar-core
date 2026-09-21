@@ -529,7 +529,7 @@ if __name__ == '__main__':
     rotate_log_at_startup()
     # Get root logger and log start messages
     logger_ = getLogger(__name__)
-    script_name_ = os.path.basename(__file__)
+    script_name_ = str(os.path.basename(__file__))
     begin_logging(logger_, script_name_, INFO)
 
     price_provider_ = PriceProvider()
