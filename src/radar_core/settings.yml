@@ -1,5 +1,9 @@
 # settings.yml
+
+# Reserved symbols retained during database cleanup.
+# settings.py combines this list with symbols.
 done:
+
 symbols:
   - 'SPY'     # Most important
   - 'QQQ'
@@ -8,7 +12,8 @@ symbols:
   - 'XBI'
   - 'GDX'
   - 'IWM'
-  - 'VFLO'
+  - 'VTI'     # Total US stock market
+  - 'VFLO'    # Cashflow-focused
   - 'TQQQ'    # 2x3x ETFs
   - 'TECL'
   - 'SOXL'
@@ -17,75 +22,98 @@ symbols:
   - 'NUGT'
   - 'TNA'
   - 'SQQQ'
+  - 'TECS'
   - 'SOXS'
   - 'LABD'
   - 'SPXS'
   - 'TZA'
   - 'DUST'
+  - 'ROM'     # Technology 2x long ~ TECL
+  - 'REW'     # Technology 2x inverse ~ TECS
+  - 'USD'     # Semiconductors 2x long
+  - 'SSG'     # Semiconductors 2x inverse
   - 'MAGS'    # Magnificent
-  - 'MAGX'    # 2x Long MAGS
-  - 'AAPL'
-  - 'AMZN'
-  - 'AVGO'
-  - 'GOOGL'
-  - 'META'
-  - 'MSFT'
-  - 'NFLX'
-  - 'NVDA'
-  - 'TSLA'
-  - 'TSM'
+  - 'MAGX'    # 2x Long
   - 'DRAM'    # Memory ETF
-  - 'ROM'     # 2x Technology ~ TECL
-  - 'REW'
-  - 'BTC-USD' # Crypto
-  - 'BITX'    # 2x Long
-  - 'SBIT'    # 2x Short
-  - 'WGMI'
+  - 'XLI'     # Industrials
+  - 'UXI'     # 2x long
+  - 'SIJ'     # 2x inverse
+  - 'DUSL'    # 3x long
+  - 'BTC-USD' # Bitcoin
+  - 'BITX'    # 2x long
+  - 'SBIT'    # 2x inverse
+  - 'WGMI'    # Bitcoin Miners
   - 'DBC'     # Commodities
-  - 'PDBC'
-  - 'GOLD'    # Gold & Silver
-  - 'GLD'
-  - 'UGL'
-  - 'GLL'
-  - 'SILVER'
-  - 'SLV'
-  - 'AGQ'
-  - 'ZSL'
+  - 'PDBC'    # Commodities
+  - 'GOLD'    # Gold
+  - 'GLD'     # Gold ETF
+  - 'UGL'     # 2x long
+  - 'GLL'     # 2x inverse
+  - 'SILVER'  # Silver
+  - 'SLV'     # Silver ETF
+  - 'AGQ'     # 2x long
+  - 'ZSL'     # 2x inverse
   - 'XLE'     # Energy
-  - 'ERX'
-  - 'ERY'
-  - 'USOIL'
-  - 'USO'
-  - 'UNG'
-  - 'XLF'     # Banks
-  - 'FAS'
-  - 'FAZ'
+  - 'ERX'     # 2x long
+  - 'ERY'     # 2x inverse
+  - 'USOIL'   # Oil
+  - 'USO'     # Oil ETF
+  - 'UNG'     # Natural Gas ETF
+  - 'XLF'     # Financials
+  - 'FAS'     # 2x long
+  - 'FAZ'     # 2x inverse
   - 'REET'    # REIT - Real Estate Investment Trust
   - 'FXI'     # China
-  - 'YINN'
-  - 'BABA'
+  - 'YINN'    # 3x long
   - 'EWH'     # Hong Kong
   - 'EEM'     # Emerging
-  - 'EDC'
-  - 'EDZ'
+  - 'EDC'     # 3x long
+  - 'EDZ'     # 3x inverse
   - 'VGK'     # Europe
-  - 'ADBE'    # Following
+  - 'AAPL'    # Individual stocks
+  - 'ADBE'
+  - 'AMAT'
+  - 'AMD'
+  - 'AMZN'
+  - 'AVGO'
+  - 'BABA'
+  - 'COST'
+  - 'GOOGL'
+  - 'INTC'
+  - 'JPM'
+  - 'LRCX'
+  - 'MA'
   - 'MELI'
+  - 'META'
+  - 'MSFT'
+  - 'MU'
+  - 'NFLX'
+  - 'NVDA'
+  - 'ONON'
   - 'ORCL'
+  - 'PLTR'
+  - 'TSLA'
+  - 'TSM'
+  - 'V'
+  - 'WMT'
   - 'DIA'     # Down Jones
-  - 'UDOW'
-  - 'SDOW'
-  - 'TLT'     # Bonds
-  - 'TMF'
-  - 'TTT'
-  - 'SVXY'    # VIX
-  - 'UVXY'
+  - 'UDOW'    # 3x long
+  - 'SDOW'    # 3x inverse
+  - 'TLT'     # Treasury bonds ETF
+  - 'TMF'     # 3x long
+  - 'TTT'     # 3x inverse
+  - 'SVXY'    # Short-volatility
+  - 'UVXY'    # Long-volatility leveraged
+
 evaluable_strategies: # Use attribute name of the `class Strategies`, module `evaluable_strategies.py`
   - sma       # Profitable SMA
   - rsi_sma   # Profitable RSI(14) SMA
   - rsi_rc    # Profitable RSI(14) RC
   - rsi_2b    # Profitable RSI(14) 2B
+
 rsi_input_filter: 'price_action'  # options: 'none', 'price_action', 'atr_volatility', 'sma_trend'
+
 win_probability_threshold: 0.5  # Minimum winning probability threshold for a strategy to be persisted into the database
-stop_loss_cap_daily: 0.12  # Maximum percentage loss threshold for daily timeframe (Alternative A)
-stop_loss_cap_weekly: 0.18  # Maximum percentage loss threshold for weekly timeframe (Alternative A)
+
+stop_loss_cap_daily: 0.12  # Maximum percentage loss threshold for daily timeframe
+stop_loss_cap_weekly: 0.18  # Maximum percentage loss threshold for weekly timeframe
