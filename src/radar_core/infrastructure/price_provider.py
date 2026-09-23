@@ -183,12 +183,6 @@ class PriceProvider:
         # prepost = False, proxy = _SENTINEL_, rounding = False, timeout = 10, session = None,
         # multi_level_index = True
 
-        # Fallback: use weekly interval (5d) because Sep-22 is not being downloaded correctly with daily interval (1d).
-        today_dt_ = date.today()
-        weekday_ = date.today().weekday()  # weekday() returns 0 for Monday, 1 for Tuesday ... 6 for Sunday
-        last_monday_dt_ = today_dt_ - timedelta(days=weekday_)
-        interval_ = '1d' if start_date < last_monday_dt_ and weekday_ < 4 else '5d'
-
         downloaded_multi_symbol_df_ = yf.download(
             tickers,
             start_date,
@@ -197,7 +191,7 @@ class PriceProvider:
             progress=bool(verbosity_level == DEBUG),
             threads=self.max_workers,
             group_by='ticker',
-            interval=interval_
+            repair=True
         )
         return downloaded_multi_symbol_df_ if downloaded_multi_symbol_df_ is not None else pd.DataFrame()
 

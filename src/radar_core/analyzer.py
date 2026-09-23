@@ -135,7 +135,7 @@ def analyze(timeframe: int,
             f'\n[{symbol}]: {TIMEFRAMES[timeframe]} time frame analysis started at {datetime.now(LOCAL_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")}...')
         if verbosity_level == DEBUG:
             print(prices_df.head(1))
-        print(prices_df.tail(1))
+        print(prices_df.tail(2))
 
     # Add a row counter as a column, required to the analysis (is a zero-based bar number)
     prices_df = prices_df.with_columns(pl.arange(0, pl.len(), eager=False).cast(pl.Int32).alias('BarNumber'))
