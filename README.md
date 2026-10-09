@@ -4,16 +4,13 @@ Radar Core is a Python application that evaluates four complementary, pattern-ba
 
 The strategies progress from simple price or RSI moving-average crossovers to increasingly selective RSI movements between defined levels, with Rollercoaster requiring an intermediate extreme. Positions normally close on strategy-defined reversal or output crossings; RSI Two Bands and the initial phase of RSI Rollercoaster can also close on Mogalef-based price stop-losses. If neither condition occurs before the end of the analysis period, the position is valued at the final available bar. Only configurations with strictly positive net [profit](https://estrategiastrading.com/profit-factor/), positive [expected](https://estrategiastrading.com/calcular-la-esperanza-matematica-del-sistema-de-trading/) percentage return, and win probability exceeding the configured threshold, after strategy-specific candidate screening, are persisted. These results remain subject to false signals, changing market conditions, and historical overfitting.
 
-For details, see the [Strategy Implementation Overview](docs/strategy_implementation_overview.md) and [Trade Performance Percentage Ratios Architecture](docs/trade_performance_percentage_ratios.md).
+For details, see the [Strategy Implementation Overview](docs/strategy_implementation_overview.md).
 
 The analyzer downloads financial asset prices from Yahoo Finance, converts the external Pandas data to **Polars** DataFrames, and dispatches per-symbol worker processes. Each worker derives the weekly data and executes high-speed strategy evaluation using **NumPy arrays** and **Numba JIT-compiled kernels**.
 
 The project follows High Performance Practices, using concurrent symbol processing and CPU-optimized JIT kernels. Daily and weekly analyses for each symbol are evaluated sequentially within its worker. Its external runtime infrastructure is supported by the [Radar Infra](https://github.com/NestorDR/radar-infra) project.
 
-The fully operational results can be visited for public use: 
-- [All Ratios](https://radar.ndromero.com/public/dashboard/6e547cac-cbc3-4354-97c3-6745d8540d83?gain_prob=0.51&profit_vs_change=-0.20&security=&signals=2&strategy=&time_frame=#theme=night)
-- [Ratios for Stocks](https://radar.ndromero.com/public/dashboard/147ee420-badb-451c-a2d5-c30e78688ed0?profit_vs_change=&security=&strategy=&tab=6-day---open-----%7C#theme=night) 
-- [Ratios for Crypto](https://radar.ndromero.com/public/dashboard/0af531b3-df15-4aa4-a665-69704e95451e?profit_vs_change=&security=&strategy=&tab=10-day-open-----%7C#theme=night)
+The fully operational results can be visited for public use at [Ratios](https://radar.ndromero.com/public/dashboard/6e547cac-cbc3-4354-97c3-6745d8540d83?gain_prob=0.51&profit_vs_change=-0.20&security=&signals=2&strategy=&time_frame=#theme=night).
 
 ## Features
 - **Hybrid Data Architecture**:

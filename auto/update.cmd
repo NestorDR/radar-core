@@ -1,10 +1,15 @@
+:: auto/update.cmd
+:: Purpose: Update project dependencies to the latest allowed versions according to the restrictions in pyproject.toml,
+::          and update the virtual environment to match the project's lock file (uv.lock).
+:: Usage: auto\update.cmd (run from the project root directory)
+
 @echo off
 cls
 
 :: Self-actualization
 uv self update
 
-::Set python environment
+:: Set python environment
 set ENV_FOLDER=C:\Development\VirtualEnvs\radar-3.13.15-uv-env
 call %ENV_FOLDER%\Scripts\activate.bat
 
@@ -17,8 +22,6 @@ uv lock --upgrade
 :: Use --group dev to include the dev dependencies
 :: Use --active to target the active environment
 uv sync --active --group dev 
-:: Im Pycharm: File → Reload from Disk (Ctrl+F5)
-::             Python Interpreter → 🔄 (Refresh icon)
 
 :: Update TA-lib
 uv pip install --no-cache-dir https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl

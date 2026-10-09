@@ -53,6 +53,7 @@ symbols:
   - 'SLV'     # Silver ETF
   - 'AGQ'     # 2x long
   - 'ZSL'     # 2x inverse
+  - 'XLB'     # Materials
   - 'XLE'     # Energy
   - 'ERX'     # 2x long
   - 'ERY'     # 2x inverse
@@ -62,6 +63,7 @@ symbols:
   - 'XLF'     # Financials
   - 'FAS'     # 2x long
   - 'FAZ'     # 2x inverse
+  - 'IXG'     # Global Financials
   - 'REET'    # REIT - Real Estate Investment Trust
   - 'FXI'     # China
   - 'YINN'    # 3x long
@@ -96,6 +98,12 @@ symbols:
   - 'TSM'
   - 'V'
   - 'WMT'
+  - 'CRWD'    # Cybersecurity
+  - 'DDOG'
+  - 'FTNT'
+  - 'OKTA'
+  - 'PANW'
+  - 'ZS'
   - 'DIA'     # Down Jones
   - 'UDOW'    # 3x long
   - 'SDOW'    # 3x inverse
