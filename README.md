@@ -27,7 +27,7 @@ The fully operational results can be visited for public use at [Ratios](https://
 - **Database-Driven Shortability & Bear Asset Classification**: Dynamic resolution of long-only vs. short positions and inverse ETF (bear asset) asymmetric entry confirmation based on database security records.
     
 ## Prerequisites
-- Python 3.13+
+- Python 3.14.x
 - Recommended OS: Windows, Linux, or macOS
 - Required libraries (managed via pyproject.toml):
   - polars
@@ -37,7 +37,7 @@ The fully operational results can be visited for public use at [Ratios](https://
 
 TA-Lib on Windows: install the prebuilt wheel noted in pyproject.toml (example shown in Installation). On non‑Windows platforms, TA-Lib can be installed from PyPI (see environment markers in pyproject.toml).
 
-Note: The project is developed on a Windows 11 host using Python 3.13, PyCharm 2026.1+, PostgreSQL 17.x, and Docker Desktop v4.88+.
+Note: The project is developed on a Windows 11 host using Python 3.14, PyCharm 2026.1+, PostgreSQL 17.x, and Docker Desktop v4.88+.
 
 ## Installation
 The project uses [uv](https://docs.astral.sh/uv/) for dependency management:
@@ -47,7 +47,7 @@ The project uses [uv](https://docs.astral.sh/uv/) for dependency management:
    - `uv sync`
    - For development tools (`ruff`, `ty`, and `pre-commit`), run: `uv sync --group dev --active`
 2. **Windows + TA-Lib** (if needed):
-   - `uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl --no-cache-dir`
+   - `uv pip install https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp314-cp314-win_amd64.whl --no-cache-dir`
 
 ## Quick Start
 You can run the analyzer directly from the repository without installing the package system‑wide.

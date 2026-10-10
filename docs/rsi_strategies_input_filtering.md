@@ -339,7 +339,7 @@ The standalone evaluation framework evaluates strategy performance and compares 
 - **Reporting**: Outputs console breakdown and persistent Markdown tournament summaries.
 
 ### 5.4 Quality & Linting Verification
-- Fully compliant with Python 3.13, Polars, and Numba JIT standards.
+- Fully compliant with Python 3.14, Polars, and Numba JIT standards.
 - 100% clean check under `auto/lint.cmd` (Ruff).
 - All 164 unit tests pass cleanly under `auto/test.cmd`.
 

@@ -2,7 +2,7 @@
 
 # Stage 1 Builder: contains build tools to build the radar_core wheel
 # The --platform=$BUILDPLATFORM ensures this stage runs on your host's native architecture.
-FROM --platform=$BUILDPLATFORM python:3.13-slim-bookworm AS builder
+FROM --platform=$BUILDPLATFORM python:3.14-slim-bookworm AS builder
 
 # Copy the 'uv' binary for the specific version from the official image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
@@ -79,7 +79,7 @@ RUN uv build --wheel --out-dir /wheels
 
 # Stage 2 Final App: lean production image.
 # It uses the target architecture specified during the build (e.g., linux/arm64).
-FROM python:3.13-slim-bookworm AS final
+FROM python:3.14-slim-bookworm AS final
 
 # Metadata of the Docker image
 LABEL maintainer="ndr1970@gmail.com"
