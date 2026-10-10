@@ -6,9 +6,11 @@
 :: Type checker and language server - ACTIVATE if you want the code to be stricter (good luck!)
 :: DEACTIVATED uvx ty check .
 
-:: Linter 
-uvx ruff check . --diff
-uvx ruff check . --fix
+:: Replace `uvx ruff` with `uv run --locked --group dev ruff` to use the Ruff version pinned in uv.lock.
+:: Suggested fixes without changing files
+uv run --locked --group dev ruff check . --diff
+:: Apply the fixes shown before
+uv run --locked --group dev ruff check . --fix
 
 :: To request the latest version of Ruff and refresh the cache, use the @latest suffix:
 :: uvx ruff@latest check . --fix

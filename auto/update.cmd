@@ -6,30 +6,65 @@
 @echo off
 cls
 
-:: Self-actualization
-uv self update
+:: setlocal preserves the original environment variables; endlocal restores them before exit
+setlocal
+set "_EXIT_CODE=0"
 
-:: Set python environment
-set ENV_FOLDER=C:\Development\VirtualEnvs\radar-3.13.15-uv-env
-call %ENV_FOLDER%\Scripts\activate.bat
+:: Require invocation from this repository's root directory
+for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
+for %%I in ("%CD%") do set "CURRENT_DIR=%%~fI"
+if /i not "%CURRENT_DIR%"=="%PROJECT_ROOT%" (
+    echo Error: Run this script from the project root: "%PROJECT_ROOT%"
+    set "_EXIT_CODE=1"
+    goto finish
+)
 
-uv pip uninstall talib
+:: Self-actualization and stop if it fails
+uv self update || goto command_failed
 
-:: Update the project's lock file to the latest allowed versions according to the restrictions in pyproject.toml
-uv lock --upgrade
+:: Activate the project environment
+:: e.g. to separate environment: set VIRTUAL_ENV=C:\Development\VirtualEnvs\radar-3.14.8-uv-env
+set "VIRTUAL_ENV=.venv"
+call "%VIRTUAL_ENV%\Scripts\activate.bat" || goto command_failed
+
+:: Replace the installed TA-Lib package after syncing dependencies.
+uv pip uninstall talib || goto command_failed
+
+:: Upgrade the project lock file to the latest allowed versions according to the restrictions in pyproject.toml
+uv lock --upgrade || goto command_failed
 
 :: Sync the virtual environment to the project's lock file (uv.lock)
 :: Use --group dev to include the dev dependencies
 :: Use --active to target the active environment
-uv sync --active --group dev 
+uv sync --active --group dev || goto command_failed
 
 :: Update TA-lib
-uv pip install --no-cache-dir https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp313-cp313-win_amd64.whl
+uv pip install --no-cache-dir https://github.com/cgohlke/talib-build/releases/download/v0.6.4/ta_lib-0.6.4-cp314-cp314-win_amd64.whl || goto command_failed
 
-::Run python script freeze: to creates a list of all the installed packages in the virtual environment, along with their versions.
-:: Previously %ENV_FOLDER%\Scripts\pip3.exe freeze > %PROJECT_FOLDER%\requirements.txt
-@echo Freezing requirements
-uv pip freeze > requirements.lock
+:: Run python script freeze: to creates a list of all the installed packages in the virtual environment, along with their versions.
+:: Previously %VIRTUAL_ENV%\Scripts\pip3.exe freeze > %PROJECT_FOLDER%\requirements.txt
+@echo Freezing requirements for review purpose
+del /q requirements.lock.tmp
+uv pip freeze > requirements.lock.tmp
+if errorlevel 1 (
+    del /q requirements.lock.tmp 2>nul
+    echo Error: Failed to freeze requirements; requirements.lock was not changed.
+    set "_EXIT_CODE=1"
+    goto finish
+)
 
-::Return to initial folder
-::cd %AUTO_FOLDER%
+move /y requirements.lock.tmp requirements.lock
+if errorlevel 1 (
+    del /q requirements.lock.tmp 2>nul
+    echo Error: Could not replace requirements.lock.
+    set "_EXIT_CODE=1"
+)
+
+goto finish
+
+:command_failed
+set "_EXIT_CODE=%ERRORLEVEL%"
+
+:finish
+:: Restore the original environment variables and exit with the resulting exit code
+endlocal & exit /b %_EXIT_CODE%
