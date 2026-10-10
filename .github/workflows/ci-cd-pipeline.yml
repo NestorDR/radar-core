@@ -10,7 +10,8 @@ on:
   push:
     branches:
       - main
-      - feature/setup-ci-cd
+      # The '*' character is a wildcard that matches any character covering any branch beginning with 'v0.6.'
+      - v0.6.*
 
 # 2. JOBS: The stages of the pipeline
 jobs:
@@ -25,25 +26,29 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Download, compile, and install the underlying TA-Lib C library on Ubuntu Linux via helper script.
+      # Step 2: Download, compile, and install the underlying TA-Lib C library on Ubuntu Linux via a helper script.
       # The Python 'ta-lib' package requires system C headers (/usr/lib/libta-lib.so) to build and execute TA-Lib functions.
       - name: Install TA-Lib C Library for Unit Testing
         run: bash auto/ci_test_install_talib.sh
 
-      # Step 3: Provision Python 3.13 environment and Astral 'uv' package manager with dependency caching enabled.
-      - name: Install uv and Python 3.13
+      # Step 3: Provision Python 3.14 environment and Astral 'uv' package manager with dependency caching enabled.
+      - name: Install uv and Python 3.14
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.13"
+          python-version: "3.14"
           enable-cache: true
 
       # Step 4: Synchronize virtual environment with lockfile, installing all core and dev dependencies (including pytest).
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --locked --group dev
 
-      # Step 5: Execute unit test suite with Pytest using the active uv environment.
+      # Step 5: Check code with the Ruff version resolved in uv.lock; CI reports issues without modifying files.
+      - name: Check code with Ruff
+        run: uv run --locked --group dev ruff check .
+
+      # Step 6: Execute unit test suite with Pytest using the locked uv environment.
       - name: Run Unit Tests with Pytest
-        run: uv run pytest
+        run: uv run --locked pytest
 
   # ---------------------------------------------------------
   # STAGE 2: BUILD AND PUSH
@@ -51,7 +56,9 @@ jobs:
   build-and-push:
     name: Build & Push Docker Image
     # 'needs' ensures this job only starts if 'test' completes successfully
-    needs: test 
+    needs: test
+    # Run this build-and-push job only on main; other branches run tests only.
+    if: github.ref == 'refs/heads/main'
     # Standard x86_64 Ubuntu runner (temporary virtual server) provided by GitHub
     runs-on: ubuntu-latest
 
