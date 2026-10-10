@@ -24,7 +24,7 @@ for %%I in ("%CD%") do set "CURRENT_DIR=%%~fI"
 if /i not "%CURRENT_DIR%"=="%PROJECT_ROOT%" (
     echo Error: Run this script from the project root: "%PROJECT_ROOT%"
     set "_EXIT_CODE=1"
-    goto finish
+    goto end
 )
 
 :: Remove cache-named directories beneath the project root; skip .venv unless opted in
@@ -46,16 +46,16 @@ if "%INCLUDE_VENV%"=="1" (
 )
 
 :: Restore the original environment variables and exit successfully.
-goto finish
+goto end
 
 :invalid_arguments
 echo Usage: auto\cleanup.cmd [--include-venv]
 set "_EXIT_CODE=2"
-goto finish
+goto end
 
 :command_failed
 set "_EXIT_CODE=%ERRORLEVEL%"
 
-:finish
+:end
 :: Restore the original environment variables and exit with the resulting exit code
 endlocal & exit /b %_EXIT_CODE%

@@ -16,7 +16,7 @@ for %%I in ("%CD%") do set "CURRENT_DIR=%%~fI"
 if /i not "%CURRENT_DIR%"=="%PROJECT_ROOT%" (
     echo Error: Run this script from the project root: "%PROJECT_ROOT%"
     set "_EXIT_CODE=1"
-    goto finish
+    goto end
 )
 
 :: Self-actualization and stop if it fails
@@ -50,7 +50,7 @@ if errorlevel 1 (
     del /q requirements.lock.tmp 2>nul
     echo Error: Failed to freeze requirements; requirements.lock was not changed.
     set "_EXIT_CODE=1"
-    goto finish
+    goto end
 )
 
 move /y requirements.lock.tmp requirements.lock
@@ -60,11 +60,11 @@ if errorlevel 1 (
     set "_EXIT_CODE=1"
 )
 
-goto finish
+goto end
 
 :command_failed
 set "_EXIT_CODE=%ERRORLEVEL%"
 
-:finish
+:end
 :: Restore the original environment variables and exit with the resulting exit code
 endlocal & exit /b %_EXIT_CODE%

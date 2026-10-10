@@ -10,18 +10,14 @@ setlocal ENABLEDELAYEDEXPANSION
 set "_EXIT_CODE=0"
 echo !DATE! !TIME!
 
-:: Get the directory where the script is located
-set SCRIPT_DIR=%~dp0
-for %%I in ("!SCRIPT_DIR!..") do set "PROJECT_ROOT=%%~fI"
+:: Require invocation from this repository's root directory.
+for %%I in ("%~dp0..") do set "PROJECT_ROOT=%%~fI"
 for %%I in ("%CD%") do set "CURRENT_DIR=%%~fI"
 if /i not "!CURRENT_DIR!"=="!PROJECT_ROOT!" (
     echo Error: Run this script from the project root: "!PROJECT_ROOT!"
     set "_EXIT_CODE=1"
-    goto finish
+    goto end
 )
-
-:: Ensure we are executing from the project root (one level up from /auto)
-cd /D "!SCRIPT_DIR!..!"
 
 :: Capture 1st argument
 set TARGET_DEPLOY=%1
@@ -30,7 +26,7 @@ if "!TARGET_DEPLOY!"=="" (
     echo Valid values for target_deploy: core, mb
     echo Example: %0 core
     set "_EXIT_CODE=2"
-    goto finish
+    goto end
 )
 
 :: Since `docker compose` is case-sensitive, force `TARGET_DEPLOY` to lowercase to match the
@@ -45,14 +41,14 @@ if /i "!TARGET_DEPLOY!"=="core" (
 ) else (
     echo Invalid target. Valid values are: core, mb.
     set "_EXIT_CODE=2"
-    goto finish
+    goto end
 )
 
 :: This wrapper accepts one target only; reject extra arguments for now.
 if not "%2"=="" (
     echo Unexpected extra argument. Usage: %0 ^<core^|mb^>
     set "_EXIT_CODE=2"
-    goto finish
+    goto end
 )
 
 :compose
@@ -86,12 +82,12 @@ echo [SUCCESS] !TARGET_DEPLOY! Environment is up.
 echo !DATE! !TIME!
 
 :: Restore the original environment variables and exit
-goto finish
+goto end
 
 :command_failed
 set "_EXIT_CODE=%ERRORLEVEL%"
 echo [ERROR] Docker Compose for !TARGET_DEPLOY! Environment failed to start.
 
-:finish
+:end
 :: Restore the original environment variables and exit with the resulting exit code
 endlocal & exit /b %_EXIT_CODE%

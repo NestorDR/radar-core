@@ -15,7 +15,7 @@ for %%I in ("%CD%") do set "CURRENT_DIR=%%~fI"
 if /i not "%CURRENT_DIR%"=="%PROJECT_ROOT%" (
     echo Error: Run this script from the project root: "%PROJECT_ROOT%"
     set "_EXIT_CODE=1"
-    goto finish
+    goto end
 )
 
 :: Set the virtual environment for this test run.
@@ -42,6 +42,6 @@ if exist "%PROJECT_ROOT%\.coverage.*" del /f /q "%PROJECT_ROOT%\.coverage.*"
 :: Remove test price cache directories if left behind
 if exist "%PROJECT_ROOT%\tests\cache" rmdir /s /q "%PROJECT_ROOT%\tests\cache"
 
-:finish
+:end
 :: Restore the original VIRTUAL_ENV and exit with the original pytest exit code
 endlocal & exit /b %_EXIT_CODE%
