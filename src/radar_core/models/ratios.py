@@ -1,6 +1,6 @@
 # src/radar_core/models/ratios.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # datetime: provides classes for manipulating dates and times.
 import datetime
 # dataclasses: provides decorator and functions for data-oriented classes.

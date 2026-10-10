@@ -1,6 +1,6 @@
 # src/radar_core/domain/evaluable_strategies.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # dataclasses: provides decorator and functions for auto-generating special methods in classes that primarily store data,
 # such as __init__, __repr__, and __eq__, simplifying class definitions and reducing boilerplate code.
 from dataclasses import dataclass

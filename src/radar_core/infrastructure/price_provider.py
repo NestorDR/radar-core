@@ -1,6 +1,6 @@
 # src/radar_core/infrastructure/price_provider.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # datetime: provides classes for manipulating dates and times.
 from datetime import date, datetime, timedelta, timezone
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
@@ -514,7 +514,7 @@ class PriceProvider:
 
 # Use of __name__ & __main__
 if __name__ == '__main__':
-    # --- Python modules ---
+    # --- Python Standard Library ---
     import logging.config
     import os
     from datetime import datetime

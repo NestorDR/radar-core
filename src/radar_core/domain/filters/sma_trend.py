@@ -1,6 +1,6 @@
 # src/radar_core/domain/filters/sma_trend.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from typing import Final
 
 # --- Third Party Libraries ---

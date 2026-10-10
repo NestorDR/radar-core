@@ -1,6 +1,6 @@
 # tests/infrastructure/crud/test_strategy_crud.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from unittest.mock import MagicMock, patch
 
 # --- App modules ---

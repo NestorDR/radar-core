@@ -1,6 +1,6 @@
 # src/radar_core/infrastructure/price_cache.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # json: provides functions for working with JSON data.
 import json
 # dataclasses: provides support for defining data-oriented classes.

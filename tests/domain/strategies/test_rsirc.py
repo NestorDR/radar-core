@@ -1,6 +1,6 @@
 # tests/domain/strategies/test_rsirc.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from unittest.mock import MagicMock, patch
 
 # --- Third Party Libraries ---

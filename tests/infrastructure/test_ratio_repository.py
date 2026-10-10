@@ -1,6 +1,6 @@
 # tests/infrastructure/test_ratio_repository.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from unittest.mock import MagicMock, patch
 
 # --- Third Party Libraries ---

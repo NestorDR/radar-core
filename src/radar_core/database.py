@@ -1,6 +1,6 @@
 # src/radar_core/database.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # contextlib: provides utilities for common tasks involving the context management protocol
 from contextlib import contextmanager, suppress
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.

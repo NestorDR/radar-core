@@ -1,6 +1,6 @@
 # tests/infrastructure/crud/test_ratio_crud.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from unittest.mock import MagicMock, patch
 
 # --- Third Party Libraries ---

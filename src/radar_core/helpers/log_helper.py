@@ -1,6 +1,6 @@
 # src/radar_core/helpers/log_helper.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # datetime: provides classes for manipulating dates and times.
 from datetime import datetime
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.

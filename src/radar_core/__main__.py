@@ -1,7 +1,7 @@
 # src/radar_core/__main__.py
 """Minimal CLI entrypoint for the package: python -m radar_core"""
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import INFO, getLogger
 import logging.config

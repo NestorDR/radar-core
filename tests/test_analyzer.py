@@ -1,6 +1,6 @@
 # tests/test_analyzer.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch

@@ -1,6 +1,6 @@
 # tests/test_database.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from unittest.mock import MagicMock, patch
 
 # --- Third Party Libraries ---

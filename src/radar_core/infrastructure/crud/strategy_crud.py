@@ -1,6 +1,6 @@
 # src/radar_core/infrastructure/crud/strategy_crud.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # typing: provides runtime support for type hints
 from typing import Final
 

@@ -1,6 +1,6 @@
 # tests/domain/technical/test_volatility.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from collections.abc import Callable
 from typing import Any
 

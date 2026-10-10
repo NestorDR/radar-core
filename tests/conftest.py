@@ -1,6 +1,6 @@
 # tests/conftest.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from collections.abc import Callable, Generator
 from datetime import date, datetime, timedelta, timezone
 import os

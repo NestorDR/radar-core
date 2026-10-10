@@ -1,6 +1,6 @@
 # src/radar_core/infrastructure/security_repository.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.
 from logging import DEBUG, ERROR, INFO, WARNING, getLogger
 # typing: provides runtime support for type hints

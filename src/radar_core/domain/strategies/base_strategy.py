@@ -1,6 +1,6 @@
 # src/radar_core/domain/strategies/base_strategy.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # abc: abstract base classes (abc) allow implementing interfaces effectively
 from abc import ABC, abstractmethod
 # Decimal: provides fast, correctly rounded decimal floating-point arithmetic with advantages over the built-in float.

@@ -1,6 +1,6 @@
 # src/radar_core/models/daily_data.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # datetime: provides classes for manipulating dates and times.
 import datetime
 # dataclasses: provides support for defining data-oriented classes.

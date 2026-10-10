@@ -1,6 +1,6 @@
 # tests/infrastructure/test_price_provider.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch

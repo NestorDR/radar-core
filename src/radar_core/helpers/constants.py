@@ -1,6 +1,6 @@
 # src/radar_core/helpers/constants.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from zoneinfo import ZoneInfo
 
 LOCAL_TIMEZONE = ZoneInfo("Europe/Brussels")

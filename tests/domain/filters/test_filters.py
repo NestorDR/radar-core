@@ -1,6 +1,6 @@
 # tests/domain/filters/test_filters.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from collections.abc import Callable
 import datetime
 

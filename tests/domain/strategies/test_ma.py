@@ -1,6 +1,6 @@
 # tests/domain/strategies/test_ma.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from unittest.mock import MagicMock
 
 # --- Third Party Libraries ---

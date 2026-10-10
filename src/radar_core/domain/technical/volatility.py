@@ -1,6 +1,6 @@
 # src/radar_core/domain/technical/volatility.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 import logging
 
 # --- Third Party Libraries ---

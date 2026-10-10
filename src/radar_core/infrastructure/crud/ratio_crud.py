@@ -1,6 +1,6 @@
 # src/radar_core/infrastructure/crud/ratio_crud.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # operator: exports a set of efficient functions corresponding to intrinsic operators of Python
 #  (e.g., attrgetter for fast attribute access)
 from operator import attrgetter

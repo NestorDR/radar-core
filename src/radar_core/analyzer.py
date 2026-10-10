@@ -1,6 +1,6 @@
 # src/radar_core/analyzer.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # concurrent.futures: provides a high-level interface for asynchronously executing callables.
 import concurrent.futures
 # contextlib: provides utilities for working with context managers, including stream redirection.
@@ -490,7 +490,7 @@ def analyzer(symbols: list[str] | None = None) -> int:
 # For example, in a file my_module.py, when executed as the main program, the __name__ attribute will be equal to '__main__'.
 # However, if it is called by importing it from another module: import my_module, the __name__ attribute will be 'my_module'.
 if __name__ == '__main__':
-    # --- Python modules ---
+    # --- Python Standard Library ---
     import logging.config
     # --- App modules ---
     from radar_core.helpers.log_helper import begin_logging, end_logging, rotate_log_at_startup
@@ -506,7 +506,7 @@ if __name__ == '__main__':
     begin_logging(logger_, script_name_, INFO)
 
     # Set symbols for a specific test
-    symbols_ = ['BTC-USD', 'SPY', 'GOLD']
+    symbols_ = ['BTC-USD', 'SPY', 'NFLX']
 
     try:
         #  Analyze strategies over historical prices

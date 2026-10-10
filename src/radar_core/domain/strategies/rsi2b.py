@@ -1,6 +1,6 @@
 # src/radar_core/domain/strategies/rsi2b.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # json: provides functions for working with JSON data.
 import json
 # logging: defines functions and classes which implement a flexible event logging system for applications and libraries.

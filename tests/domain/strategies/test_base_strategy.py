@@ -1,6 +1,6 @@
 # tests/domain/strategies/test_base_strategy.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from collections.abc import Callable
 from datetime import date
 import inspect

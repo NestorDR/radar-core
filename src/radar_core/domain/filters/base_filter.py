@@ -1,6 +1,6 @@
 # src/radar_core/domain/filters/base_filter.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from abc import ABC, abstractmethod
 
 # --- Third Party Libraries ---

@@ -1,6 +1,6 @@
 # tests/test_settings.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 from datetime import time
 from pathlib import Path
 from zoneinfo import ZoneInfo

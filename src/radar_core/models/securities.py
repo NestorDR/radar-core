@@ -1,6 +1,6 @@
 # src/radar_core/models/securities.py
 
-# --- Python modules ---
+# --- Python Standard Library ---
 # dataclasses: provides support for defining data-oriented classes.
 from dataclasses import dataclass, field, fields
 # typing: provides runtime support for type hints
