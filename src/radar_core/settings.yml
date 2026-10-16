@@ -14,6 +14,7 @@ symbols:
   - 'IWM'
   - 'VTI'     # Total US stock market
   - 'VFLO'    # Cashflow-focused
+  - 'NIXT'    # Removed from market-cap-weighted indices but passing a quality filter
   - 'TQQQ'    # 2x3x ETFs
   - 'TECL'
   - 'SOXL'
@@ -90,6 +91,7 @@ symbols:
   - 'MSFT'
   - 'MU'
   - 'NFLX'
+  - 'NKE'
   - 'NVDA'
   - 'ONON'
   - 'ORCL'

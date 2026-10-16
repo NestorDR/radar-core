@@ -31,11 +31,12 @@ call "%VIRTUAL_ENV%\Scripts\activate.bat" || goto command_failed
 uv pip uninstall talib || goto command_failed
 
 :: Upgrade the project lock file to the latest allowed versions according to the restrictions in pyproject.toml
+:: --upgrade  : tries to update all direct and transitive dependencies to the newest compatible version.
 uv lock --upgrade || goto command_failed
 
 :: Sync the virtual environment to the project's lock file (uv.lock)
-:: Use --group dev to include the dev dependencies
-:: Use --active to target the active environment
+:: --group dev: include the dev dependencies
+:: --active   : target the active environment
 uv sync --active --group dev || goto command_failed
 
 :: Update TA-lib

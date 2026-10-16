@@ -1,6 +1,6 @@
 :: auto/cleanup.cmd
 :: Purpose: Remove repository cache directories and optionally .venv
-:: Usage: auto\cleanup.cmd [--include-venv] (run from the project root directory)
+:: Usage: auto/cleanup.cmd [--include-venv] (run from the project root directory)
 
 @echo off
 cls
